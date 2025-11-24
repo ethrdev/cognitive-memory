@@ -83,7 +83,7 @@ i-o-consciousness-projekt/
 *.tmp
 *.temp
 
-# BMAD - Project planning framework (keep local only)
+# Project planning (keep local only)
 bmad/
 bmad-docs/
 

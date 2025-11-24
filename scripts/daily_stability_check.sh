@@ -1,6 +1,6 @@
 #!/bin/bash
-# Story 3.11: 7-Day Stability Test - Daily Monitoring Check
-# Author: BMad Dev-Story Workflow
+# 7-Day Stability Test - Daily Monitoring Check
+# Cognitive Memory v1.0.0
 # Date: 2025-11-20
 
 set -e  # Exit on error
