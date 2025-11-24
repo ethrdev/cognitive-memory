@@ -329,13 +329,13 @@ After migration, you should see these tables:
 
 ## Next Steps
 
-- Read the [Operations Manual](operations-manual.md) for daily operations
-- Configure [backup strategy](backup-recovery.md) for data protection
-- Set up [budget monitoring](budget-monitoring.md) for cost control
+- Read the [Operations Manual](../operations/operations-manual.md) for daily operations
+- Configure [backup strategy](../operations/backup-recovery.md) for data protection
+- Set up [budget monitoring](../monitoring/budget-monitoring.md) for cost control
 
 ## Troubleshooting
 
-See [Troubleshooting Guide](troubleshooting.md) for common issues.
+See [Troubleshooting Guide](../troubleshooting.md) for common issues.
 
 ### Quick Fixes
 

@@ -183,7 +183,8 @@ class TestDualJudgeEvaluator:
     async def test_haiku_judge_rate_limit_retry(self, evaluator):
         """Test Haiku rate limit with exponential backoff retry."""
 
-        class MockRateLimitError(Exception):
+        # Name MUST be exactly "RateLimitError" for retry_logic to recognize it
+        class RateLimitError(Exception):
             def __init__(self, message):
                 self.status_code = 429
                 super().__init__(message)
@@ -194,9 +195,9 @@ class TestDualJudgeEvaluator:
 
         evaluator.haiku_client.messages.create = AsyncMock(
             side_effect=[
-                MockRateLimitError("Rate limit exceeded"),
-                MockRateLimitError("Rate limit exceeded"),
-                MockRateLimitError("Rate limit exceeded"),
+                RateLimitError("Rate limit exceeded"),
+                RateLimitError("Rate limit exceeded"),
+                RateLimitError("Rate limit exceeded"),
                 MagicMock(content=[mock_content]),
             ]
         )
@@ -258,16 +259,8 @@ class TestDualJudgeEvaluator:
             return_value=MagicMock(content=[mock_content])
         )
 
-        # Mock database operations
-        with (
-<<<<<<< Updated upstream
-            patch.object(evaluator, "_log_api_cost"),
-            patch.object(evaluator, "_update_ground_truth"),
-=======
-            patch.object(evaluator, "_log_api_cost") as mock_log_cost,
-            patch.object(evaluator, "_update_ground_truth") as mock_update,
->>>>>>> Stashed changes
-        ):
+        # Mock database operations (only _update_ground_truth exists)
+        with patch.object(evaluator, "_update_ground_truth"):
 
             docs = [
                 {"id": 1, "content": "Document 1 content"},
@@ -315,10 +308,7 @@ class TestDualJudgeEvaluator:
             side_effect=Exception("API Error")
         )
 
-        with (
-            patch.object(evaluator, "_log_api_cost"),
-            patch.object(evaluator, "_update_ground_truth"),
-        ):
+        with patch.object(evaluator, "_update_ground_truth"):
 
             docs = [{"id": 1, "content": "Document 1"}]
 
@@ -332,6 +322,7 @@ class TestDualJudgeEvaluator:
             assert result["successful_evaluations"] == 1  # Only GPT-4o succeeded
 
     @pytest.mark.asyncio
+    @pytest.mark.skip(reason="_log_api_cost method no longer exists in DualJudgeEvaluator")
     @patch("mcp_server.tools.dual_judge.get_connection")
     async def test_log_api_cost(self, mock_get_connection, evaluator):
         """Test API cost logging to database."""
@@ -571,10 +562,7 @@ class TestIntegration:
             return_value=MagicMock(content=[mock_content])
         )
 
-        with (
-            patch.object(evaluator, "_log_api_cost"),
-            patch.object(evaluator, "_update_ground_truth"),
-        ):
+        with patch.object(evaluator, "_update_ground_truth"):
 
             docs = [{"id": i, "content": f"Document {i} content"} for i in range(5)]
 

@@ -78,6 +78,7 @@ memory/
 backups/
 i-o/
 i-o-consciousness-projekt/
+ethr/
 
 # Temporary files
 *.tmp
