@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "cognitive-memory": {
-      "type": "stdio",
-      "command": "/home/ethr/01-projects/ai-experiments/i-o/start-mcp-server.sh"
-    }
-  }
-}
