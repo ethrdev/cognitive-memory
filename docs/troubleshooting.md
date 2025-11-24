@@ -6,6 +6,14 @@ Common issues and solutions for the Cognitive Memory System.
 
 Run this health check first:
 
+**For Neon Cloud:**
+```bash
+# Full system check
+psql "$DATABASE_URL" -c "SELECT 1;"
+python -c "import mcp_server; print('OK')"
+```
+
+**For Local PostgreSQL:**
 ```bash
 # Full system check
 systemctl status cognitive-memory-mcp postgresql --no-pager
@@ -23,15 +31,19 @@ python -c "import mcp_server; print('OK')"
 
 ### Checks
 ```bash
-systemctl status cognitive-memory-mcp
+# Check .mcp.json exists
 cat .mcp.json  # Should exist (copy from .mcp.json.template if missing)
-poetry run which python
-psql -U mcp_user -d cognitive_memory -c "SELECT 1;"
+
+# Test database connection
+psql "$DATABASE_URL" -c "SELECT 1;"
+
+# For local: check systemd service
+systemctl status cognitive-memory-mcp
 ```
 
 ### Solutions
 
-**Restart service:**
+**Restart service (Local):**
 ```bash
 sudo systemctl restart cognitive-memory-mcp
 journalctl -u cognitive-memory-mcp --since "5m"
@@ -60,6 +72,19 @@ python -m json.tool .mcp.json
 - Timeouts during MCP tool calls
 
 ### Checks
+
+**For Neon Cloud:**
+```bash
+# Check if project is suspended (free tier)
+psql "$DATABASE_URL" -c "SELECT 1;"  # First query may take ~1s
+
+# Database performance
+psql "$DATABASE_URL" -c "
+SELECT now() - query_start as duration, query
+FROM pg_stat_activity WHERE state = 'active';"
+```
+
+**For Local PostgreSQL:**
 ```bash
 # System load
 uptime
@@ -75,14 +100,16 @@ FROM pg_stat_activity WHERE state = 'active';"
 
 **Optimize indexes:**
 ```bash
-psql -U mcp_user -d cognitive_memory -c "ANALYZE l2_insights;"
+psql "$DATABASE_URL" -c "ANALYZE l2_insights;"
 ```
 
 **Reduce connection pool pressure:**
 ```bash
-psql -U mcp_user -d cognitive_memory -c "
-SELECT count(*) FROM pg_stat_activity WHERE datname = 'cognitive_memory';"
+psql "$DATABASE_URL" -c "
+SELECT count(*) FROM pg_stat_activity WHERE datname = current_database();"
 ```
+
+**Neon-specific:** Upgrade to paid tier to avoid auto-suspend wake-up latency.
 
 ---
 
@@ -149,20 +176,45 @@ print(f'New weights: {result}')"
 
 ---
 
-## 5. PostgreSQL Connection Failed
+## 5. Database Connection Failed
 
 ### Symptoms
 - Database not reachable
 - "Connection refused" errors
 
-### Checks
+### Checks (Neon Cloud)
+```bash
+# Verify connection string format
+echo $DATABASE_URL
+# Should include: ?sslmode=require
+
+# Test connection
+psql "$DATABASE_URL" -c "SELECT 1;"
+
+# Check if project is suspended (first query may take ~1s)
+```
+
+### Checks (Local PostgreSQL)
 ```bash
 sudo systemctl status postgresql
 ss -tlnp | grep 5432
 df -h /var/lib/postgres
 ```
 
-### Solutions
+### Solutions (Neon Cloud)
+
+**Verify connection string:**
+```bash
+# Must include ?sslmode=require
+# Format: postgresql://user:pass@ep-xxx.neon.tech/neondb?sslmode=require
+```
+
+**Check Neon Console:**
+- Verify project is not paused
+- Check connection limits (free tier: 5 concurrent)
+- Verify region availability at [status.neon.tech](https://status.neon.tech)
+
+### Solutions (Local PostgreSQL)
 
 **Restart PostgreSQL:**
 ```bash
@@ -195,6 +247,7 @@ sudo systemctl start postgresql
 # Test API connectivity
 curl -H "Authorization: Bearer $ANTHROPIC_API_KEY" \
   -H "Content-Type: application/json" \
+  -H "anthropic-version: 2023-06-01" \
   -d '{"model":"claude-3-5-haiku-20241022","max_tokens":10,"messages":[{"role":"user","content":"test"}]}' \
   https://api.anthropic.com/v1/messages
 ```
@@ -252,6 +305,20 @@ ORDER BY fidelity_score LIMIT 10;
 
 Use only when all else fails:
 
+**For Neon Cloud:**
+```bash
+# 1. Backup current state
+pg_dump "$DATABASE_URL" -Fc > /tmp/emergency_backup_$(date +%Y%m%d).dump
+
+# 2. Restart MCP server
+pkill -f "python -m mcp_server"
+python -m mcp_server
+
+# 3. Verify
+psql "$DATABASE_URL" -c "SELECT count(*) FROM l2_insights;"
+```
+
+**For Local PostgreSQL:**
 ```bash
 # 1. Stop services
 sudo systemctl stop cognitive-memory-mcp
@@ -276,6 +343,6 @@ systemctl status cognitive-memory-mcp
 
 If issues persist:
 
-1. Check logs: `journalctl -u cognitive-memory-mcp -f`
+1. Check logs: `journalctl -u cognitive-memory-mcp -f` (local) or Python stderr (Neon)
 2. Review documentation: [Operations Manual](operations-manual.md)
 3. Open an issue: https://github.com/ethrdev/cognitive-memory/issues
