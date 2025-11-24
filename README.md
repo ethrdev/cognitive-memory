@@ -155,27 +155,26 @@ cp .mcp.json.template .mcp.json
 }
 ```
 
-3. Alternatively, add to `~/.config/claude-code/mcp-settings.json`:
+3. For **global availability** (all projects), add to `~/.config/claude-code/mcp-settings.json`:
 
 ```json
 {
   "mcpServers": {
     "cognitive-memory": {
-      "command": "python",
-      "args": ["-m", "mcp_server"],
-      "cwd": "/path/to/cognitive-memory",
-      "env": {
-        "DATABASE_URL": "postgresql://neondb-user:PASSWORD@ep-xxx.neon.tech/neondb?sslmode=require"
-      }
+      "type": "stdio",
+      "command": "/path/to/cognitive-memory/start_mcp_server.sh"
     }
   }
 }
 ```
 
+The start script automatically loads environment variables from `.env.development`.
+
 ## MCP Tools
 
 | Tool | Description |
 |------|-------------|
+| `ping` | Health check for connectivity testing |
 | `store_raw_dialogue` | Store complete dialogue transcripts (L0) |
 | `compress_to_l2_insight` | Compress dialogues to semantic insights with embeddings |
 | `hybrid_search` | Semantic + keyword search with RRF fusion |
@@ -209,7 +208,7 @@ cp .mcp.json.template .mcp.json
 ```
 cognitive-memory/
 ├── mcp_server/           # MCP Server implementation
-│   ├── tools/            # 7 MCP tool implementations
+│   ├── tools/            # 8 MCP tool implementations
 │   ├── resources/        # 5 MCP resource implementations
 │   ├── db/               # Database layer and migrations
 │   └── external/         # OpenAI and Anthropic API clients
