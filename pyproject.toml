@@ -132,3 +132,8 @@ python_functions = ["test_*"]
 markers = [
     "asyncio: marks tests as async",
 ]
+
+[tool.bandit]
+exclude_dirs = ["tests", "venv", ".venv", "scripts/migration"]
+skips = ["B101", "B311"]  # B101: assert, B311: random (not crypto)
+targets = ["mcp_server"]
