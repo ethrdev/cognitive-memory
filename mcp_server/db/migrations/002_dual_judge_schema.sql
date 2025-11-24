@@ -1,5 +1,5 @@
--- Migration 002: Dual Judge Schema Updates for Story 1.11
--- Created: Story 1.11 - Dual Judge Implementation mit GPT-4o + Haiku
+-- Migration 002: Dual Judge Schema Updates for 
+--  - Dual Judge Implementation mit GPT-4o + Haiku
 --
 -- Changes:
 -- 1. Fix ground_truth.judge1_score/judge2_score: FLOAT → FLOAT[] for arrays

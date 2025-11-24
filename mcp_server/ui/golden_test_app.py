@@ -2,7 +2,7 @@
 """
 Golden Test Set Labeling UI
 
-Story 3.1: Streamlit app for manually labeling Golden Test Set queries.
+: Streamlit app for manually labeling Golden Test Set queries.
 
 Features:
 - Load queries from mock_golden_test_set.json (mock mode)
@@ -208,7 +208,7 @@ def main():
     )
 
     st.title("🏆 Golden Test Set Labeling")
-    st.markdown("**Story 3.1:** Label 50-100 queries for production monitoring")
+    st.markdown("**:** Label 50-100 queries for production monitoring")
 
     # Initialize database connection pool (production mode only)
     if not MOCK_MODE:

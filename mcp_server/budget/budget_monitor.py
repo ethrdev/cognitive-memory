@@ -293,7 +293,7 @@ def get_daily_costs(days: int = 30) -> list[dict[str, Any]]:
         2025-11-19: €0.4123
         2025-11-18: €0.2987
     """
-    # Input validation (Story 3.10: Prevent invalid day ranges)
+    # Input validation (: Prevent invalid day ranges)
     if not isinstance(days, int) or days <= 0 or days > 365:
         raise ValueError(f"days must be an integer between 1 and 365, got {days}")
 
@@ -301,7 +301,7 @@ def get_daily_costs(days: int = 30) -> list[dict[str, Any]]:
         with get_connection() as conn:
             cursor = conn.cursor()
 
-            # Calculate start_date using Python timedelta (Story 3.10: SQL injection fix)
+            # Calculate start_date using Python timedelta (: SQL injection fix)
             start_date = date.today() - timedelta(days=days)
 
             query = """

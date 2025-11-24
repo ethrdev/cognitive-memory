@@ -95,7 +95,7 @@ async def setup_test_data():
                 0.6,
                 base_time - timedelta(minutes=30),
                 base_time - timedelta(hours=1),
-                "Priority: Complete Story 1.9",
+                "Priority: Complete ",
                 0.9,
                 base_time,
                 base_time - timedelta(minutes=15),

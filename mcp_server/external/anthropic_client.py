@@ -33,7 +33,7 @@ class FallbackRequiredException(Exception):
     """
     Exception raised when Haiku API evaluation fails after all retries.
 
-    Signals that fallback to Claude Code evaluation should be triggered (Story 3.4).
+    Signals that fallback to Claude Code evaluation should be triggered ().
     This exception is caught by calling code to implement degraded mode operation.
     """
 
@@ -49,7 +49,7 @@ class HaikuClient:
     - Creative reflexion (Temperature 0.7) for verbalized lesson learned generation
     - API key validation at initialization
     - Cost tracking integration (Stories 2.5-2.6)
-    - Retry logic integration (Story 2.4 Task 3)
+    - Retry logic integration ( Task 3)
 
     Architecture Decision (ADR-002):
     - Bulk operations (Query Expansion, CoT) run internally in Claude Code (€0/mo)
@@ -208,7 +208,7 @@ Provide only the JSON object, no additional text."""
             output_tokens = response.usage.output_tokens
             total_tokens = input_tokens + output_tokens
 
-            # Calculate cost using centralized config rates (Story 3.10)
+            # Calculate cost using centralized config rates ()
             total_cost = calculate_api_cost("haiku", input_tokens, output_tokens)
 
             logger.info(
@@ -227,7 +227,7 @@ Provide only the JSON object, no additional text."""
                 cost_eur=total_cost,
             )
 
-            # Log API cost to database (Story 3.10: Budget Monitoring)
+            # Log API cost to database (: Budget Monitoring)
             insert_cost_log(
                 api_name="haiku_eval",
                 num_calls=1,
@@ -263,7 +263,7 @@ Provide only the JSON object, no additional text."""
         - Max Tokens: 1000
         - Cost: €0.0015 per reflexion (~€0.45/mo for 300 reflexions @ 30% trigger rate)
 
-        Trigger Condition (from Story 2.5):
+        Trigger Condition (from ):
             reward_score < 0.3 (configured in config.yaml: evaluation.reward_threshold)
 
         Args:
@@ -282,7 +282,7 @@ Provide only the JSON object, no additional text."""
             - lesson: str (what to do differently in future, 1-2 sentences)
             - full_reflection: str (complete reflection text)
 
-        Implementation (Story 2.6):
+        Implementation ():
             - Structured prompt with Problem/Lesson format
             - Temperature 0.7 for creative lesson generation
             - Cost tracking and logging integration
@@ -405,7 +405,7 @@ Now reflect on the current case:"""
             output_tokens = response.usage.output_tokens
             total_tokens = input_tokens + output_tokens
 
-            # Calculate cost using centralized config rates (Story 3.10)
+            # Calculate cost using centralized config rates ()
             total_cost = calculate_api_cost("haiku", input_tokens, output_tokens)
 
             logger.info(
@@ -425,7 +425,7 @@ Now reflect on the current case:"""
                 api_name="haiku_reflexion",  # Distinguish from evaluation logs
             )
 
-            # Log API cost to database (Story 3.10: Budget Monitoring)
+            # Log API cost to database (: Budget Monitoring)
             insert_cost_log(
                 api_name="haiku_reflection",
                 num_calls=1,
@@ -497,7 +497,7 @@ async def generate_reflection_safe(
 
 
 # =============================================================================
-# Fallback Evaluation Functions (Story 3.4)
+# Fallback Evaluation Functions ()
 # =============================================================================
 
 
@@ -544,7 +544,7 @@ async def _claude_code_fallback_evaluation(
         >>> result["fallback"]
         True
     """
-    # NOTE: This is a SIMULATED internal evaluation for Story 3.4 implementation.
+    # NOTE: This is a SIMULATED internal evaluation for  implementation.
     # In a real Claude Code environment, this would use Claude Code's internal
     # evaluation capabilities. For now, we'll simulate a reasonable evaluation.
 
@@ -633,7 +633,7 @@ async def evaluate_answer_with_fallback(
     """
     Evaluate answer with automatic fallback to Claude Code on Haiku API failure.
 
-    Story 3.4: Claude Code Fallback für Haiku API Ausfall (Degraded Mode)
+    : Claude Code Fallback für Haiku API Ausfall (Degraded Mode)
 
     Fallback Flow:
     1. Check if fallback mode already active → use Claude Code directly

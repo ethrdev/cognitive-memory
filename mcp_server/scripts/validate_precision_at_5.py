@@ -2,11 +2,11 @@
 """
 Precision@5 Validation on Ground Truth Set
 
-Story 2.9: Final validation of calibrated Hybrid Search weights to ensure
+: Final validation of calibrated Hybrid Search weights to ensure
 NFR002 (Precision@5 >0.75) is met and system is production-ready.
 
 Graduated Success Criteria:
-- Full Success (P@5 ≥0.75): System ready for production, Epic 2 complete
+- Full Success (P@5 ≥0.75): System ready for production, complete
 - Partial Success (P@5 0.70-0.74): Deploy with monitoring, re-calibrate in 2 weeks
 - Failure (P@5 <0.70): Architecture review required
 
@@ -45,7 +45,7 @@ LONG_QUERY_MIN_WORDS = 30
 
 
 # =============================================================================
-# Reused from Story 2.8: Precision@5 Calculation
+# Reused from : Precision@5 Calculation
 # =============================================================================
 
 
@@ -53,7 +53,7 @@ def calculate_precision_at_5(
     retrieved_ids: list[int], expected_ids: list[int]
 ) -> float:
     """
-    Calculate Precision@5 metric (REUSED from Story 2.8)
+    Calculate Precision@5 metric (REUSED from )
 
     Formula: (relevant_docs_in_top5) / 5
 
@@ -76,10 +76,10 @@ def calculate_precision_at_5(
 
 def classify_query_type(query: str) -> str:
     """
-    Classify query by length (Story 2.9 requirement)
+    Classify query by length ( requirement)
 
     Ground Truth table does not have query_type column (that's in golden_test_set
-    from Epic 3). We classify dynamically via word count.
+    from production). We classify dynamically via word count.
 
     Classification:
     - Short: ≤10 words (e.g., "Was denke ich über Bewusstsein?")
@@ -109,7 +109,7 @@ def classify_query_type(query: str) -> str:
 
 def mock_hybrid_search(query: str, top_k: int, weights: dict[str, float]) -> list[int]:
     """
-    Simulate hybrid_search results for testing (REUSED from Story 2.8)
+    Simulate hybrid_search results for testing (REUSED from )
 
     In production: Replace with actual hybrid_search tool call
 
@@ -165,7 +165,7 @@ def mock_hybrid_search(query: str, top_k: int, weights: dict[str, float]) -> lis
 
 def load_calibrated_weights() -> dict[str, float]:
     """
-    Load calibrated weights from config.yaml (Story 2.8 output)
+    Load calibrated weights from config.yaml ( output)
 
     Returns:
         {semantic: float, keyword: float}
@@ -184,7 +184,7 @@ def load_ground_truth() -> list[dict]:
     """
     Load Ground Truth Set
 
-    In MOCK_MODE: Load from mock_ground_truth.json (Story 2.8)
+    In MOCK_MODE: Load from mock_ground_truth.json ()
     In Production: Load from PostgreSQL ground_truth table
 
     Returns:
@@ -345,7 +345,7 @@ def evaluate_success_criteria(precision_at_5: float) -> tuple[str, str]:
         # AC-2.9.2: Full Success (P@5 ≥0.75)
         return (
             "full",
-            "System ready for production. Epic 2 COMPLETE. Transition to Epic 3.",
+            "System ready for production. Complete. Production ready.",
         )
 
     elif precision_at_5 >= PARTIAL_SUCCESS_THRESHOLD:
@@ -456,7 +456,7 @@ def main():
     Main validation execution
     """
     print("=" * 60)
-    print("Story 2.9: Precision@5 Validation on Ground Truth Set")
+    print(": Precision@5 Validation on Ground Truth Set")
     print("=" * 60)
     print(f"Mode: {'MOCK (Infrastructure Testing)' if MOCK_MODE else 'PRODUCTION'}")
     print(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")

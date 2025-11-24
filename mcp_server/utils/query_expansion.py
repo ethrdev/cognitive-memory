@@ -2,7 +2,7 @@
 Query Expansion Utilities Module
 
 Provides deduplication and fusion helpers for query expansion results.
-Part of Epic 2 (Story 2.2) - RAG Pipeline & Hybrid Calibration.
+Part of () - RAG Pipeline & Hybrid Calibration.
 
 Functions:
 - deduplicate_by_l2_id: Remove duplicate search results by L2 Insight ID
@@ -115,5 +115,5 @@ def merge_rrf_scores(results_list: List[List[Dict]], k: int = 60) -> List[Dict]:
 
 # Version Info
 __version__ = "1.0.0"
-__author__ = "Dev Agent (Epic 2, Story 2.2)"
+__author__ = "Cognitive Memory Team"
 __description__ = "Query expansion utilities for deduplication and RRF fusion"

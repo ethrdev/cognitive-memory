@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Staged Dual Judge CLI Tool (Story 3.9)
+Staged Dual Judge CLI Tool ()
 
 Command-line interface for managing Staged Dual Judge transition between
 Full Dual Judge Mode and Single Judge + Spot Checks Mode.

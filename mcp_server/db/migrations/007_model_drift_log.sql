@@ -1,5 +1,5 @@
 -- Migration 007: Model Drift Log Table
--- Story 3.2: Model Drift Detection mit Daily Golden Test
+-- : Model Drift Detection mit Daily Golden Test
 -- Date: 2025-11-18
 
 -- =============================================================================

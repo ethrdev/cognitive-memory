@@ -1,5 +1,5 @@
 -- Migration 008: API Retry Log Table
--- Story 3.3: API Retry-Logic Enhancement mit Exponential Backoff
+-- : API Retry-Logic Enhancement mit Exponential Backoff
 -- Date: 2025-11-18
 
 -- =============================================================================

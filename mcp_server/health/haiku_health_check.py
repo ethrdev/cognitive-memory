@@ -4,7 +4,7 @@ Haiku API Health Check and Auto-Recovery
 Periodic background task that monitors Haiku API availability and automatically
 deactivates fallback mode when the API recovers.
 
-Story 3.4: Claude Code Fallback für Haiku API Ausfall (Degraded Mode)
+: Claude Code Fallback für Haiku API Ausfall (Degraded Mode)
 """
 
 import asyncio

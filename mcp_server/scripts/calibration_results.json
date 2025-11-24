@@ -43,6 +43,6 @@
   "acceptance_criteria": {
     "ac_2_8_3_precision_gte_070": false,
     "ac_2_8_4_uplift_gte_5pct": false,
-    "story_2_9_ready_precision_gte_075": false
+    "production_ready_precision_gte_075": false
   }
 }

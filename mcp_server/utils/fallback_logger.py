@@ -4,7 +4,7 @@ Fallback Status Logger
 Centralized logging utilities for fallback mode activation and recovery events.
 Writes to fallback_status_log table for observability and degraded mode monitoring.
 
-Story 3.4: Claude Code Fallback für Haiku API Ausfall (Degraded Mode)
+: Claude Code Fallback für Haiku API Ausfall (Degraded Mode)
 """
 
 import json

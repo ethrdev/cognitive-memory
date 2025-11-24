@@ -1,7 +1,7 @@
 """
 Staged Dual Judge Transition Logic for Budget Optimization.
 
-Story 3.9: Staged Dual Judge Implementation (Enhancement E8)
+: Staged Dual Judge Implementation (Enhancement E8)
 
 Implements data-driven transition from Full Dual Judge (GPT-4o + Haiku) to
 Single Judge + 5% Spot Checks based on IRR stability (Kappa ≥0.85).
@@ -29,8 +29,8 @@ Functions:
 References:
 - Enhancement E8: Budget optimization via staged approach
 - NFR003: Budget target €5-10/mo → €2-3/mo
-- Story 1.11: Dual Judge Implementation (prerequisite)
-- Story 1.12: IRR Validation (prerequisite)
+- : Dual Judge Implementation (prerequisite)
+- : IRR Validation (prerequisite)
 """
 
 from __future__ import annotations
@@ -103,7 +103,7 @@ def calculate_macro_kappa(num_queries: int = 100) -> Dict[str, Union[float, int,
     Calculate Macro-Average Cohen's Kappa over last N Ground Truth queries.
 
     IRR Measurement Strategy:
-    - Load last N queries from ground_truth table (Story 1.11)
+    - Load last N queries from ground_truth table ()
     - Binary conversion: Score >0.5 = Relevant (1), ≤0.5 = Not Relevant (0)
     - Calculate Cohen's Kappa using sklearn.metrics.cohen_kappa_score()
     - Transition eligibility: Kappa ≥0.85 ("Almost Perfect Agreement")
@@ -158,7 +158,7 @@ def calculate_macro_kappa(num_queries: int = 100) -> Dict[str, Union[float, int,
             raise ValueError(
                 "No Ground Truth data available. "
                 "Cannot calculate Kappa without judge scores. "
-                "Run Ground Truth collection (Story 1.11) first."
+                "Run Ground Truth collection () first."
             )
 
         actual_count = len(rows)

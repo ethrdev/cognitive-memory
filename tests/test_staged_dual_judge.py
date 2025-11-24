@@ -1,5 +1,5 @@
 """
-Unit Tests for Staged Dual Judge Transition Logic (Story 3.9).
+Unit Tests for Staged Dual Judge Transition Logic ().
 
 Tests Kappa calculation, transition decision engine, and config management
 against AC 3.9.1 requirements.

@@ -69,8 +69,8 @@ def get_optimization_recommendations() -> List[Dict[str, Any]]:
     Generate cost optimization recommendations based on current usage patterns.
 
     Analyzes:
-    - Query Expansion (Story 2.2): num_variants configuration
-    - Dual Judge (Story 3.9): staged_dual_judge configuration
+    - Query Expansion (): num_variants configuration
+    - Dual Judge (): staged_dual_judge configuration
     - Embedding batch sizes and caching opportunities
 
     Returns:
@@ -130,7 +130,7 @@ def get_optimization_recommendations() -> List[Dict[str, Any]]:
             "estimated_savings_pct": estimated_savings_pct,
             "estimated_savings_eur": estimated_savings_eur,
             "impact": "medium" if estimated_savings_pct > 5 else "low",
-            "trade_off": "~5% recall reduction (from Story 2.2: 3 variants = +15% recall, 2 variants = +10% recall)",
+            "trade_off": "~5% recall reduction (from : 3 variants = +15% recall, 2 variants = +10% recall)",
         })
 
     # Recommendation 2: Staged Dual Judge Transition
@@ -149,7 +149,7 @@ def get_optimization_recommendations() -> List[Dict[str, Any]]:
     dual_judge_cost = gpt4o_cost + haiku_judge_cost
 
     if dual_judge_enabled and haiku_judge_cost > 0:
-        # Transition to Single Judge Mode (Story 3.9 Enhancement E8)
+        # Transition to Single Judge Mode ( Enhancement E8)
         # Saves ~95% of Haiku judge costs (only 5% spot checks remain)
         estimated_savings_eur = haiku_judge_cost * 0.95
         estimated_savings_pct = (estimated_savings_eur / total_cost * 100.0) if total_cost > 0 else 0.0
@@ -167,7 +167,7 @@ def get_optimization_recommendations() -> List[Dict[str, Any]]:
             "trade_off": (
                 "Requires Kappa ≥ 0.85 for safe transition. "
                 "Maintains 5% spot checks for quality monitoring. "
-                "Expected from Story 3.9: -40% budget reduction (€7.50 → €2.50/mo)"
+                "Expected from : -40% budget reduction (€7.50 → €2.50/mo)"
             ),
         })
 
@@ -225,7 +225,7 @@ def get_optimization_recommendations() -> List[Dict[str, Any]]:
             "impact": "low",
             "trade_off": (
                 "Lower semantic weight may reduce recall for semantically similar queries. "
-                "Requires re-calibration via grid search (Story 2.8). "
+                "Requires re-calibration via grid search (). "
                 "Marginal cost savings, mainly impacts search quality"
             ),
         })
@@ -294,7 +294,7 @@ def calculate_potential_savings() -> Dict[str, Any]:
 
 def validate_staged_dual_judge_transition() -> Dict[str, Any]:
     """
-    Validate if Staged Dual Judge transition is safe (Story 3.9 Enhancement E8).
+    Validate if Staged Dual Judge transition is safe ( Enhancement E8).
 
     Checks:
     - Cohen's Kappa ≥ 0.85 ("Almost Perfect Agreement")

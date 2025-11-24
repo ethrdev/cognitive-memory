@@ -1,13 +1,13 @@
 #!/bin/bash
 # Setup Development Database for Cognitive Memory System
-# Story 3.7: Production Configuration & Environment Setup
+# 
 #
 # Purpose: Create and configure cognitive_memory_dev database
 # Usage: ./scripts/setup_dev_database.sh
 #
 # Prerequisites:
 #   - PostgreSQL server running
-#   - mcp_user already created (from Story 1.2)
+#   - mcp_user already created (from )
 #   - Migrations in mcp_server/db/migrations/
 
 set -e  # Exit on error

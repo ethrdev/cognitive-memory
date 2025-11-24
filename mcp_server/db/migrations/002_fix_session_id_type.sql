@@ -1,5 +1,5 @@
 -- Migration 002: Fix session_id Type from UUID to VARCHAR(255)
--- Created: 2025-11-12 (Schema Consistency Fix between Story 1.2 and 1.4)
+--  (Schema Consistency Fix between  and 1.4)
 --
 -- Rationale: VARCHAR(255) provides more flexibility than UUID constraint
 -- Allows human-readable session IDs like "session-philosophy-2025-11-12"

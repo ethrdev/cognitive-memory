@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test Validation Script for Story 1.4
+Test Validation Script for 
 Validates the store_raw_dialogue implementation without requiring PostgreSQL
 """
 
@@ -204,7 +204,7 @@ def validate_tool_registration():
 
 def main():
     """Run all validation tests."""
-    print("🧪 Story 1.4 Implementation Validation")
+    print("🧪  Implementation Validation")
     print("=" * 50)
 
     tests = [

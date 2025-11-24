@@ -1,5 +1,5 @@
 """
-IRR Validation Module for Story 1.12
+IRR Validation Module for 
 
 This module implements Inter-Rater Reliability (IRR) validation using Cohen's Kappa
 for dual judge scores (GPT-4o + Haiku) across all ground truth queries.

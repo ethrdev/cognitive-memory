@@ -54,7 +54,7 @@ class DualJudgeEvaluator:
         self.gpt4o_client = AsyncOpenAI(api_key=self.openai_api_key)
         self.haiku_client = AsyncAnthropic(api_key=self.anthropic_api_key)
 
-        # Load Staged Dual Judge configuration (Story 3.9)
+        # Load Staged Dual Judge configuration ()
         try:
             config = load_environment()
             staged_config = config.get('staged_dual_judge', {})
@@ -148,7 +148,7 @@ class DualJudgeEvaluator:
             logger.warning(f"GPT-4o returned invalid score: {score}, using 0.5")
             score = 0.5
 
-        # Log API cost (Story 3.10: Budget Monitoring)
+        # Log API cost (: Budget Monitoring)
         # Extract actual token counts from API response
         if hasattr(response, 'usage') and response.usage:
             input_tokens = response.usage.prompt_tokens
@@ -212,7 +212,7 @@ class DualJudgeEvaluator:
             logger.warning(f"Haiku returned invalid score: {score}, using 0.5")
             score = 0.5
 
-        # Log API cost (Story 3.10: Budget Monitoring)
+        # Log API cost (: Budget Monitoring)
         # Extract actual token counts from API response
         if hasattr(response, 'usage') and response.usage:
             input_tokens = response.usage.input_tokens
@@ -344,7 +344,7 @@ class DualJudgeEvaluator:
         self, query_id: int, query: str, docs: list[dict[str, Any]]
     ) -> dict[str, Any]:
         """
-        Evaluate documents with Staged Dual Judge logic (Story 3.9).
+        Evaluate documents with Staged Dual Judge logic ().
 
         Evaluation Strategy:
         - If dual_judge_enabled=True: Call both judges (full dual judge)
@@ -373,7 +373,7 @@ class DualJudgeEvaluator:
 
         start_time = time.time()
 
-        # Staged Dual Judge Logic (Story 3.9)
+        # Staged Dual Judge Logic ()
         is_spot_check = False
         if self.dual_judge_enabled:
             # Phase 1: Full Dual Judge Mode
@@ -497,7 +497,7 @@ class DualJudgeEvaluator:
             latency = time.time() - start_time
 
             # Note: API costs are now logged per-call in _call_gpt4o_judge() and
-            # _call_haiku_judge() using actual token counts (Story 3.10)
+            # _call_haiku_judge() using actual token counts ()
 
             # Update ground_truth table
             await self._update_ground_truth(
@@ -546,7 +546,7 @@ class DualJudgeEvaluator:
         """
         Update ground_truth table with judge scores and spot check metadata.
 
-        Story 3.9: Adds spot_check flag to metadata JSONB field for tracking
+        : Adds spot_check flag to metadata JSONB field for tracking
         spot checks vs full evaluations.
 
         Args:

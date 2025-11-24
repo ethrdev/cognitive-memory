@@ -25,7 +25,7 @@ from mcp.server import InitializationOptions, Server
 from mcp.server.stdio import stdio_server
 from mcp.types import Resource, ServerCapabilities, Tool
 
-# Story 3.8: Systemd watchdog support
+# : Systemd watchdog support
 try:
     from systemd import daemon as systemd_daemon
 
@@ -34,7 +34,7 @@ except ImportError:
     SYSTEMD_AVAILABLE = False
 
 # Load environment-specific configuration BEFORE local imports
-# Story 3.7: Environment separation (development/production)
+#(development/production)
 from mcp_server.config import load_environment  # noqa: E402
 
 # Load environment (validates required vars, merges config, logs environment)
@@ -88,7 +88,7 @@ def setup_logging() -> None:
     logging.getLogger().setLevel(log_level)
 
 
-# Story 3.8: Systemd watchdog heartbeat thread
+# : Systemd watchdog heartbeat thread
 _watchdog_stop_event = threading.Event()
 
 
@@ -183,12 +183,12 @@ async def main() -> None:
             logger.error(f"Database connection failed: {e}")
             logger.warning("Server will continue but database operations may fail")
 
-        # Start background health check task (Story 3.4)
+        # Start background health check task ()
         # Monitors Haiku API availability and auto-recovers from fallback mode
         asyncio.create_task(periodic_health_check())
         logger.info("Health check background task started (15-minute intervals)")
 
-        # Story 3.8: Start systemd watchdog heartbeat thread
+        # : Start systemd watchdog heartbeat thread
         start_watchdog()
 
         # Setup server info for handshake
@@ -211,7 +211,7 @@ async def main() -> None:
             capabilities=ServerCapabilities(tools={}, resources={}, prompts={}),
         )
 
-        # Story 3.8: Notify systemd that server is ready
+        # : Notify systemd that server is ready
         notify_systemd_ready()
 
         # Run the server with stdio transport
@@ -227,7 +227,7 @@ async def main() -> None:
         traceback.print_exc(file=sys.stderr)
         sys.exit(1)
     finally:
-        # Story 3.8: Notify systemd we're stopping gracefully
+        # : Notify systemd we're stopping gracefully
         notify_systemd_stopping()
 
         # Graceful shutdown: close all database connections
@@ -250,7 +250,7 @@ def handle_sigterm(signum, frame):
 
 
 if __name__ == "__main__":
-    # Story 3.8: Register SIGTERM handler for graceful shutdown
+    # : Register SIGTERM handler for graceful shutdown
     signal.signal(signal.SIGTERM, handle_sigterm)
 
     # Environment variables already loaded at module import time

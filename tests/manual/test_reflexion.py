@@ -1,5 +1,5 @@
 """
-Manual Test Script for Story 2.6: Reflexion-Framework mit Verbal Reinforcement Learning
+Manual Test Script for : Reflexion-Framework mit Verbal Reinforcement Learning
 
 This script tests:
 1. Low-quality answer flow (Trigger → Reflexion → Logging)
@@ -246,7 +246,7 @@ async def test_cost_tracking():
 
 async def run_all_tests():
     """
-    Run all manual tests for Story 2.6
+    Run all manual tests for 
     """
     print("\n" + "=" * 80)
     print("STORY 2.6: REFLEXION-FRAMEWORK - MANUAL TESTS")

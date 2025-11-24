@@ -2,7 +2,7 @@
 """
 Validate Golden Test Set
 
-Story 3.1: Comprehensive validation of Golden Test Set for completeness,
+: Comprehensive validation of Golden Test Set for completeness,
 quality, and compliance with stratification requirements.
 
 Validation Checks:
@@ -267,7 +267,7 @@ def run_validation() -> Dict:
         }
     """
     print("=" * 60)
-    print("Golden Test Set Validation - Story 3.1")
+    print("Golden Test Set Validation - ")
     print("=" * 60)
     print(f"Mode: {'MOCK (Infrastructure Testing)' if MOCK_MODE else 'PRODUCTION'}")
     print(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")

@@ -1,6 +1,6 @@
 # Cognitive Memory System Configuration
 # =============================================================================
-# Story 3.7: Production Configuration & Environment Setup
+# 
 #
 # Structure:
 #   - base: Shared configuration for all environments
@@ -45,7 +45,7 @@ base:
     # Ground Truth Configuration
     ground_truth_threshold: 0.8  # IRR validation threshold
 
-    # Query Expansion Configuration (Epic 2, Story 2.2)
+    # Query Expansion Configuration (, )
     # Generates semantic query variants for robust retrieval (+10-15% recall uplift)
     query_expansion:
       enabled: true
@@ -69,22 +69,22 @@ base:
       rrf_k: 60  # Reciprocal Rank Fusion constant (literature standard)
       final_top_k: 5  # Number of final results after fusion
 
-    # Evaluation Configuration (Epic 2, Story 2.4-2.5)
+    # Evaluation Configuration (, )
     # Haiku API for self-evaluation with deterministic scoring
     evaluation:
       model: "claude-3-5-haiku-20241022"
       temperature: 0.0  # Deterministic for consistent reward scores across sessions
       max_tokens: 500
-      reward_threshold: 0.3  # Trigger reflexion if reward < 0.3 (Story 2.6)
+      reward_threshold: 0.3  # Trigger reflexion if reward < 0.3 ()
 
-    # Reflexion Configuration (Epic 2, Story 2.4, 2.6)
+    # Reflexion Configuration (, )
     # Verbal reinforcement learning for failed evaluations
     reflexion:
       model: "claude-3-5-haiku-20241022"
       temperature: 0.7  # Creative for lesson learned generation
       max_tokens: 1000
 
-  # API Limits Configuration (Story 2.4)
+  # API Limits Configuration ()
   # Retry logic and rate limit handling for external APIs
   api_limits:
     anthropic:
@@ -99,7 +99,7 @@ base:
       retry_delays: [1, 2, 4, 8]
       jitter: true
 
-  # API Cost Rates (Story 3.10: Budget Monitoring)
+  # API Cost Rates ()
   # Hard-coded rates based on API pricing as of 2025-11-20
   # Update manually when API prices change
   # All costs in EUR per token (convert USD to EUR if needed)
@@ -116,14 +116,14 @@ base:
     # Exchange Rate Reference
     # USD to EUR conversion rate: 0.92 (update when rates change significantly)
 
-  # Budget Monitoring (Story 2.4, Story 3.10)
+  # Budget Monitoring ()
   budget:
     monthly_limit_eur: 10.0  # Alert if projected monthly cost exceeds €10/mo
     alert_threshold_pct: 80  # Alert at 80% of monthly limit (€8.00)
     alert_email: ""          # Optional: Email address for budget alerts
     alert_slack_webhook: ""  # Optional: Slack webhook URL for budget alerts
 
-  # Staged Dual Judge Configuration (Story 3.9, Enhancement E8)
+  # Staged Dual Judge Configuration ()
   # Cost optimization via IRR-based transition from Full Dual Judge to Single Judge + Spot Checks
   # Phase 1: dual_judge_enabled=true (€5-10/mo, both judges all queries)
   # Phase 2: dual_judge_enabled=false (€2-3/mo, GPT-4o all + Haiku 5%)
@@ -181,7 +181,7 @@ development:
   database:
     host: "localhost"
     port: 5432
-    name: "cognitive_memory_dev"  # Development database (Story 3.7)
+    name: "cognitive_memory_dev"  # Development database ()
     user: "mcp_user"
     # Password from environment variable (DATABASE_URL in .env.development)
     ssl_mode: "prefer"
@@ -212,7 +212,7 @@ development:
 # =============================================================================
 # Production Environment Configuration
 # =============================================================================
-# Database: cognitive_memory (real user data, backed up daily via Story 3.6)
+# Database: cognitive_memory (real user data, backed up daily via )
 # Logging: INFO level to reduce noise
 # Features: Debug mode disabled, profiling disabled
 # Purpose: Production deployment, real conversations, rate limiting enabled

@@ -1,5 +1,5 @@
 """
-Manual Test Script for Story 2.5: Self-Evaluation mit Haiku API
+Manual Test Script for : Self-Evaluation mit Haiku API
 
 This script tests:
 1. High-quality answer (reward >0.7)
@@ -262,7 +262,7 @@ async def test_database_logging():
 
 async def run_all_tests():
     """
-    Run all manual tests for Story 2.5
+    Run all manual tests for 
     """
     print("\n" + "=" * 80)
     print("STORY 2.5: SELF-EVALUATION MIT HAIKU API - MANUAL TESTS")

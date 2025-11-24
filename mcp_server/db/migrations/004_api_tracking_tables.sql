@@ -1,5 +1,5 @@
 -- Migration 004: API Cost and Retry Tracking Tables
--- Story 2.4: External API Setup für Haiku (Evaluation + Reflexion)
+-- : External API Setup für Haiku (Evaluation + Reflexion)
 -- Date: 2025-11-16
 --
 -- Purpose:
