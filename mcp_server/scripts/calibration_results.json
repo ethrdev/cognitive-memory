@@ -1,0 +1,48 @@
+{
+  "timestamp": "2025-11-16T21:07:15.302052",
+  "mock_mode": true,
+  "ground_truth_size": 100,
+  "best_weights": {
+    "semantic": 0.7,
+    "keyword": 0.3,
+    "precision_at_5": 0.10200000000000001
+  },
+  "baseline_weights": {
+    "semantic": 0.7,
+    "keyword": 0.3,
+    "precision_at_5": 0.10200000000000001
+  },
+  "uplift_percentage": 0.0,
+  "all_results": [
+    {
+      "semantic": 0.7,
+      "keyword": 0.3,
+      "precision_at_5": 0.10200000000000001
+    },
+    {
+      "semantic": 0.8,
+      "keyword": 0.2,
+      "precision_at_5": 0.09799999999999999
+    },
+    {
+      "semantic": 0.6,
+      "keyword": 0.4,
+      "precision_at_5": 0.09600000000000002
+    },
+    {
+      "semantic": 0.9,
+      "keyword": 0.1,
+      "precision_at_5": 0.08000000000000006
+    },
+    {
+      "semantic": 0.5,
+      "keyword": 0.5,
+      "precision_at_5": 0.07200000000000004
+    }
+  ],
+  "acceptance_criteria": {
+    "ac_2_8_3_precision_gte_070": false,
+    "ac_2_8_4_uplift_gte_5pct": false,
+    "story_2_9_ready_precision_gte_075": false
+  }
+}

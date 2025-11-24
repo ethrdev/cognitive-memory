@@ -1,0 +1,106 @@
+# Pre-commit hooks configuration for Cognitive Memory System
+# Run `pre-commit install` to install these hooks
+# Run `pre-commit run --all-files` to test on all files
+
+repos:
+  # Built-in hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        description: Trim trailing whitespace
+      - id: end-of-file-fixer
+        description: Ensure files end with newline
+      - id: check-yaml
+        description: Check YAML syntax
+      - id: check-json
+        description: Check JSON syntax
+      - id: check-toml
+        description: Check TOML syntax
+      - id: check-merge-conflict
+        description: Check for merge conflict markers
+      - id: check-case-conflict
+        description: Check for case conflicts
+      - id: check-docstring-first
+        description: Check docstring is first
+      - id: debug-statements
+        description: Check for debugger imports and py37+ breakpoint() calls
+      - id: name-tests-test
+        description: Check that test files are named correctly
+        args: ["--pytest-test-first"]
+
+  # Python code formatting with Black
+  - repo: https://github.com/psf/black
+    rev: 24.4.2
+    hooks:
+      - id: black
+        description: Format Python code with Black
+        language_version: python3.13
+        args: [--line-length=88]
+
+  # Python linting with Ruff
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.1
+    hooks:
+      - id: ruff
+        description: Lint Python code with Ruff
+        args: [--fix, --line-length=88]
+
+  # Type checking with MyPy
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.9.0
+    hooks:
+      - id: mypy
+        description: Type check Python code with MyPy
+        additional_dependencies: [types-PyYAML, types-requests]
+        args: [--ignore-missing-imports]
+        exclude: ^(tests/|docs/)
+
+  # Security scanning
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.7
+    hooks:
+      - id: bandit
+        description: Check for common security issues
+        args: [-f, json, -o, bandit-report.json]
+        exclude: ^tests/
+
+  # Dependency vulnerability scanning disabled due to pyproject.toml + requirements.txt conflict
+  # Use: safety check manually when needed
+
+# Global configuration
+default_stages: [commit]
+fail_fast: false
+
+# Configuration for specific file types
+exclude: |
+  (?x)^(
+    \.git/.*|
+    \.venv/.*|
+    venv/.*|
+    __pycache__/.*|
+    \.pytest_cache/.*|
+    \.mypy_cache/.*|
+    build/.*|
+    dist/.*|
+    .*\.egg-info/.*|
+    .*\.pyc|
+    .*\.pyo|
+    .*\.pyd|
+    .*\.swp|
+    .*\.swo|
+    .*~$
+  )
+
+# CI configuration
+ci:
+  autofix_commit_msg: |
+    [pre-commit.ci] auto fixes from pre-commit.com hooks
+
+    for more information, see https://pre-commit.ci
+  autofix_prs: true
+  autoupdate_branch: ''
+  autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
+  autoupdate_schedule: weekly
+  skip: []
+  submodules: false

@@ -1,0 +1,272 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>2</epicId>
+    <storyId>9</storyId>
+    <title>Precision@5 Validation auf Ground Truth Set</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-16</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>bmad-docs/stories/2-9-precision-5-validation-auf-ground-truth-set.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Entwickler</asA>
+    <iWant>finales Precision@5 nach Calibration validieren</iWant>
+    <soThat>ich sicherstelle dass NFR002 (Precision@5 >0.75) erfüllt ist und das System production-ready ist</soThat>
+    <tasks>
+      <task id="1" ac="2.9.1">
+        <title>Ground Truth Set Preparation and Validation</title>
+        <subtasks>
+          <subtask id="1.1">Verify Ground Truth Set Existence - Confirm 50-100 Queries in PostgreSQL ground_truth table, validate expected_docs arrays populated, check query stratification (40% Short, 40% Medium, 20% Long)</subtask>
+          <subtask id="1.2">Load Calibrated Weights from config.yaml - Read hybrid_search_weights section, extract semantic and keyword weights, verify weights sum to 1.0</subtask>
+          <subtask id="1.3">Prepare Validation Environment - Verify MCP Server connectivity or prepare standalone validation script, ensure OpenAI API Key available for embeddings, check MOCK_MODE=False for production validation</subtask>
+        </subtasks>
+      </task>
+
+      <task id="2" ac="2.9.1">
+        <title>Precision@5 Validation Script Implementation</title>
+        <subtasks>
+          <subtask id="2.1">Create validate_precision_at_5.py script - File: mcp_server/scripts/validate_precision_at_5.py, reuse calculate_precision_at_5() function from Story 2.8, load all Ground Truth Queries from PostgreSQL</subtask>
+          <subtask id="2.2">Implement Hybrid Search Loop - For each Ground Truth Query execute hybrid_search with calibrated weights, retrieve Top-5 L2 Insight IDs, compare with expected_docs array, calculate Precision@5 per query</subtask>
+          <subtask id="2.3">Implement Macro-Average Aggregation - Sum all per-query Precision@5 scores, divide by total number of queries, store individual query results for breakdown analysis</subtask>
+          <subtask id="2.4">Add Query-Type Breakdown - Classify queries by length (Short ≤10 words, Medium 11-29, Long ≥30), calculate separate P@5 for Short/Medium/Long queries, identify which query types perform best/worst, store breakdown in validation results</subtask>
+        </subtasks>
+      </task>
+
+      <task id="3" ac="2.9.1">
+        <title>Execute Validation and Collect Results</title>
+        <subtasks>
+          <subtask id="3.1">Run Validation Script - Execute: python mcp_server/scripts/validate_precision_at_5.py, monitor execution time and errors, collect all metrics (overall P@5, breakdown by query type)</subtask>
+          <subtask id="3.2">Generate Validation Results JSON - File: mcp_server/scripts/validation_results.json, include macro_avg_precision_at_5, query_count, breakdown, timestamp, store individual query results for debugging</subtask>
+          <subtask id="3.3">Analyze Results Quality - Compare to Story 2.8 Grid Search Results, verify consistency with calibration expectations, identify outlier queries (very high or very low P@5)</subtask>
+        </subtasks>
+      </task>
+
+      <task id="4" ac="2.9.2, 2.9.3, 2.9.4">
+        <title>Evaluate Success Criteria</title>
+        <subtasks>
+          <subtask id="4.1">Determine Success Level - Check if P@5 ≥0.75 → Full Success path, check if P@5 0.70-0.74 → Partial Success path, check if P@5 &lt;0.70 → Failure path</subtask>
+          <subtask id="4.2">Full Success Actions (if P@5 ≥0.75) - Mark Epic 2 as complete, document production-ready status, prepare for Epic 3 transition</subtask>
+          <subtask id="4.3">Partial Success Actions (if P@5 0.70-0.74) - Create monitoring plan document, schedule re-calibration in 2 weeks, identify data collection priorities</subtask>
+          <subtask id="4.4">Failure Analysis (if P@5 &lt;0.70) - Breakdown by query type (Short/Medium/Long), identify failure patterns, document architecture review recommendations</subtask>
+        </subtasks>
+      </task>
+
+      <task id="5" ac="2.9.2, 2.9.3, 2.9.4">
+        <title>Documentation</title>
+        <subtasks>
+          <subtask id="5.1">Create evaluation-results.md - File: bmad-docs/evaluation-results.md, document finale Precision@5 metric, include success level (Full/Partial/Failure), add query-type breakdown analysis</subtask>
+          <subtask id="5.2">Document Success Path Taken - If Full Success: document production readiness, if Partial Success: document monitoring plan and re-calibration schedule, if Failure: document analysis findings and next steps</subtask>
+          <subtask id="5.3">Add Recommendations - Performance optimization opportunities, future calibration triggers (domain shift, new data), Epic 3 readiness assessment</subtask>
+        </subtasks>
+      </task>
+
+      <task id="6" ac="All">
+        <title>Final Validation and Story Completion</title>
+        <subtasks>
+          <subtask id="6.1">Verify All Deliverables - validate_precision_at_5.py script created and tested, validation_results.json generated, evaluation-results.md documentation complete, success criteria evaluated and documented</subtask>
+          <subtask id="6.2">Update Story Status - Mark story as complete in sprint-status.yaml, update story file with final results, document any deviations or insights</subtask>
+          <subtask id="6.3">Epic 2 Completion Check - Verify all 9 Epic 2 stories completed, assess readiness for Epic 3 transition, document any outstanding technical debt</subtask>
+        </subtasks>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-2.9.1" title="Finale Precision@5 Berechnung">
+      <given>Hybrid Gewichte sind kalibriert (Story 2.8)</given>
+      <when>ich Precision@5 auf komplettem Ground Truth Set messe</when>
+      <then>
+        - Führe hybrid_search für alle 50-100 Ground Truth Queries aus
+        - Verwende kalibrierte Gewichte aus config.yaml (semantic=0.7, keyword=0.3)
+        - Vergleiche Top-5 Ergebnisse mit expected_docs aus Ground Truth Tabelle
+        - Berechne Precision@5 = (Anzahl relevanter Docs in Top-5) / 5 pro Query
+        - Aggregiere Macro-Average Precision@5 (Durchschnitt über alle Queries)
+      </then>
+    </criterion>
+
+    <criterion id="AC-2.9.2" title="Full Success Criteria (P@5 ≥0.75)">
+      <given>Precision@5 Berechnung abgeschlossen</given>
+      <when>Precision@5 ≥0.75 erreicht wird</when>
+      <then>
+        - System ist ready for production
+        - Epic 2 wird als abgeschlossen markiert
+        - Dokumentiere finale Metrik in bmad-docs/evaluation-results.md
+        - Transition zu Epic 3 (Production Readiness)
+      </then>
+    </criterion>
+
+    <criterion id="AC-2.9.3" title="Partial Success Criteria (P@5 0.70-0.74)">
+      <given>Precision@5 Berechnung abgeschlossen</given>
+      <when>Precision@5 zwischen 0.70 und 0.74 liegt</when>
+      <then>
+        - Deploy System in Production mit Monitoring
+        - Continue Data Collection (mehr L2 Insights sammeln)
+        - Re-run Calibration nach 2 Wochen mit erweiterten Daten
+        - Dokumentiere Partial Success Status und Monitoring-Plan
+      </then>
+    </criterion>
+
+    <criterion id="AC-2.9.4" title="Failure Handling (P@5 &lt;0.70)">
+      <given>Precision@5 Berechnung abgeschlossen</given>
+      <when>Precision@5 &lt;0.70</when>
+      <then>
+        - Analyse durchführen: Welche Query-Typen scheitern (Short/Medium/Long)?
+        - Breakdown nach Query-Typ: Separate P@5 für Short, Medium, Long
+        - Optionen evaluieren:
+          * Option 1: Mehr Ground Truth Queries sammeln
+          * Option 2: Embedding-Modell wechseln (z.B. text-embedding-3-large)
+          * Option 3: L2 Compression Quality verbessern
+        - Architecture Review erforderlich
+      </then>
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>bmad-docs/tech-spec-epic-2.md</path>
+        <title>Epic Technical Specification: RAG Pipeline &amp; Hybrid Calibration</title>
+        <section>Story 2.9: Precision@5 Validation auf Ground Truth Set (lines 435-440)</section>
+        <snippet>Authoritative acceptance criteria for Story 2.9. Defines Graduated Success Criteria: Full Success (P@5 ≥0.75), Partial Success (P@5 0.70-0.74), Failure (P@5 &lt;0.70). Critical for determining Epic 2 completion status.</snippet>
+      </doc>
+
+      <doc>
+        <path>bmad-docs/epics.md</path>
+        <title>Cognitive Memory System v3.1.0-Hybrid - Epic Breakdown</title>
+        <section>Story 2.9: Precision@5 Validation auf Ground Truth Set (lines 832-873)</section>
+        <snippet>User story definition and technical notes. Explains Graduated Success Criteria rationale, Precision@5 >0.75 target (higher than v2.4.1), and monitoring strategy for Partial Success. Emphasizes this is the finale Epic 2 validation story.</snippet>
+      </doc>
+
+      <doc>
+        <path>bmad-docs/architecture.md</path>
+        <title>Cognitive Memory System v3.1.0-Hybrid - Architektur</title>
+        <section>NFR002: Precision@5 >0.75 (lines 546-551)</section>
+        <snippet>Non-functional requirement defining Precision@5 >0.75 as system success metric. Story 2.9 is the final check for NFR002 fulfillment. Includes database schema for ground_truth table (lines 269-282) with expected_docs arrays.</snippet>
+      </doc>
+
+      <doc>
+        <path>bmad-docs/stories/2-8-hybrid-weight-calibration-via-grid-search.md</path>
+        <title>Story 2.8: Hybrid Weight Calibration via Grid Search</title>
+        <section>Completion Notes and Dev Notes</section>
+        <snippet>Critical learnings from Story 2.8: Calibrated weights (semantic=0.7, keyword=0.3) in config.yaml, MOCK_MODE limitation (P@5=0.1040 not production-ready), production-ready grid search code with calculate_precision_at_5() function that Story 2.9 should reuse. Expected production P@5 >0.75 with real data.</snippet>
+      </doc>
+
+      <doc>
+        <path>bmad-docs/calibration-results.md</path>
+        <title>Grid Search Calibration Results (Story 2.8)</title>
+        <section>Grid Search Results and Observations</section>
+        <snippet>Documents Story 2.8 Grid Search execution with mock data. Best weights: semantic=0.7, keyword=0.3 (P@5=0.1040). Notes infrastructure validated and ready for production re-calibration. Story 2.9 should use these calibrated weights for validation.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <artifact>
+        <path>mcp_server/scripts/calibrate_hybrid_weights.py</path>
+        <kind>script</kind>
+        <symbol>calculate_precision_at_5()</symbol>
+        <lines>entire file (318 lines)</lines>
+        <reason>Grid Search script from Story 2.8. Contains production-ready calculate_precision_at_5() function that Story 2.9 must REUSE. Implements Precision@5 calculation logic: (relevant_docs_in_top5) / 5. Also contains Ground Truth loading logic and mock_hybrid_search() example.</reason>
+      </artifact>
+
+      <artifact>
+        <path>config.yaml</path>
+        <kind>config</kind>
+        <symbol>hybrid_search_weights</symbol>
+        <lines>1-34</lines>
+        <reason>Contains calibrated weights from Story 2.8 (semantic=0.7, keyword=0.3). Story 2.9 validation script must load these weights for hybrid_search calls. Includes metadata: calibration_date, calibration_precision_at_5, mock_data flag (currently true, should be false for production).</reason>
+      </artifact>
+
+      <artifact>
+        <path>mcp_server/db/connection.py</path>
+        <kind>module</kind>
+        <symbol>get_connection()</symbol>
+        <lines>N/A</lines>
+        <reason>PostgreSQL connection pool from Story 1.2. Story 2.9 validation script needs database access to load Ground Truth Set from ground_truth table (query, expected_docs columns). Use this module for all database operations.</reason>
+      </artifact>
+
+      <artifact>
+        <path>mcp_server/scripts/generate_mock_ground_truth.py</path>
+        <kind>script</kind>
+        <symbol>generate_mock_ground_truth()</symbol>
+        <lines>N/A</lines>
+        <reason>Mock data generator from Story 2.8. Reference for understanding Ground Truth data structure. Production validation should NOT use mock data - load from PostgreSQL ground_truth table instead.</reason>
+      </artifact>
+    </code>
+
+    <dependencies>
+      <python>
+        <package name="psycopg2-binary" version="^2.9.0" purpose="PostgreSQL database connection for loading Ground Truth Set" />
+        <package name="pgvector" version="^0.2.0" purpose="Vector operations (optional, mainly for hybrid_search tool)" />
+        <package name="numpy" version="^1.24.0" purpose="Numerical operations for Precision@5 calculations" />
+        <package name="pyyaml" version="^6.0" purpose="Parse config.yaml to load calibrated hybrid_search_weights" />
+        <package name="openai" version="^1.0.0" purpose="OpenAI API for embeddings (if validation script generates embeddings)" />
+        <package name="python-dotenv" version="^1.0.0" purpose="Load .env.development for database connection string and API keys" />
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>MOCK_MODE must be False for production validation - Story 2.9 requires real Ground Truth Set from PostgreSQL, not mock data used in Story 2.8 infrastructure testing</constraint>
+    <constraint>Use calibrated weights from config.yaml (semantic=0.7, keyword=0.3) - Do NOT hardcode weights, load from configuration file for consistency with Story 2.8 calibration</constraint>
+    <constraint>Query-Type classification via length-based heuristic - Ground Truth table does not have query_type column (that's in golden_test_set from Epic 3). Classify dynamically: Short (≤10 words), Medium (11-29 words), Long (≥30 words)</constraint>
+    <constraint>Graduated Success Criteria branching - Validation script must determine success level (Full/Partial/Failure) and execute corresponding actions. Not a binary pass/fail test.</constraint>
+    <constraint>Macro-Average Precision@5 aggregation - Each query weighted equally, NOT micro-average (which would bias toward queries with more expected_docs). PRD/Tech-Spec defines macro-average as standard.</constraint>
+    <constraint>Reuse calculate_precision_at_5() from Story 2.8 - Do NOT reimplement Precision@5 calculation. Extract function from mcp_server/scripts/calibrate_hybrid_weights.py to ensure consistency.</constraint>
+    <constraint>Statistical robustness requirement - 50-100 Ground Truth Queries required (NFR002). Validation must halt with clear error if ground_truth table has fewer than 50 queries.</constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>hybrid_search MCP Tool</name>
+      <kind>MCP Tool (Epic 1)</kind>
+      <signature>hybrid_search(query_embedding: List[float], query_text: str, top_k: int = 5, weights: HybridWeights = None) -> List[SearchResult]</signature>
+      <path>mcp_server/tools/hybrid_search.py</path>
+      <notes>Core retrieval tool from Epic 1. Story 2.9 validation script calls this tool for each Ground Truth query with calibrated weights from config.yaml. Returns Top-5 L2 Insight IDs for Precision@5 calculation.</notes>
+    </interface>
+
+    <interface>
+      <name>ground_truth PostgreSQL Table</name>
+      <kind>Database Schema</kind>
+      <signature>CREATE TABLE ground_truth (id SERIAL PRIMARY KEY, query TEXT NOT NULL, expected_docs INTEGER[] NOT NULL, judge1_score FLOAT, judge2_score FLOAT, kappa FLOAT, created_at TIMESTAMPTZ DEFAULT NOW())</signature>
+      <path>mcp_server/db/migrations/002_add_ground_truth.sql</path>
+      <notes>Ground Truth Set from Epic 1 (Stories 1.10-1.12). Story 2.9 loads ALL rows from this table to run validation. Expected 50-100 queries with expected_docs arrays (L2 Insight IDs).</notes>
+    </interface>
+
+    <interface>
+      <name>config.yaml - hybrid_search_weights</name>
+      <kind>YAML Configuration</kind>
+      <signature>hybrid_search_weights: {semantic: float, keyword: float, calibration_date: str, mock_data: bool}</signature>
+      <path>config.yaml</path>
+      <notes>Calibrated weights from Story 2.8. Story 2.9 validation script must load these values at runtime. Currently: semantic=0.7, keyword=0.3, mock_data=true (should be false for production).</notes>
+    </interface>
+
+    <interface>
+      <name>calculate_precision_at_5() function</name>
+      <kind>Python Function</kind>
+      <signature>def calculate_precision_at_5(retrieved_ids: List[int], expected_ids: List[int]) -> float</signature>
+      <path>mcp_server/scripts/calibrate_hybrid_weights.py</path>
+      <notes>Precision@5 calculation function from Story 2.8. Returns float 0.0-1.0. Formula: len(set(retrieved_ids[:5]) &amp; set(expected_ids)) / 5.0. Story 2.9 MUST reuse this function for consistency.</notes>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Story 2.9 is primarily script execution and validation, similar to Story 2.8. Manual testing approach: (1) Prepare Ground Truth Set (verify ≥50 queries in PostgreSQL), (2) Implement validation script (mcp_server/scripts/validate_precision_at_5.py), (3) Execute validation (run script, collect results ~5-10 min), (4) Evaluate success criteria (determine Full/Partial/Failure path), (5) Document results (create evaluation-results.md), (6) Verify deliverables (confirm all outputs present). No automated unit tests required for Story 2.9 scope - calculate_precision_at_5() already validated in Story 2.8.
+    </standards>
+
+    <locations>
+      <location>mcp_server/scripts/validate_precision_at_5.py (NEW validation script)</location>
+      <location>mcp_server/scripts/validation_results.json (NEW validation output)</location>
+      <location>bmad-docs/evaluation-results.md (NEW documentation)</location>
+    </locations>
+
+    <ideas>
+      <idea ac="AC-2.9.1">Test validate_precision_at_5.py script execution on Ground Truth Set - Verify script loads calibrated weights from config.yaml, executes hybrid_search for all queries, calculates Precision@5 correctly (reuses Story 2.8 function), generates validation_results.json with macro_avg_precision_at_5 and query-type breakdown</idea>
+      <idea ac="AC-2.9.2, AC-2.9.3, AC-2.9.4">Test Graduated Success Criteria logic - Verify correct branching for Full Success (P@5 ≥0.75 → mark Epic 2 complete), Partial Success (P@5 0.70-0.74 → create monitoring plan), Failure (P@5 &lt;0.70 → architecture review). Test with different P@5 values to ensure all paths work.</idea>
+      <idea ac="AC-2.9.1">Test Query-Type breakdown calculation - Verify length-based classification (Short ≤10 words, Medium 11-29, Long ≥30), calculate separate P@5 for each type, identify performance patterns (e.g., Medium queries expected 0.75-0.80, Short/Long 0.70-0.75)</idea>
+      <idea ac="AC-2.9.1">Edge case testing - Empty Ground Truth Set (script should HALT with error), missing expected_docs (skip query with warning), all L2 IDs invalid (P@5=0.0 expected), query without retrieval results (P@5=0.0)</idea>
+      <idea ac="AC-2.9.1">Consistency check with Story 2.8 - Compare Story 2.9 validation P@5 to Story 2.8 Grid Search expectation. If significantly different (e.g., &lt;0.65 vs expected >0.75), perform root cause analysis (query distribution mismatch? mock vs real data?)</idea>
+    </ideas>
+  </tests>
+</story-context>

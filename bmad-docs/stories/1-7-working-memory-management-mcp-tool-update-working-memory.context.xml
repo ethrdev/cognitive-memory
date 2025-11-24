@@ -1,0 +1,342 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>7</storyId>
+    <title>Working Memory Management (MCP Tool: update_working_memory)</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-12</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>bmad-docs/stories/1-7-working-memory-management-mcp-tool-update-working-memory.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Claude Code</asA>
+    <iWant>Working Memory mit LRU Eviction verwalten</iWant>
+    <soThat>der aktuelle Session-Kontext begrenzt bleibt (8-10 Items)</soThat>
+    <tasks>Working Memory Insertion Logic (AC: 1)
+  - [ ] Create `async def add_working_memory_item(content: str, importance: float, conn) -> dict`
+  - [ ] Validate importance range: 0.0 ≤ importance ≤ 1.0
+  - [ ] SQL Query: `INSERT INTO working_memory (content, importance, last_accessed) VALUES (%s, %s, NOW())`
+  - [ ] Return inserted item ID
+  - [ ] Update last_accessed to NOW() on insert
+
+- [ ] Working Memory Capacity Check (AC: 1)
+  - [ ] After insertion: `SELECT COUNT(*) FROM working_memory`
+  - [ ] If count >10: Trigger LRU Eviction
+  - [ ] Configurable capacity via config.yaml (default: 10)
+
+- [ ] LRU Eviction Logic with Importance Override (AC: 2)
+  - [ ] Create `async def evict_lru_item(conn) -> Optional[int]`
+  - [ ] SQL Query: `SELECT id, content, importance, last_accessed FROM working_memory WHERE importance ≤0.8 ORDER BY last_accessed ASC LIMIT 1`
+  - [ ] If no items with importance ≤0.8: Return None (no eviction possible - all critical)
+  - [ ] If item found: Return item ID for eviction
+  - [ ] Critical Items (importance >0.8) NEVER evicted via LRU
+
+- [ ] Force Eviction for Critical-Only Edge Case (AC: 2, Test 10)
+  - [ ] Create `async def force_evict_oldest_critical(conn) -> int`
+  - [ ] SQL Query: `SELECT id FROM working_memory ORDER BY last_accessed ASC LIMIT 1`
+  - [ ] Called when evict_lru_item() returns None (all items have importance >0.8)
+  - [ ] Returns oldest item ID regardless of importance
+  - [ ] Ensures capacity constraint (≤10 items) never violated
+  - [ ] Rationale: Hard capacity limit overrides importance protection
+
+- [ ] Stale Memory Archival (AC: 3, Enhancement E6)
+  - [ ] Create `async def archive_to_stale_memory(item_id: int, reason: str, conn) -> int`
+  - [ ] Load item from working_memory: `SELECT content, importance FROM working_memory WHERE id=%s`
+  - [ ] Insert into stale_memory: `INSERT INTO stale_memory (original_content, importance, reason, archived_at) VALUES (%s, %s, %s, NOW())`
+  - [ ] Reason values: "LRU_EVICTION" or "MANUAL_ARCHIVE"
+  - [ ] Return archived item ID
+
+- [ ] Item Deletion after Archival (AC: 2)
+  - [ ] After archival: `DELETE FROM working_memory WHERE id=%s`
+  - [ ] Commit transaction (archival + deletion atomic)
+
+- [ ] Atomic Transaction Management (Prevent Race Conditions)
+  - [ ] Wrap entire operation in single transaction scope
+  - [ ] Order: add → check capacity → evict (with fallback) → archive → delete → commit
+  - [ ] conn.rollback() on ANY error in the chain
+  - [ ] Prevents partial state (e.g., item added but eviction failed)
+  - [ ] Prevents race conditions in concurrent calls (multiple clients adding simultaneously)
+
+- [ ] update_working_memory Tool Implementation (AC: 1, 2, 3)
+  - [ ] Locate stub in `mcp_server/tools/__init__.py`
+  - [ ] Replace stub implementation:
+    - [ ] Parameter extraction: content (string), importance (float, default 0.5)
+    - [ ] Validate importance: 0.0 ≤ importance ≤ 1.0
+    - [ ] **BEGIN TRANSACTION** (entire operation atomic)
+    - [ ] Call add_working_memory_item(content, importance, conn)
+    - [ ] Check capacity: If >10 items → trigger eviction
+    - [ ] Call evict_lru_item(conn) → get evicted_id
+    - [ ] **NEW:** If evicted_id is None AND count >10 → call force_evict_oldest_critical(conn)
+    - [ ] If evicted_id: Call archive_to_stale_memory(evicted_id, "LRU_EVICTION", conn)
+    - [ ] Delete evicted item from working_memory
+    - [ ] **FIXED:** Return response: {added_id: int, evicted_id: Optional[int], archived_id: Optional[int]} (singular, not arrays)
+    - [ ] **COMMIT TRANSACTION** on success
+  - [ ] Error handling: DB errors, invalid importance values, rollback on any error
+  - [ ] Logging: All operations (insert, eviction, archival)</tasks>
+  </story>
+
+  <acceptanceCriteria>**Given** Working Memory enthält Items
+**When** Claude Code `update_working_memory` aufruft mit (content, importance)
+**Then** wird das Item hinzugefügt und Eviction durchgeführt:
+- Item wird in `working_memory` gespeichert
+- Importance-Score (0.0-1.0) wird gesetzt
+- last_accessed wird auf NOW() gesetzt bei INSERT (SQL DEFAULT)
+- Falls >10 Items: Eviction wird getriggert
+
+**And** LRU Eviction mit Importance-Override funktioniert:
+- Items werden sortiert nach last_accessed (älteste zuerst)
+- Items mit Importance >0.8 werden übersprungen (Critical Items)
+- Ältestes Non-Critical Item wird entfernt
+- Entferntes Item wird zu Stale Memory archiviert (Enhancement E6)
+
+**And** Stale Memory Archive wird befüllt:
+- Archivierte Items in `stale_memory` mit Timestamp + Reason
+- Reason: "LRU_EVICTION" oder "MANUAL_ARCHIVE"
+- Original Content + Importance erhalten</acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>bmad-docs/tech-spec-epic-1.md</path>
+        <title>Epic Technical Specification: MCP Server Foundation & Ground Truth Collection</title>
+        <section>Working Memory Service</section>
+        <snippet>**Working Memory Service** - LRU Eviction + Importance Management | (content, importance) | Updated Working Memory State | Story 1.7</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/architecture.md</path>
+        <title>Cognitive Memory System v3.1.0-Hybrid - Architektur</title>
+        <section>Working Memory Schema</section>
+        <snippet>```sql
+CREATE TABLE working_memory (
+    id SERIAL PRIMARY KEY,
+    content TEXT NOT NULL,
+    importance FLOAT NOT NULL CHECK (importance BETWEEN 0.0 AND 1.0),
+    last_accessed TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX idx_wm_lru ON working_memory(last_accessed ASC);
+```</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/architecture.md</path>
+        <title>Cognitive Memory System v3.1.0-Hybrid - Architektur</title>
+        <section>Stale Memory Schema</section>
+        <snippet>```sql
+CREATE TABLE stale_memory (
+    id SERIAL PRIMARY KEY,
+    original_content TEXT NOT NULL,
+    archived_at TIMESTAMPTZ DEFAULT NOW(),
+    importance FLOAT,  -- Nullable for old data without importance
+    reason VARCHAR(100) NOT NULL       -- 'LRU_EVICTION' | 'MANUAL_ARCHIVE'
+);
+```</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/epics.md</path>
+        <title>i-o - Epic Breakdown</title>
+        <section>Story 1.7 Working Memory Management</section>
+        <snippet>**Technical Notes:**
+- Capacity: 8-10 Items (configurable)
+- Importance Threshold: >0.8 für Critical Items
+- LRU-Sortierung: `ORDER BY last_accessed ASC`
+- Stale Memory: Unbegrenzte Retention (kein automatisches Löschen)
+- Resource `memory://stale-memory` ermöglicht Zugriff</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>mcp_server/tools/__init__.py</path>
+        <kind>tool implementation</kind>
+        <symbol>handle_update_working_memory</symbol>
+        <lines>712-727</lines>
+        <reason>Stub implementation that needs to be replaced with full working memory management logic</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/tools/__init__.py</path>
+        <kind>tool registration</kind>
+        <symbol>update_working_memory</symbol>
+        <lines>893-912</lines>
+        <reason>JSON schema definition for tool parameters - importance parameter currently defined as integer (incorrect), must be changed to number (float) type with minimum: 0.0, maximum: 1.0</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/tools/__init__.py</path>
+        <kind>database pattern</kind>
+        <symbol>handle_store_raw_dialogue</symbol>
+        <lines>400-467</lines>
+        <reason>Reference implementation for database operations using get_connection() context manager and error handling</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/db/connection.py</path>
+        <kind>database connection</kind>
+        <symbol>get_connection</symbol>
+        <lines>93-146</lines>
+        <reason>Context manager for PostgreSQL connections with connection pooling and health checks</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <python>
+        <package>mcp</package>
+        <version>^1.0.0</version>
+        <purpose>Python MCP SDK for tool registration and protocol handling</purpose>
+      </python>
+      <python>
+        <package>psycopg2-binary</package>
+        <version>^2.9.0</version>
+        <purpose>PostgreSQL database adapter with connection pooling</purpose>
+      </python>
+      <python>
+        <package>pytest</package>
+        <version>^7.4.0</version>
+        <purpose>Testing framework for unit and integration tests</purpose>
+      </python>
+      <python>
+        <package>python-dotenv</package>
+        <version>^1.0.0</version>
+        <purpose>Environment variable management for database and API configuration</purpose>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>
+      <type>development pattern</type>
+      <rule>PostgreSQL Connection Pattern</rule>
+      <description>Use `with get_connection() as conn:` context manager for database operations</description>
+    </constraint>
+    <constraint>
+      <type>development pattern</type>
+      <rule>Error Handling Pattern</rule>
+      <description>Use try/except with psycopg2.Error and generic Exception, return structured error responses</description>
+    </constraint>
+    <constraint>
+      <type>code quality</type>
+      <rule>Type hints REQUIRED</rule>
+      <description>All functions must have type hints (mypy --strict compliance)</description>
+    </constraint>
+    <constraint>
+      <type>code quality</type>
+      <rule>Import organization</rule>
+      <description>All imports at file top, no duplicate imports or unused variables</description>
+    </constraint>
+    <constraint>
+      <type>code quality</type>
+      <rule>Code formatting</rule>
+      <description>Black + Ruff for linting and formatting compliance</description>
+    </constraint>
+    <constraint>
+      <type>database constraint</type>
+      <rule>Working Memory Capacity</rule>
+      <description>Maximum 10 items in working_memory table, configurable via config.yaml</description>
+    </constraint>
+    <constraint>
+      <type>database constraint</type>
+      <rule>Importance Range Validation</rule>
+      <description>Importance scores must be between 0.0 and 1.0 inclusive (database CHECK constraint)</description>
+    </constraint>
+    <constraint>
+      <type>business rule</type>
+      <rule>Critical Items Protection</rule>
+      <description>Items with importance >0.8 are never evicted via LRU, only via force eviction when capacity exceeded</description>
+    </constraint>
+    <constraint>
+      <type>database constraint</type>
+      <rule>Atomic Transaction Management</rule>
+      <description>Entire update_working_memory operation (add item, check capacity, evict, archive, delete) must be wrapped in single transaction with commit at end and rollback on any error to prevent race conditions and partial state</description>
+    </constraint>
+    <constraint>
+      <type>business rule</type>
+      <rule>Insertion-Order Eviction (NOT True LRU)</rule>
+      <description>last_accessed is set only at INSERT time (SQL DEFAULT NOW()), not updated on READ operations. Eviction is based on insertion order, not access patterns. True LRU (with access_working_memory tool) is future enhancement.</description>
+    </constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>update_working_memory</name>
+      <kind>MCP Tool</kind>
+      <signature>update_working_memory(content: str, importance: float = 0.5) -> dict</signature>
+      <path>mcp_server/tools/__init__.py</path>
+      <description>Add item to Working Memory with atomic eviction handling. Returns {added_id: int, evicted_id: Optional[int], archived_id: Optional[int]}</description>
+    </interface>
+    <interface>
+      <name>add_working_memory_item</name>
+      <kind>Database Function</kind>
+      <signature>async def add_working_memory_item(content: str, importance: float, conn) -> dict</signature>
+      <path>mcp_server/tools/__init__.py (to be implemented)</path>
+      <description>Insert new item into working_memory table with timestamp and return generated ID</description>
+    </interface>
+    <interface>
+      <name>evict_lru_item</name>
+      <kind>Database Function</kind>
+      <signature>async def evict_lru_item(conn) -> Optional[int]</signature>
+      <path>mcp_server/tools/__init__.py (to be implemented)</path>
+      <description>Find oldest non-critical item (importance ≤0.8) for LRU eviction, return ID or None if all critical</description>
+    </interface>
+    <interface>
+      <name>force_evict_oldest_critical</name>
+      <kind>Database Function</kind>
+      <signature>async def force_evict_oldest_critical(conn) -> int</signature>
+      <path>mcp_server/tools/__init__.py (to be implemented)</path>
+      <description>Force eviction of oldest item when all items are critical (capacity override)</description>
+    </interface>
+    <interface>
+      <name>archive_to_stale_memory</name>
+      <kind>Database Function</kind>
+      <signature>async def archive_to_stale_memory(item_id: int, reason: str, conn) -> int</signature>
+      <path>mcp_server/tools/__init__.py (to be implemented)</path>
+      <description>Archive working memory item to stale_memory table before deletion</description>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Unit tests mit real PostgreSQL database, Integration tests via MCP stdio transport, Cleanup test data in teardown/finally, Mock external APIs (OpenAI) for unit tests when applicable, Black + Ruff + mypy for code quality, pytest framework with coverage reporting</standards>
+    <locations>tests/test_working_memory.py (new file to create), tests/test_mcp_server.py (existing integration tests), mcp_server/tools/__init__.py (production code)</locations>
+    <ideas>
+      <test mapped_to="AC1">
+        <id>test_valid_item_insertion</id>
+        <description>Valid item insertion - verify item added to DB with correct importance and timestamp</description>
+      </test>
+      <test mapped_to="AC1">
+        <id>test_capacity_enforcement</id>
+        <description>Capacity enforcement - add 15 items, verify 5 evicted, maintain ≤10 items total</description>
+      </test>
+      <test mapped_to="AC2">
+        <id>test_importance_override</id>
+        <description>Importance override - add 10 items (all importance >0.8), verify all 10 remain in working_memory (no eviction)</description>
+      </test>
+      <test mapped_to="AC2">
+        <id>test_mixed_importance</id>
+        <description>Mixed importance - add 5 critical (>0.8) + 10 normal items, verify only normal items evicted, 5 critical + 5 normal remain</description>
+      </test>
+      <test mapped_to="AC3">
+        <id>test_stale_memory_archival</id>
+        <description>Stale Memory archival - verify evicted items in stale_memory table with reason "LRU_EVICTION"</description>
+      </test>
+      <test mapped_to="AC1-2">
+        <id>test_insertion_order_eviction</id>
+        <description>Insertion order eviction - add 10 items at T0, T1, T2..., add 11th item at T10, verify item from T0 evicted (oldest by last_accessed)</description>
+      </test>
+      <test mapped_to="validation">
+        <id>test_invalid_importance</id>
+        <description>Invalid importance - importance=1.5, verify error returned</description>
+      </test>
+      <test mapped_to="validation">
+        <id>test_empty_content</id>
+        <description>Empty content - content="", verify error or warning</description>
+      </test>
+      <test mapped_to="AC3">
+        <id>test_manual_archive</id>
+        <description>Manual archive - test manual archival with reason "MANUAL_ARCHIVE"</description>
+      </test>
+      <test mapped_to="AC2-edge">
+        <id>test_all_critical_force_eviction</id>
+        <description>Edge case - all 10 items critical (importance >0.8), add 11th item, verify oldest critical item evicted (force eviction, capacity override)</description>
+      </test>
+      <test mapped_to="integration">
+        <id>test_mcp_tool_call_end_to_end</id>
+        <description>Integration Test: MCP Tool Call End-to-End - call_tool("update_working_memory", {"content": "test content", "importance": 0.6}) and verify response structure</description>
+      </test>
+    </ideas>
+  </tests>
+</story-context>

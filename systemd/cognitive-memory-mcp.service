@@ -1,0 +1,28 @@
+[Unit]
+Description=Cognitive Memory MCP Server - Persistent Memory System
+Documentation=https://github.com/ethrdev/i-o
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=notify
+User=ethr
+WorkingDirectory=/home/user/i-o
+ExecStart=/usr/bin/poetry run python mcp_server/__main__.py
+Restart=always
+RestartSec=10
+Environment="ENVIRONMENT=production"
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cognitive-memory-mcp
+
+# Health Monitoring
+WatchdogSec=60
+NotifyAccess=main
+TimeoutStartSec=30
+
+[Install]
+WantedBy=multi-user.target
