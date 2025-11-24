@@ -69,7 +69,35 @@ chmod 600 .env.development
 # Edit .env.development with your API keys
 ```
 
-### Database Setup
+### Database Setup (Neon Cloud)
+
+This project uses [Neon Cloud](https://neon.tech) for serverless PostgreSQL with pgvector.
+
+1. **Create a Neon account** at [console.neon.tech](https://console.neon.tech)
+
+2. **Create a new project** and note your connection string:
+   ```
+   postgresql://neondb-user:PASSWORD@ep-xxx.REGION.aws.neon.tech/neondb?sslmode=require
+   ```
+
+3. **Enable pgvector extension** (in Neon SQL Editor):
+   ```sql
+   CREATE EXTENSION IF NOT EXISTS vector;
+   ```
+
+4. **Run migrations**:
+   ```bash
+   # Set your Neon connection string
+   export DATABASE_URL="postgresql://neondb-user:PASSWORD@ep-xxx.neon.tech/neondb?sslmode=require"
+
+   # Run all migrations
+   for f in mcp_server/db/migrations/*.sql; do psql "$DATABASE_URL" -f "$f"; done
+   ```
+
+5. **Update `.env.development`** with your Neon DATABASE_URL
+
+<details>
+<summary>Alternative: Local PostgreSQL Setup</summary>
 
 ```bash
 # Install PostgreSQL and pgvector (Arch Linux)
@@ -93,6 +121,7 @@ EOF
 PGPASSWORD=your_secure_password psql -U mcp_user -d cognitive_memory \
   -f mcp_server/db/migrations/001_initial_schema.sql
 ```
+</details>
 
 ### Running the MCP Server
 
@@ -136,7 +165,7 @@ cp .mcp.json.template .mcp.json
       "args": ["-m", "mcp_server"],
       "cwd": "/path/to/cognitive-memory",
       "env": {
-        "DATABASE_URL": "postgresql://mcp_user:password@localhost/cognitive_memory"
+        "DATABASE_URL": "postgresql://neondb-user:PASSWORD@ep-xxx.neon.tech/neondb?sslmode=require"
       }
     }
   }
