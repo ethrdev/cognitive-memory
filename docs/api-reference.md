@@ -1,9 +1,8 @@
 # API Reference - MCP Tools & Resources
 
-**Version:** 3.1.0-Hybrid
-**Ziel:** Complete API documentation für 7 MCP Tools und 5 Resources
+Complete API documentation for MCP Tools and Resources.
 
-Das Cognitive Memory System bietet MCP (Model Context Protocol) Integration mit 8 Tools und 5 Resources für vollständige Gedächtnis-Management-Funktionalität.
+The Cognitive Memory System provides MCP (Model Context Protocol) integration with 8 Tools and 5 Resources for comprehensive memory management.
 
 ## Table of Contents
 
@@ -720,7 +719,3 @@ Successful operations return:
 - **Episode Memory:** Unlimited (with search optimization)
 - **L0 Raw:** Unlimited (raw transcript storage)
 
----
-
-*API Reference created am 2025-11-24*
-*Projekt: Cognitive Memory System v3.1.0-Hybrid*
