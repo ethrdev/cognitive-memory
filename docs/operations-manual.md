@@ -4,9 +4,26 @@ Daily operations and maintenance guide for the Cognitive Memory System.
 
 ## Service Management
 
-### MCP Server Service
+### MCP Server (Neon Cloud)
 
-The MCP Server runs as a systemd service for automatic startup and restart.
+When using Neon Cloud, the MCP server runs on-demand via Claude Code.
+
+```bash
+# Start manually for testing
+source venv/bin/activate
+set -a && source .env.development && set +a
+python -m mcp_server
+
+# Check database connection
+psql "$DATABASE_URL" -c "SELECT 1;"
+
+# View Python process
+ps aux | grep "python -m mcp_server"
+```
+
+### MCP Server (Local PostgreSQL with systemd)
+
+For local installations, the MCP Server runs as a systemd service.
 
 ```bash
 # Check status
@@ -28,6 +45,16 @@ journalctl -u cognitive-memory-mcp -p err       # Errors only
 
 ### Health Checks
 
+**For Neon Cloud:**
+```bash
+# Database connection
+psql "$DATABASE_URL" -c "SELECT NOW();"
+
+# Process check
+ps aux | grep "python -m mcp_server"
+```
+
+**For Local PostgreSQL:**
 ```bash
 # Service status
 systemctl is-active cognitive-memory-mcp
@@ -41,7 +68,21 @@ systemctl show cognitive-memory-mcp --property=MemoryCurrent
 
 ## Backup Operations
 
-### Daily Backups
+### Neon Cloud
+
+Neon provides automatic continuous backups. For manual operations:
+
+```bash
+# Manual backup
+pg_dump "$DATABASE_URL" -Fc > backup_$(date +%Y%m%d).dump
+
+# Verify backup
+pg_restore --list backup_$(date +%Y%m%d).dump | head -20
+
+# Point-in-Time Recovery: Use Neon Console → Branches → Create from point in time
+```
+
+### Local PostgreSQL
 
 Backups run automatically at 03:00 with 7-day retention.
 
@@ -62,6 +103,13 @@ find /backups/postgres/ -name "*.dump" -mtime +7 -delete
 
 ### Restore Procedure
 
+**For Neon Cloud:**
+```bash
+# Create new branch from backup in Neon Console, or:
+pg_restore -d "$DATABASE_URL" backup.dump
+```
+
+**For Local PostgreSQL:**
 ```bash
 # Stop MCP server
 sudo systemctl stop cognitive-memory-mcp
@@ -268,6 +316,18 @@ ORDER BY idx_scan DESC;
 
 ### Vacuum and Analyze
 
+**For Neon Cloud:**
+```bash
+# Neon handles autovacuum automatically
+# Manual analyze if needed:
+psql "$DATABASE_URL" -c "ANALYZE;"
+
+# Check statistics
+psql "$DATABASE_URL" -c \
+  "SELECT relname, last_vacuum, last_autovacuum FROM pg_stat_user_tables;"
+```
+
+**For Local PostgreSQL:**
 ```bash
 # Manual vacuum
 vacuumdb -U mcp_user -d cognitive_memory --analyze
@@ -279,21 +339,21 @@ psql -U mcp_user -d cognitive_memory -c \
 
 ## Troubleshooting Quick Reference
 
-| Issue | Check | Fix |
-|-------|-------|-----|
-| Server not starting | `journalctl -u cognitive-memory-mcp` | Check logs for errors |
-| Database connection | `psql -U mcp_user -d cognitive_memory` | Verify PostgreSQL running |
-| High latency | `pg_stat_activity` | Check slow queries |
-| Disk space | `df -h /backups` | Clean old backups |
-| Memory issues | `free -h` | Restart server |
+| Issue | Check (Neon) | Check (Local) | Fix |
+|-------|--------------|---------------|-----|
+| Server not starting | Python stderr | `journalctl -u cognitive-memory-mcp` | Check logs for errors |
+| Database connection | `psql "$DATABASE_URL"` | `psql -U mcp_user -d cognitive_memory` | Verify connection string/service |
+| High latency | First query wake-up (~1s) | `pg_stat_activity` | Upgrade Neon tier / check slow queries |
+| Disk space | N/A (managed) | `df -h /backups` | Clean old backups |
+| Memory issues | N/A (serverless) | `free -h` | Restart server |
 
 ## Maintenance Schedule
 
-| Task | Frequency | Command |
-|------|-----------|---------|
-| Check service status | Daily | `systemctl status cognitive-memory-mcp` |
-| Review drift logs | Daily | `get_golden_test_results` |
-| Check budget | Weekly | `python -m mcp_server.budget status` |
-| Verify backups | Weekly | `ls -la /backups/postgres/` |
-| Database vacuum | Monthly | `vacuumdb --analyze` |
-| Review ground truth | Monthly | Streamlit UI |
+| Task | Frequency | Neon Cloud | Local PostgreSQL |
+|------|-----------|------------|------------------|
+| Check database connection | Daily | `psql "$DATABASE_URL" -c "SELECT 1;"` | `systemctl status cognitive-memory-mcp` |
+| Review drift logs | Daily | `get_golden_test_results` | Same |
+| Check budget | Weekly | `python -m mcp_server.budget status` | Same |
+| Verify backups | Weekly | Check Neon Console | `ls -la /backups/postgres/` |
+| Database analyze | Monthly | `ANALYZE;` (optional) | `vacuumdb --analyze` |
+| Review ground truth | Monthly | Streamlit UI | Same |
