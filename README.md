@@ -197,11 +197,11 @@ The start script automatically loads environment variables from `.env.developmen
 
 | Document | Description |
 |----------|-------------|
-| [Installation Guide](docs/installation-guide.md) | Detailed setup instructions |
-| [Operations Manual](docs/operations-manual.md) | Daily operations and maintenance |
-| [API Reference](docs/api-reference.md) | Complete MCP tools and resources reference |
+| [Installation Guide](docs/guides/installation-guide.md) | Detailed setup instructions |
+| [Operations Manual](docs/operations/operations-manual.md) | Daily operations and maintenance |
+| [API Reference](docs/reference/api-reference.md) | Complete MCP tools and resources reference |
 | [Troubleshooting](docs/troubleshooting.md) | Common issues and solutions |
-| [Backup & Recovery](docs/backup-recovery.md) | Disaster recovery procedures |
+| [Backup & Recovery](docs/operations/backup-recovery.md) | Disaster recovery procedures |
 
 ## Project Structure
 

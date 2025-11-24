@@ -174,19 +174,19 @@ echo ""
 
 # Test 8: Production Checklist Documentation (AC 3.7.4)
 echo -e "${YELLOW}Test 8: Production Checklist Documentation${NC}"
-check_file "$PROJECT_ROOT/docs/production-checklist.md" "docs/production-checklist.md"
-if [ -f "$PROJECT_ROOT/docs/production-checklist.md" ]; then
+check_file "$PROJECT_ROOT/docs/operations/production-checklist.md" "docs/operations/production-checklist.md"
+if [ -f "$PROJECT_ROOT/docs/operations/production-checklist.md" ]; then
     # Check for required sections
-    if grep -q "Pre-Deployment Checklist" "$PROJECT_ROOT/docs/production-checklist.md"; then
+    if grep -q "Pre-Deployment Checklist" "$PROJECT_ROOT/docs/operations/production-checklist.md"; then
         echo -e "${GREEN}  ✓ Pre-Deployment Checklist section exists${NC}"
     fi
-    if grep -q "Deployment Steps" "$PROJECT_ROOT/docs/production-checklist.md"; then
+    if grep -q "Deployment Steps" "$PROJECT_ROOT/docs/operations/production-checklist.md"; then
         echo -e "${GREEN}  ✓ Deployment Steps section exists${NC}"
     fi
-    if grep -q "Post-Deployment Validation" "$PROJECT_ROOT/docs/production-checklist.md"; then
+    if grep -q "Post-Deployment Validation" "$PROJECT_ROOT/docs/operations/production-checklist.md"; then
         echo -e "${GREEN}  ✓ Post-Deployment Validation section exists${NC}"
     fi
-    if grep -q "Operational Readiness" "$PROJECT_ROOT/docs/production-checklist.md"; then
+    if grep -q "Operational Readiness" "$PROJECT_ROOT/docs/operations/production-checklist.md"; then
         echo -e "${GREEN}  ✓ Operational Readiness section exists${NC}"
     fi
 fi

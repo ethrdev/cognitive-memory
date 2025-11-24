@@ -100,7 +100,7 @@ class TestSuccessPathValidation:
         """Test success path with kappa >= 0.70 (Task 2)"""
         # Setup mock database response
         mock_queries = [MockQuery(kappa=0.75) for _ in range(100)]
-        self._setup_mock_database(mock_get_connection, mock_queries)
+        _setup_mock_database(mock_get_connection, mock_queries)
 
         # Execute
         results = run_irr_validation()
@@ -108,11 +108,7 @@ class TestSuccessPathValidation:
         # Verify
         assert results["status"] == "passed"
         assert results["kappa_macro"] == pytest.approx(0.75, abs=0.01)
-<<<<<<< Updated upstream
         assert not results["contingency_triggered"]
-=======
-        assert results["contingency_triggered"] == False
->>>>>>> Stashed changes
         assert len(results["high_disagreement_queries"]) == 0
         assert "IRR Validation Passed" in results["notes"]
 
@@ -120,7 +116,7 @@ class TestSuccessPathValidation:
     def test_validation_saves_success_results(self, mock_get_connection):
         """Test that success results are saved to database"""
         mock_queries = [MockQuery(kappa=0.80) for _ in range(50)]
-        mock_conn = self._setup_mock_database(mock_get_connection, mock_queries)
+        mock_conn = _setup_mock_database(mock_get_connection, mock_queries)
 
         # Execute
         run_irr_validation()
@@ -138,7 +134,7 @@ class TestContingencyPathValidation:
         """Test contingency path with kappa < 0.70 (Task 3)"""
         # Setup: Mock 100 queries mit Kappa 0.65
         mock_queries = [MockQuery(kappa=0.65) for _ in range(100)]
-        self._setup_mock_database(mock_get_connection, mock_queries)
+        _setup_mock_database(mock_get_connection, mock_queries)
 
         # Execute
         results = run_irr_validation()
@@ -146,11 +142,7 @@ class TestContingencyPathValidation:
         # Verify
         assert results["status"] == "contingency_triggered"
         assert results["kappa_macro"] == pytest.approx(0.65, abs=0.01)
-<<<<<<< Updated upstream
         assert results["contingency_triggered"]
-=======
-        assert results["contingency_triggered"] == True
->>>>>>> Stashed changes
         assert len(results["high_disagreement_queries"]) > 0
         assert len(results["contingency_actions"]) > 0
 
@@ -164,7 +156,7 @@ class TestContingencyPathValidation:
             MockQuery(kappa=0.60, disagreement=0.6),  # Very high disagreement
             MockQuery(kappa=0.90, disagreement=0.05),  # Very low disagreement
         ]
-        self._setup_mock_database(mock_get_connection, mock_queries)
+        _setup_mock_database(mock_get_connection, mock_queries)
 
         # Execute
         validator = IRRValidator()
@@ -223,11 +215,7 @@ class TestWilcoxonSignedRankTest:
 
         # Verify
         assert result is not None
-<<<<<<< Updated upstream
         assert result["significant_bias"]
-=======
-        assert result["significant_bias"] == True
->>>>>>> Stashed changes
         assert result["p_value"] < 0.05
         assert pytest.approx(result["median_difference"], 0.01) == 0.1
         assert result["threshold_adjustment"] is not None
@@ -248,11 +236,7 @@ class TestWilcoxonSignedRankTest:
 
         # Verify
         assert result is not None
-<<<<<<< Updated upstream
         assert not result["significant_bias"]
-=======
-        assert result["significant_bias"] == False
->>>>>>> Stashed changes
         assert result["p_value"] >= 0.05
         assert result["threshold_adjustment"] is None
 
@@ -288,7 +272,7 @@ class TestJudgeRecalibration:
         with patch(
             "mcp_server.validation.contingency.get_connection"
         ) as mock_get_connection:
-            self._setup_mock_database_for_contingency(mock_get_connection, queries)
+            _setup_mock_database_for_contingency(mock_get_connection, queries)
 
             # Execute
             recalibrator = JudgeRecalibration()
@@ -357,7 +341,7 @@ class TestContingencyManager:
             MockQuery(kappa=0.65, disagreement=0.5),  # High disagreement
             MockQuery(kappa=0.30, query_text="short", query_length=8),  # Low kappa
         ]
-        self._setup_mock_database_for_contingency(mock_get_connection, mock_queries)
+        _setup_mock_database_for_contingency(mock_get_connection, mock_queries)
 
         # Execute
         manager = ContingencyManager()
@@ -376,6 +360,9 @@ class TestContingencyManager:
         # Setup
         mock_conn = Mock()
         mock_cursor = Mock()
+        # Add context manager support for cursor
+        mock_cursor.__enter__ = Mock(return_value=mock_cursor)
+        mock_cursor.__exit__ = Mock(return_value=None)
         mock_conn.cursor.return_value = mock_cursor
         mock_get_connection.return_value.__enter__.return_value = mock_conn
 
@@ -386,11 +373,7 @@ class TestContingencyManager:
         )
 
         # Verify
-<<<<<<< Updated upstream
         assert success
-=======
-        assert success == True
->>>>>>> Stashed changes
         mock_cursor.execute.assert_called_once()
         mock_conn.commit.assert_called_once()
 
@@ -521,6 +504,9 @@ def _setup_mock_database(mock_get_connection, mock_queries):
     """Helper method to setup mock database for IRR validation tests"""
     mock_conn = Mock()
     mock_cursor = Mock()
+    # Add context manager support for cursor
+    mock_cursor.__enter__ = Mock(return_value=mock_cursor)
+    mock_cursor.__exit__ = Mock(return_value=None)
     mock_conn.cursor.return_value = mock_cursor
     mock_get_connection.return_value.__enter__.return_value = mock_conn
 
@@ -565,6 +551,8 @@ def _setup_mock_database_for_contingency(mock_get_connection, mock_queries):
     mock_get_connection.return_value.__enter__.return_value = mock_conn
 
     # Mock different queries for different use cases
+    # Production expects 9 columns: id, query, judge1_score, judge2_score, kappa,
+    # expected_docs, avg_disagreement, avg_judge1, avg_judge2
     mock_cursor.fetchall.return_value = [
         (
             q.id,
@@ -573,7 +561,9 @@ def _setup_mock_database_for_contingency(mock_get_connection, mock_queries):
             q.judge2_score,
             q.kappa,
             q.expected_docs,
-            getattr(q, "query_length", len(q.query)),
+            getattr(q, "avg_disagreement", 0.2),  # avg_disagreement
+            getattr(q, "avg_judge1", 0.6),  # avg_judge1
+            getattr(q, "avg_judge2", 0.5),  # avg_judge2
         )
         for q in mock_queries
     ]
@@ -589,7 +579,7 @@ class TestEndToEndValidation:
         """Test end-to-end validation with success scenario (AC: all)"""
         # Setup: Seed 50 queries with high kappa
         mock_queries = [MockQuery(kappa=0.78) for _ in range(50)]
-        self._setup_mock_database(mock_get_connection, mock_queries)
+        _setup_mock_database(mock_get_connection, mock_queries)
 
         # Execute
         results = run_irr_validation(kappa_threshold=0.70)
@@ -597,11 +587,7 @@ class TestEndToEndValidation:
         # Verify success path
         assert results["status"] == "passed"
         assert results["kappa_macro"] > 0.70
-<<<<<<< Updated upstream
         assert not results["contingency_triggered"]
-=======
-        assert results["contingency_triggered"] == False
->>>>>>> Stashed changes
 
     @patch("mcp_server.validation.irr_validator.get_connection")
     def test_end_to_end_validation_contingency_scenario(self, mock_get_connection):
@@ -615,7 +601,7 @@ class TestEndToEndValidation:
                 kappa = 0.55  # Poor agreement
             mock_queries.append(MockQuery(kappa=kappa))
 
-        self._setup_mock_database(mock_get_connection, mock_queries)
+        _setup_mock_database(mock_get_connection, mock_queries)
 
         # Execute
         results = run_irr_validation(kappa_threshold=0.70)

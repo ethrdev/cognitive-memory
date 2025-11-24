@@ -403,7 +403,7 @@ def main():
 
     # Save report
     output_file = Path(
-        "/home/ethr/01-projects/ai-experiments/i-o/docs/7-day-stability-report.md"
+        "/home/ethr/01-projects/ai-experiments/i-o/docs/testing/7-day-stability-report.md"
     )
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -416,7 +416,7 @@ def main():
     print()
     print("Next Steps:")
     print(f"  1. Review report: {output_file}")
-    print("  2. Add report to Git: git add docs/7-day-stability-report.md")
+    print("  2. Add report to Git: git add docs/testing/7-day-stability-report.md")
     print("  3. Update 3.11 status based on results")
     print("  4. Proceed to next phase (Production Handoff) if test passed")
     print()
