@@ -156,21 +156,17 @@ Create or update `~/.config/claude-code/mcp-settings.json`:
 }
 ```
 
-Alternatively, create `.mcp.json` in the project root:
+Alternatively, use the provided template in the project root:
 
-```json
-{
-  "mcpServers": {
-    "cognitive-memory": {
-      "command": "/bin/bash",
-      "args": ["-c", "source venv/bin/activate && python -m mcp_server"],
-      "env": {
-        "DATABASE_URL": "postgresql://mcp_user:password@localhost/cognitive_memory"
-      }
-    }
-  }
-}
+```bash
+# Copy template and customize
+cp .mcp.json.template .mcp.json
+
+# Edit .mcp.json and replace ${PROJECT_ROOT} with your actual path
+# Example: /home/user/cognitive-memory/start_mcp_server.sh
 ```
+
+The template uses `start_mcp_server.sh` which automatically loads environment variables from `.env.development`.
 
 ## Verification Checklist
 
@@ -237,6 +233,10 @@ journalctl -xeu postgresql
 
 **MCP Server not visible in Claude Code:**
 ```bash
+# Ensure .mcp.json exists (copy from template if needed)
+cp .mcp.json.template .mcp.json
+# Edit and replace ${PROJECT_ROOT} with actual path
+
 # Check .mcp.json syntax
 python -m json.tool .mcp.json
 
