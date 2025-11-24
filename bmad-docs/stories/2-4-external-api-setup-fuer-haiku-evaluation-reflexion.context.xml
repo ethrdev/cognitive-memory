@@ -1,0 +1,378 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>2</epicId>
+    <storyId>2.4</storyId>
+    <title>External API Setup für Haiku (Evaluation + Reflexion)</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-16</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>bmad-docs/stories/2-4-external-api-setup-fuer-haiku-evaluation-reflexion.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>MCP Server</asA>
+    <iWant>Anthropic Haiku API für Evaluation und Reflexion nutzen</iWant>
+    <soThat>konsistente Episode Memory Quality über Sessions garantiert ist</soThat>
+    <tasks>
+      <task id="1" ac="1">
+        <title>Setup Anthropic SDK und API Client Infrastruktur</title>
+        <subtask id="1.1">Install anthropic Python SDK via requirements.txt/poetry</subtask>
+        <subtask id="1.2">Create /mcp_server/external/anthropic_client.py module</subtask>
+        <subtask id="1.3">Implement HaikuClient class mit __init__(api_key: str)</subtask>
+        <subtask id="1.4">Add ANTHROPIC_API_KEY zu .env.template und .env.development</subtask>
+        <subtask id="1.5">Test API-Client Initialization mit valid/invalid API-Keys</subtask>
+      </task>
+      <task id="2" ac="1,2">
+        <title>Implement Evaluation und Reflexion Methods</title>
+        <subtask id="2.1">Implement async evaluate_answer() method (Model: claude-3-5-haiku-20241022, Temperature: 0.0, Max Tokens: 500, Input: query, context, answer, Output: Dict mit reward_score, reasoning)</subtask>
+        <subtask id="2.2">Implement async generate_reflection() method (Model: claude-3-5-haiku-20241022, Temperature: 0.7, Max Tokens: 1000, Input: query, poor_answer, evaluation_reasoning, Output: Dict mit problem_description, lesson_learned)</subtask>
+        <subtask id="2.3">Add structured prompts für beide Methods (siehe Tech Spec)</subtask>
+      </task>
+      <task id="3" ac="3">
+        <title>Implement Retry-Logic mit Exponential Backoff</title>
+        <subtask id="3.1">Create /mcp_server/utils/retry_logic.py module</subtask>
+        <subtask id="3.2">Implement @retry_with_backoff decorator (Max Retries: 4, Base Delays: [1s, 2s, 4s, 8s], Jitter: ±20%, Retry Conditions: Rate Limit 429, Service Unavailable 503, Timeout)</subtask>
+        <subtask id="3.3">Apply decorator zu evaluate_answer() und generate_reflection()</subtask>
+        <subtask id="3.4">Implement Fallback zu Claude Code Evaluation bei total failure</subtask>
+        <subtask id="3.5">Log retry attempts in api_retry_log Tabelle</subtask>
+      </task>
+      <task id="4" ac="4">
+        <title>Implement Cost-Tracking Infrastructure</title>
+        <subtask id="4.1">Add api_cost_log Tabelle zu Database Schema (Columns: id, date, api_name, num_calls, token_count, estimated_cost)</subtask>
+        <subtask id="4.2">Implement cost calculation logic (Haiku Evaluation: €0.001 per 1K input tokens, Haiku Reflexion: €0.0015 per 1K input tokens, Extract token count aus Anthropic API Response)</subtask>
+        <subtask id="4.3">Log every API call zu api_cost_log</subtask>
+        <subtask id="4.4">Implement daily/monthly aggregation query</subtask>
+        <subtask id="4.5">Add budget alert logic (warn if projected monthly >€10)</subtask>
+      </task>
+      <task id="5" ac="1,2">
+        <title>Configuration Management</title>
+        <subtask id="5.1">Add Haiku-specific config zu config/config.yaml (evaluation.model, evaluation.temperature: 0.0, evaluation.max_tokens: 500, reflexion.temperature: 0.7, reflexion.max_tokens: 1000)</subtask>
+        <subtask id="5.2">Add API limits zu config (api_limits.anthropic.rpm_limit: 1000, retry_attempts: 4, retry_delays: [1, 2, 4, 8])</subtask>
+      </task>
+      <task id="6" ac="all">
+        <title>Testing und Validation</title>
+        <subtask id="6.1">Manual test Haiku API call (evaluation) mit sample query</subtask>
+        <subtask id="6.2">Manual test Haiku API call (reflexion) mit poor answer</subtask>
+        <subtask id="6.3">Test retry-logic durch simulated rate limit (optional)</subtask>
+        <subtask id="6.4">Verify cost-tracking entries in api_cost_log</subtask>
+        <subtask id="6.5">Validate API-Key security (.env files git-ignored)</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-2.4.1">
+      <title>API Client Setup</title>
+      <description>Integration mit claude-3-5-haiku-20241022 ist funktional: API-Client initialisiert (anthropic Python SDK), Model: claude-3-5-haiku-20241022, API-Key aus .env geladen, Client ready für Evaluation und Reflexion Calls</description>
+      <source>bmad-docs/tech-spec-epic-2.md#Story-2.4-Acceptance-Criteria, lines 405-409</source>
+    </criterion>
+    <criterion id="AC-2.4.2">
+      <title>Temperature Configuration</title>
+      <description>Temperature ist korrekt konfiguriert für beide Use Cases: Temperature: 0.0 für Evaluation (deterministisch für konsistente Scores), Temperature: 0.7 für Reflexion (kreativ für verbalisierte Lektionen), Max Tokens: 500 (Evaluation), 1000 (Reflexion)</description>
+      <source>bmad-docs/tech-spec-epic-2.md#Story-2.4-Acceptance-Criteria, lines 405-409</source>
+    </criterion>
+    <criterion id="AC-2.4.3">
+      <title>Retry Logic mit Exponential Backoff</title>
+      <description>Rate Limit Handling funktioniert: Exponential Backoff: 1s, 2s, 4s, 8s bei Rate-Limit, Max Retries: 4 Versuche, Jitter: ±20% Random Delay (verhindert Thundering Herd), Fallback bei totaler API-Ausfall: Claude Code Evaluation (degraded mode)</description>
+      <source>bmad-docs/tech-spec-epic-2.md#Story-2.4-Acceptance-Criteria, lines 405-409</source>
+    </criterion>
+    <criterion id="AC-2.4.4">
+      <title>Cost-Tracking Implementation</title>
+      <description>Token Count und Kosten werden in PostgreSQL geloggt: Log jeder API-Call mit Token-Count, Daily/Monthly Aggregation in PostgreSQL (api_cost_log Tabelle), Alert bei >€10/mo Budget-Überschreitung, Cost: €0.001 per Evaluation, €0.0015 per Reflexion</description>
+      <source>bmad-docs/tech-spec-epic-2.md#Story-2.4-Acceptance-Criteria, lines 405-409</source>
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>bmad-docs/tech-spec-epic-2.md</path>
+        <title>Epic Technical Specification: RAG Pipeline & Hybrid Calibration</title>
+        <section>Haiku API Client Integration (lines 312-336)</section>
+        <snippet>Defines HaikuClient class structure with evaluate_answer() and generate_reflection() async methods. Specifies temperature settings (0.0 for evaluation, 0.7 for reflexion), max tokens (500/1000), and API integration patterns.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/tech-spec-epic-2.md</path>
+        <title>Epic Technical Specification: RAG Pipeline & Hybrid Calibration</title>
+        <section>Reliability/Availability (lines 247-258)</section>
+        <snippet>Specifies API Reliability requirements: Retry-Logic mit Exponential Backoff für Haiku API, 4 Retries mit Delays: 1s, 2s, 4s, 8s (+/- 20% Jitter), Fallback zu Claude Code Evaluation bei totalem Haiku Ausfall (Degraded Mode), Rate Limit Handling mit automatischer Recovery.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/tech-spec-epic-2.md</path>
+        <title>Epic Technical Specification: RAG Pipeline & Hybrid Calibration</title>
+        <section>Configuration Dependencies (lines 349-376)</section>
+        <snippet>Defines config.yaml structure for evaluation (model: claude-3-5-haiku-20241022, temperature: 0.0, max_tokens: 500, reward_threshold: 0.3) and reflexion (temperature: 0.7, max_tokens: 1000). API limits: anthropic.rpm_limit: 1000, retry_attempts: 4, retry_delays: [1, 2, 4, 8].</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/architecture.md</path>
+        <title>Cognitive Memory System v3.1.0-Hybrid - Architektur</title>
+        <section>Database Schema (lines 306-317)</section>
+        <snippet>Defines api_cost_log table schema: CREATE TABLE api_cost_log (id SERIAL PRIMARY KEY, date DATE NOT NULL, api_name VARCHAR(50) NOT NULL, num_calls INTEGER NOT NULL, token_count INTEGER, estimated_cost FLOAT NOT NULL); CREATE INDEX idx_cost_date ON api_cost_log(date DESC);</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/architecture.md</path>
+        <title>Cognitive Memory System v3.1.0-Hybrid - Architektur</title>
+        <section>API-Integration - Anthropic API (Haiku) (lines 454-477)</section>
+        <snippet>Haiku Evaluation: Model: claude-3-5-haiku-20241022, Temperature: 0.0 (deterministisch), Max Tokens: 500, Usage: Self-Evaluation (Reward -1.0 bis +1.0), Cost: ~€0.001 per Evaluation. Haiku Reflexion: Temperature: 0.7 (kreativ), Max Tokens: 1000, Usage: Verbal RL bei Reward &lt;0.3, Cost: ~€0.0015 per Reflexion. Retry-Logic: 4 Retries (1s, 2s, 4s, 8s), Fallback: Claude Code Evaluation (degraded mode) bei totalem API-Ausfall.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/architecture.md</path>
+        <title>Cognitive Memory System v3.1.0-Hybrid - Architektur</title>
+        <section>ADR-002: Strategische API-Nutzung (lines 769-784)</section>
+        <snippet>Entscheidung: Bulk-Operationen (Query Expansion, CoT) → intern in Claude Code (€0/mo), Kritische Evaluationen (Dual Judge, Reflexion) → externe APIs (€5-10/mo). Rationale: 90-95% Cost Reduction vs. v2.4.1 (€106/mo → €5-10/mo), Methodische Validität: Externe Haiku API = deterministisch über Sessions (konsistente Episode Memory), True IRR: GPT-4o + Haiku = echte unabhängige Dual Judges (Kappa >0.70).</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/epics.md</path>
+        <title>i-o - Epic Breakdown</title>
+        <section>Story 2.4 (lines 634-668)</section>
+        <snippet>User Story Definition: Als MCP Server, möchte ich Anthropic Haiku API für Evaluation und Reflexion nutzen, sodass konsistente Episode Memory Quality über Sessions garantiert ist. Acceptance Criteria detailing API setup, temperature configuration, retry logic, and cost tracking.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/stories/2-3-chain-of-thought-cot-generation-framework.md</path>
+        <title>Story 2.3: Chain-of-Thought (CoT) Generation Framework</title>
+        <section>Completion Notes List (lines 446-481)</section>
+        <snippet>Story 2.3 established CoT Generation Framework (Thought → Reasoning → Answer → Confidence) as internal Claude Code reasoning. Relevant for Story 2.4: CoT-generated Answer wird als Input für Haiku Evaluation genutzt (Story 2.5). Confidence (Story 2.3) basiert auf Retrieval Quality, Reward (Story 2.5) basiert on Answer Quality via Haiku. Combined transparency: internal reasoning (CoT) + external assessment (Haiku).</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <artifact>
+        <path>mcp_server/tools/dual_judge.py</path>
+        <kind>module</kind>
+        <symbol>DualJudgeEvaluator</symbol>
+        <lines>26-52</lines>
+        <reason>Existing reference implementation for Anthropic async client initialization and API key management. Shows pattern for AsyncAnthropic client setup that can be adapted for HaikuClient.</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/tools/dual_judge.py</path>
+        <kind>module</kind>
+        <symbol>_call_gpt4o_judge, _call_haiku_judge</symbol>
+        <lines>84-200</lines>
+        <reason>Existing exponential backoff retry logic implementation (delays = [1, 2, 4, 8]) that can serve as pattern for retry_logic.py decorator. Shows jitter implementation and error handling.</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/db/connection.py</path>
+        <kind>module</kind>
+        <symbol>get_connection</symbol>
+        <lines>entire file</lines>
+        <reason>PostgreSQL connection handling for cost tracking. Will be used to log API calls to api_cost_log table.</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/external/__init__.py</path>
+        <kind>file</kind>
+        <symbol>n/a</symbol>
+        <lines>entire file</lines>
+        <reason>External API clients directory. Story 2.4 will add anthropic_client.py to this directory.</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/utils/__init__.py</path>
+        <kind>file</kind>
+        <symbol>n/a</symbol>
+        <lines>entire file</lines>
+        <reason>Utilities directory. Story 2.4 will add retry_logic.py with @retry_with_backoff decorator.</reason>
+      </artifact>
+      <artifact>
+        <path>config/config.yaml</path>
+        <kind>config</kind>
+        <symbol>base.memory.query_expansion</symbol>
+        <lines>32-54</lines>
+        <reason>Existing config structure for Epic 2 features. Story 2.4 will add evaluation and reflexion sections following same pattern.</reason>
+      </artifact>
+      <artifact>
+        <path>.env.template</path>
+        <kind>config</kind>
+        <symbol>ANTHROPIC_API_KEY</symbol>
+        <lines>16-18</lines>
+        <reason>ANTHROPIC_API_KEY already defined in template. Story 2.4 validates this is properly documented and loaded.</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/db/migrations</path>
+        <kind>directory</kind>
+        <symbol>existing migrations: 001_initial_schema.sql, 002_dual_judge_schema.sql, 003_validation_results.sql</symbol>
+        <lines>n/a</lines>
+        <reason>Migration directory. Story 2.4 will add new migration for api_cost_log and api_retry_log tables (004_api_tracking_tables.sql).</reason>
+      </artifact>
+    </code>
+
+    <dependencies>
+      <python>
+        <package name="anthropic" version="^0.25.0" source="pyproject.toml:15">Anthropic Python SDK for Haiku API</package>
+        <package name="openai" version="^1.0.0" source="pyproject.toml:14">OpenAI SDK (already used for embeddings and GPT-4o)</package>
+        <package name="python-dotenv" version="^1.0.0" source="pyproject.toml:20">Environment variable loading for API keys</package>
+        <package name="psycopg2-binary" version="^2.9.0" source="pyproject.toml:12">PostgreSQL driver for cost tracking database</package>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>
+      <title>Strategische API-Nutzung Pattern (ADR-002)</title>
+      <description>Bulk-Operationen (€0/mo) intern in Claude Code, Kritische Evaluationen (€1-2/mo) extern via Haiku API für methodische Robustheit. Haiku API = deterministisch über Sessions, verhindert Session-State Variabilität.</description>
+      <source>bmad-docs/architecture.md#ADR-002, lines 769-784</source>
+    </constraint>
+    <constraint>
+      <title>Temperature Settings für Use Cases</title>
+      <description>Evaluation MUSS Temperature 0.0 verwenden (deterministisch für konsistente Reward Scores), Reflexion MUSS Temperature 0.7 verwenden (kreativ für verbalisierte Lektionen).</description>
+      <source>bmad-docs/tech-spec-epic-2.md#Configuration-Dependencies, lines 349-376</source>
+    </constraint>
+    <constraint>
+      <title>Retry-Logic Specification</title>
+      <description>Exponential Backoff: [1s, 2s, 4s, 8s] mit ±20% Jitter, Max 4 Retries, Retry bei HTTP 429 (Rate Limit), 503 (Service Unavailable), Timeout. Fallback zu Claude Code Evaluation bei total API failure (nur für Evaluation, nicht für Reflexion).</description>
+      <source>bmad-docs/tech-spec-epic-2.md#Reliability/Availability, lines 247-258</source>
+    </constraint>
+    <constraint>
+      <title>Cost Budget NFR003</title>
+      <description>Development: €1-2/mo, Production: €5-10/mo (first 3 months), dann €2-3/mo (after Staged Dual Judge). Budget Alert bei projected monthly >€10/mo.</description>
+      <source>bmad-docs/architecture.md#Budget-Architektur, lines 641-665</source>
+    </constraint>
+    <constraint>
+      <title>API Key Security</title>
+      <description>API Keys nur in .env files (git-ignored), chmod 600 permissions, load via python-dotenv, validate at server start. No Vault/SecretManager (Personal Use only).</description>
+      <source>bmad-docs/architecture.md#Security-&-Privacy, lines 481-508</source>
+    </constraint>
+    <constraint>
+      <title>Database Schema Standards</title>
+      <description>Tabellen: snake_case, Columns: snake_case, Foreign Keys: {table}_id pattern. All tables SERIAL PRIMARY KEY, timestamps TIMESTAMPTZ DEFAULT NOW(), indices für performance-critical queries.</description>
+      <source>bmad-docs/architecture.md#Database-Schema, lines 202-330</source>
+    </constraint>
+    <constraint>
+      <title>Foundation for Subsequent Stories</title>
+      <description>Story 2.4 etabliert API-Client Infrastructure für Stories 2.5 (Self-Evaluation) und 2.6 (Reflexion-Framework). HaikuClient MUSS robust sein (Retry-Logic, Fallback), da nachfolgende Stories darauf aufbauen.</description>
+      <source>bmad-docs/stories/2-4-external-api-setup-fuer-haiku-evaluation-reflexion.md#Integration-mit-Subsequent-Stories, lines 302-323</source>
+    </constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>HaikuClient.evaluate_answer</name>
+      <kind>async method</kind>
+      <signature>async def evaluate_answer(self, query: str, context: List[str], answer: str) -> Dict[str, Any]</signature>
+      <path>mcp_server/external/anthropic_client.py (to be created)</path>
+      <description>Self-Evaluation mit Haiku API. Temperature: 0.0, Max Tokens: 500. Returns: Dict with reward_score (float -1.0 to +1.0), reasoning (str). Used by Story 2.5.</description>
+    </interface>
+    <interface>
+      <name>HaikuClient.generate_reflection</name>
+      <kind>async method</kind>
+      <signature>async def generate_reflection(self, query: str, poor_answer: str, evaluation_reasoning: str) -> Dict[str, Any]</signature>
+      <path>mcp_server/external/anthropic_client.py (to be created)</path>
+      <description>Verbalisierte Reflexion bei schlechter Bewertung. Temperature: 0.7, Max Tokens: 1000. Returns: Dict with problem_description (str), lesson_learned (str). Trigger: Reward &lt;0.3. Used by Story 2.6.</description>
+    </interface>
+    <interface>
+      <name>@retry_with_backoff decorator</name>
+      <kind>function decorator</kind>
+      <signature>def retry_with_backoff(max_retries: int = 4, base_delays: List[float] = [1, 2, 4, 8], jitter: bool = True)</signature>
+      <path>mcp_server/utils/retry_logic.py (to be created)</path>
+      <description>Exponential backoff retry decorator. Retries on RateLimitError (429), ServiceUnavailable (503), Timeout. Applies ±20% jitter to delays. Logs retry attempts to api_retry_log table.</description>
+    </interface>
+    <interface>
+      <name>api_cost_log table</name>
+      <kind>database schema</kind>
+      <signature>CREATE TABLE api_cost_log (id SERIAL PRIMARY KEY, date DATE NOT NULL, api_name VARCHAR(50) NOT NULL, num_calls INTEGER NOT NULL, token_count INTEGER, estimated_cost FLOAT NOT NULL); CREATE INDEX idx_cost_date ON api_cost_log(date DESC);</signature>
+      <path>mcp_server/db/migrations/004_api_tracking_tables.sql (to be created)</path>
+      <description>Cost tracking table for all external API calls. Enables daily/monthly aggregation and budget alerts. api_name values: 'haiku_eval', 'haiku_refl', 'openai_embed', 'gpt4o_judge'.</description>
+    </interface>
+    <interface>
+      <name>api_retry_log table</name>
+      <kind>database schema</kind>
+      <signature>CREATE TABLE api_retry_log (id SERIAL PRIMARY KEY, timestamp TIMESTAMPTZ DEFAULT NOW(), api_name VARCHAR(50) NOT NULL, error_type VARCHAR(100), retry_count INTEGER, success BOOLEAN NOT NULL);</signature>
+      <path>mcp_server/db/migrations/004_api_tracking_tables.sql (to be created)</path>
+      <description>Retry statistics table. Logs each retry attempt for monitoring API reliability and identifying unstable APIs.</description>
+    </interface>
+    <interface>
+      <name>config.yaml - evaluation section</name>
+      <kind>configuration</kind>
+      <signature>evaluation: {model: "claude-3-5-haiku-20241022", temperature: 0.0, max_tokens: 500, reward_threshold: 0.3}</signature>
+      <path>config/config.yaml</path>
+      <description>Haiku evaluation configuration. Temperature 0.0 for deterministic scores. reward_threshold: 0.3 triggers reflexion in Story 2.6.</description>
+    </interface>
+    <interface>
+      <name>config.yaml - reflexion section</name>
+      <kind>configuration</kind>
+      <signature>reflexion: {model: "claude-3-5-haiku-20241022", temperature: 0.7, max_tokens: 1000}</signature>
+      <path>config/config.yaml</path>
+      <description>Haiku reflexion configuration. Temperature 0.7 for creative lesson learned generation.</description>
+    </interface>
+    <interface>
+      <name>config.yaml - api_limits.anthropic section</name>
+      <kind>configuration</kind>
+      <signature>api_limits: {anthropic: {rpm_limit: 1000, retry_attempts: 4, retry_delays: [1, 2, 4, 8]}}</signature>
+      <path>config/config.yaml</path>
+      <description>Anthropic API limits and retry configuration. rpm_limit: 1000 matches Anthropic's rate limit. retry_delays define exponential backoff pattern.</description>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      This story focuses on infrastructure setup with manual testing in development environment. Python testing standards from pyproject.toml: pytest for test framework, pytest-asyncio for async test support, pytest-cov for coverage. Tests should validate API client initialization, retry logic behavior, and cost tracking database writes. Story 2.4 is primarily infrastructure/configuration, so comprehensive testing will occur in Stories 2.5-2.6 when methods are actually used in RAG pipeline.
+    </standards>
+
+    <locations>
+      tests/test_anthropic_client.py (to be created) - Unit tests for HaikuClient initialization and configuration
+      tests/test_retry_logic.py (to be created) - Unit tests for @retry_with_backoff decorator with mocked failures
+      tests/test_cost_tracking.py (to be created) - Integration tests for api_cost_log writes
+    </locations>
+
+    <ideas>
+      <testIdea ac="AC-2.4.1">
+        <id>TC-2.4.1</id>
+        <title>API Client Initialization Success</title>
+        <description>Test HaikuClient initializes successfully with valid ANTHROPIC_API_KEY from .env. Verify AsyncAnthropic client is created, model is set to claude-3-5-haiku-20241022.</description>
+      </testIdea>
+      <testIdea ac="AC-2.4.1">
+        <id>TC-2.4.2</id>
+        <title>API Client Initialization Failure</title>
+        <description>Test HaikuClient raises RuntimeError when ANTHROPIC_API_KEY is missing or invalid (sk-ant-your-anthropic-api-key-here placeholder). Verify error message is clear.</description>
+      </testIdea>
+      <testIdea ac="AC-2.4.2">
+        <id>TC-2.4.3</id>
+        <title>Temperature Configuration for Evaluation</title>
+        <description>Verify config.yaml evaluation section has temperature: 0.0, max_tokens: 500. Load config and assert values match specification.</description>
+      </testIdea>
+      <testIdea ac="AC-2.4.2">
+        <id>TC-2.4.4</id>
+        <title>Temperature Configuration for Reflexion</title>
+        <description>Verify config.yaml reflexion section has temperature: 0.7, max_tokens: 1000. Load config and assert values match specification.</description>
+      </testIdea>
+      <testIdea ac="AC-2.4.3">
+        <id>TC-2.4.5</id>
+        <title>Retry Logic Exponential Backoff</title>
+        <description>Mock API call that fails with RateLimitError (429). Verify @retry_with_backoff retries 4 times with delays ~1s, 2s, 4s, 8s (allow ±20% jitter). Assert final failure after 4 retries.</description>
+      </testIdea>
+      <testIdea ac="AC-2.4.3">
+        <id>TC-2.4.6</id>
+        <title>Retry Logic Jitter Application</title>
+        <description>Run retry test multiple times and verify jitter causes delays to vary within ±20% of base delay. Ensures Thundering Herd prevention.</description>
+      </testIdea>
+      <testIdea ac="AC-2.4.3">
+        <id>TC-2.4.7</id>
+        <title>Fallback to Claude Code Evaluation</title>
+        <description>Mock total Haiku API failure (all 4 retries fail). Verify fallback mechanism triggers for evaluation (degraded mode). Verify fallback does NOT trigger for reflexion (skip instead).</description>
+      </testIdea>
+      <testIdea ac="AC-2.4.4">
+        <id>TC-2.4.8</id>
+        <title>Cost Tracking Database Write</title>
+        <description>Mock successful API call with response.usage.input_tokens and output_tokens. Verify api_cost_log table receives entry with correct date, api_name ('haiku_eval' or 'haiku_refl'), token_count, and estimated_cost calculated correctly.</description>
+      </testIdea>
+      <testIdea ac="AC-2.4.4">
+        <id>TC-2.4.9</id>
+        <title>Budget Alert Projection</title>
+        <description>Insert test entries in api_cost_log with daily_cost that projects to >€10/mo (e.g., daily €0.40 × 30 = €12/mo). Verify budget alert logic triggers warning. Assert projected monthly cost calculation is correct.</description>
+      </testIdea>
+      <testIdea ac="AC-2.4.1,AC-2.4.2,AC-2.4.3,AC-2.4.4">
+        <id>TC-2.4.10</id>
+        <title>Manual Integration Test - Evaluation Call</title>
+        <description>Dry-run manual test: Call HaikuClient.evaluate_answer() with sample query, context, answer. Verify API call succeeds, response has reward_score and reasoning. Verify cost tracking entry created. This validates AC-2.4.1 (client works), AC-2.4.2 (temperature 0.0 applied), AC-2.4.4 (cost tracked).</description>
+      </testIdea>
+      <testIdea ac="AC-2.4.1,AC-2.4.2,AC-2.4.3,AC-2.4.4">
+        <id>TC-2.4.11</id>
+        <title>Manual Integration Test - Reflexion Call</title>
+        <description>Dry-run manual test: Call HaikuClient.generate_reflection() with sample query, poor_answer, evaluation_reasoning. Verify API call succeeds, response has problem_description and lesson_learned. Verify cost tracking entry created with 'haiku_refl' api_name. This validates AC-2.4.1 (client works), AC-2.4.2 (temperature 0.7 applied), AC-2.4.4 (cost tracked).</description>
+      </testIdea>
+      <testIdea ac="AC-2.4.1">
+        <id>TC-2.4.12</id>
+        <title>API Key Security Validation</title>
+        <description>Verify .env.development and .env.production are in .gitignore. Verify .env.template has ANTHROPIC_API_KEY documented with placeholder. Verify file permissions are 600 (owner read/write only) for .env files.</description>
+      </testIdea>
+    </ideas>
+  </tests>
+</story-context>

@@ -1,0 +1,378 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>2</epicId>
+    <storyId>2.5</storyId>
+    <title>Self-Evaluation mit Haiku API</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-16</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>bmad-docs/stories/2-5-self-evaluation-mit-haiku-api.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>MCP Server</asA>
+    <iWant>generierte Antworten via Haiku API evaluieren (Reward -1.0 bis +1.0)</iWant>
+    <soThat>objektive Quality-Scores für Episode Memory vorhanden sind</soThat>
+    <tasks>
+- Task 1: Implementiere evaluate_answer() Method in HaikuClient (AC: 1, 2)
+  - Subtask 1.1: Vervollständige evaluate_answer() Stub in mcp_server/external/anthropic_client.py
+  - Subtask 1.2: Implementiere strukturiertes Evaluation-Prompt (Relevance, Accuracy, Completeness)
+  - Subtask 1.3: Wende @retry_with_backoff Decorator auf evaluate_answer() an
+  - Subtask 1.4: Extrahiere Token Count aus Anthropic API Response
+  - Subtask 1.5: Berechne Cost per Evaluation
+
+- Task 2: Implementiere Evaluation Logging in PostgreSQL (AC: 3)
+  - Subtask 2.1: Erstelle evaluation_log Tabelle (falls noch nicht vorhanden)
+  - Subtask 2.2: Implementiere log_evaluation() Funktion
+  - Subtask 2.3: Füge Evaluation Logging zu evaluate_answer() hinzu
+
+- Task 3: Implementiere Reflexion Trigger Logic (AC: 4)
+  - Subtask 3.1: Lese reward_threshold aus config.yaml
+  - Subtask 3.2: Implementiere should_trigger_reflection() Funktion
+  - Subtask 3.3: Dokumentiere Trigger-Logic für Story 2.6 Integration
+
+- Task 4: Integration mit CoT Generation Framework (AC: 1, 2)
+  - Subtask 4.1: Identifiziere Integration Point in Claude Code Workflow
+  - Subtask 4.2: Dokumentiere Evaluation Call Pattern
+  - Subtask 4.3: Teste End-to-End Pipeline mit Evaluation
+
+- Task 5: Testing und Validation (AC: alle)
+  - Subtask 5.1: Manual Test mit High-Quality Answer (Reward >0.7 erwartet)
+  - Subtask 5.2: Manual Test mit Medium-Quality Answer (Reward 0.3-0.7 erwartet)
+  - Subtask 5.3: Manual Test mit Low-Quality Answer (Reward <0.3 erwartet)
+  - Subtask 5.4: Validiere Evaluation Logging in PostgreSQL
+  - Subtask 5.5: Teste Retry-Logic mit simuliertem Rate Limit (optional)
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+**Given** eine Antwort wurde via CoT generiert (Story 2.3)
+**When** Self-Evaluation durchgeführt wird
+**Then** ist die Evaluation funktional:
+
+1. **Haiku API Call für Evaluation (AC-2.5.1):** MCP Server ruft Haiku API korrekt auf
+   - Input: Query + Retrieved Context + Generated Answer
+   - Model: claude-3-5-haiku-20241022
+   - Temperature: 0.0 (deterministisch für konsistente Scores)
+   - Max Tokens: 500
+   - Prompt mit expliziten Kriterien: Relevance, Accuracy, Completeness
+
+2. **Reward Score Berechnung (AC-2.5.2):** Haiku evaluiert nach definierten Kriterien
+   - Relevance: Beantwortet die Antwort die Query?
+   - Accuracy: Basiert die Antwort auf Retrieved Context (keine Halluzinationen)?
+   - Completeness: Ist die Antwort vollständig oder fehlen wichtige Aspekte?
+   - Output: Float Score -1.0 (schlechte Antwort) bis +1.0 (exzellent)
+
+3. **Evaluation Logging (AC-2.5.3):** Evaluation wird vollständig geloggt
+   - Response enthält: Reward (float), Reasoning (Haiku's Begründung)
+   - Logging in PostgreSQL: Reward + Reasoning + Timestamp
+   - Token Count und Cost werden in api_cost_log geloggt
+
+4. **Reflexion Trigger (AC-2.5.4):** Bei schlechter Bewertung wird Reflexion getriggert
+   - Falls Reward <0.3: Trigger Reflexion-Framework (Story 2.6)
+   - Reward ≥0.3: Keine Reflexion, nur Logging
+   - Trigger-Threshold konfigurierbar in config.yaml
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+<!-- Key Technical Documentation -->
+<doc>
+  <path>bmad-docs/tech-spec-epic-2.md</path>
+  <title>Technical Specification - Epic 2 (RAG Pipeline & Hybrid Calibration)</title>
+  <section>Story 2.5: Self-Evaluation mit Haiku API</section>
+  <snippet>
+Story 2.5 defines acceptance criteria for Haiku API evaluation: AC-2.5.1 (API call with query+context+answer), AC-2.5.2 (Reward score calculation with Relevance/Accuracy/Completeness criteria), AC-2.5.3 (Evaluation logging), AC-2.5.4 (Reflexion trigger at reward <0.3). Uses claude-3-5-haiku-20241022 model with Temperature 0.0 for deterministic scoring.
+  </snippet>
+</doc>
+
+<doc>
+  <path>bmad-docs/architecture.md</path>
+  <title>Architecture Document - Cognitive Memory System v3.1.0-Hybrid</title>
+  <section>ADR-002: Strategische API-Nutzung</section>
+  <snippet>
+Architecture Decision: Bulk operations (Query Expansion, CoT) run internally in Claude Code (€0/mo), while critical evaluations (Dual Judge, Reflexion) use external Haiku API (€1-2/mo). External API ensures deterministic evaluation across sessions, preventing session-state variability. Budget: €0.001 per evaluation, ~€1-1.5/mo for 1000 evaluations.
+  </snippet>
+</doc>
+
+<doc>
+  <path>bmad-docs/architecture.md</path>
+  <title>Architecture Document - Cognitive Memory System v3.1.0-Hybrid</title>
+  <section>API-Integration - Anthropic API (Haiku)</section>
+  <snippet>
+Haiku Evaluation: Model claude-3-5-haiku-20241022, Temperature 0.0 (deterministic), Max Tokens 500, Usage: Self-Evaluation (Reward -1.0 to +1.0), Cost ~€0.001 per evaluation. Retry-Logic: 4 retries with exponential backoff [1s, 2s, 4s, 8s] + jitter. Fallback: Claude Code evaluation (degraded mode) on total API failure.
+  </snippet>
+</doc>
+
+<doc>
+  <path>bmad-docs/epics.md</path>
+  <title>Epic Breakdown - All Epics</title>
+  <section>Epic 2 - Story 2.5</section>
+  <snippet>
+Story 2.5 implements Self-Evaluation using Haiku API with structured prompt evaluating Relevance (40%), Accuracy (40%), Completeness (20%). Reward threshold 0.3 triggers reflexion (Story 2.6). Expected trigger rates: 20-30% bootstrapping, 10-15% after calibration, 5-10% long-term.
+  </snippet>
+</doc>
+
+<doc>
+  <path>bmad-docs/stories/2-4-external-api-setup-fuer-haiku-evaluation-reflexion.md</path>
+  <title>Story 2.4: External API Setup für Haiku (Evaluation + Reflexion)</title>
+  <section>Completion Notes - Haiku Client Infrastructure</section>
+  <snippet>
+Story 2.4 established: HaikuClient class (mcp_server/external/anthropic_client.py, 206 lines) with AsyncAnthropic client, evaluate_answer() stub (NotImplementedError), retry_logic.py with @retry_with_backoff decorator, api_cost_log and api_retry_log tables (004_api_tracking_tables.sql), config.yaml with evaluation settings (model, temperature 0.0, max_tokens 500, reward_threshold 0.3). Story 2.5 completes evaluate_answer() implementation.
+  </snippet>
+</doc>
+    </docs>
+
+    <code>
+<!-- Existing Code Infrastructure from Story 2.4 -->
+<artifact>
+  <path>mcp_server/external/anthropic_client.py</path>
+  <kind>api_client</kind>
+  <symbol>HaikuClient.evaluate_answer</symbol>
+  <lines>73-129</lines>
+  <reason>
+Stub method to be implemented in Story 2.5. Contains full documentation with expected inputs (query, context, answer), outputs (reward_score, reasoning), configuration (Temperature 0.0, Max Tokens 500), and cost projections. Currently raises NotImplementedError.
+  </reason>
+</artifact>
+
+<artifact>
+  <path>mcp_server/external/anthropic_client.py</path>
+  <kind>api_client</kind>
+  <symbol>HaikuClient.__init__</symbol>
+  <lines>38-71</lines>
+  <reason>
+Initialized AsyncAnthropic client with API key validation. Sets model to claude-3-5-haiku-20241022. Ready to use for evaluate_answer() implementation - no changes needed.
+  </reason>
+</artifact>
+
+<artifact>
+  <path>mcp_server/utils/retry_logic.py</path>
+  <kind>decorator</kind>
+  <symbol>retry_with_backoff</symbol>
+  <lines>27-50</lines>
+  <reason>
+Retry decorator with exponential backoff [1s, 2s, 4s, 8s], ±20% jitter, max 4 retries. Handles RateLimitError (429), ServiceUnavailable (503), Timeout. Apply to evaluate_answer() method in Story 2.5.
+  </reason>
+</artifact>
+
+<artifact>
+  <path>mcp_server/db/migrations/004_api_tracking_tables.sql</path>
+  <kind>migration</kind>
+  <symbol>api_cost_log table</symbol>
+  <lines>22-42</lines>
+  <reason>
+Cost tracking table for external API calls. Columns: date, api_name ('haiku_eval'), num_calls, token_count, estimated_cost. Use for logging evaluation costs (Story 2.5 Task 2).
+  </reason>
+</artifact>
+
+<artifact>
+  <path>mcp_server/db/migrations/004_api_tracking_tables.sql</path>
+  <kind>migration</kind>
+  <symbol>api_retry_log table</symbol>
+  <lines>45-50</lines>
+  <reason>
+Retry statistics table. Logs retry attempts for monitoring API reliability. Use for logging failed evaluation attempts with retry counts.
+  </reason>
+</artifact>
+
+<artifact>
+  <path>config/config.yaml</path>
+  <kind>config</kind>
+  <symbol>base.memory.evaluation</symbol>
+  <lines>56-62</lines>
+  <reason>
+Evaluation configuration: model (claude-3-5-haiku-20241022), temperature (0.0), max_tokens (500), reward_threshold (0.3). Read these values in evaluate_answer() implementation - no config changes needed.
+  </reason>
+</artifact>
+
+<artifact>
+  <path>config/config.yaml</path>
+  <kind>config</kind>
+  <symbol>base.api_limits.anthropic</symbol>
+  <lines>74-78</lines>
+  <reason>
+Anthropic API retry configuration: rpm_limit (1000), retry_attempts (4), retry_delays [1,2,4,8], jitter (true). Used by @retry_with_backoff decorator.
+  </reason>
+</artifact>
+    </code>
+
+    <dependencies>
+<!-- Python Dependencies from pyproject.toml -->
+<python>
+  <package name="anthropic" version="^0.25.0" usage="Haiku API client (AsyncAnthropic)"/>
+  <package name="mcp" version="^1.0.0" usage="MCP Server framework"/>
+  <package name="psycopg2-binary" version="^2.9.0" usage="PostgreSQL database adapter"/>
+  <package name="python-dotenv" version="^1.0.0" usage="Environment variable loading"/>
+</python>
+
+<!-- Development Dependencies -->
+<dev>
+  <package name="pytest" version="^7.4.0" usage="Testing framework"/>
+  <package name="pytest-asyncio" version="^0.21.0" usage="Async test support"/>
+  <package name="mypy" version="^1.7.0" usage="Type checking"/>
+</dev>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+<!-- Development Constraints from Architecture and Story -->
+
+1. **API Client Pattern (from Story 2.4):**
+   - Use existing HaikuClient class - DO NOT create new client
+   - Complete evaluate_answer() stub method (lines 73-129)
+   - Apply @retry_with_backoff decorator from retry_logic.py
+   - No changes to __init__ method needed
+
+2. **Evaluation Prompt Structure (from Tech-Spec):**
+   - Explicit criteria: Relevance (40%), Accuracy (40%), Completeness (20%)
+   - JSON output format: {reward_score: float, reasoning: str}
+   - Temperature 0.0 for deterministic scoring
+   - Max Tokens 500 (from config.yaml)
+   - Score range: -1.0 (catastrophic) to +1.0 (excellent)
+
+3. **Cost Tracking (from Story 2.4):**
+   - Extract token count: response.usage.input_tokens + output_tokens
+   - Calculate cost: (input_tokens/1000)*€0.001 + (output_tokens/1000)*€0.005
+   - Log to api_cost_log table with api_name='haiku_eval'
+   - Track date, num_calls, token_count, estimated_cost
+
+4. **Logging Strategy (from Architecture):**
+   - JSON structured logging format
+   - Log levels: ERROR (API failures), WARN (low confidence <0.3), INFO (evaluations)
+   - Include metadata: query_length, reward_score, token_count, latency_ms
+   - Log to evaluation_log table (optional - can use api_cost_log)
+
+5. **Reflexion Trigger (Story 2.6 Integration):**
+   - Read reward_threshold from config.yaml (default 0.3)
+   - Implement should_trigger_reflection() helper function
+   - Return boolean: reward_score < reward_threshold
+   - Document integration point for Story 2.6
+
+6. **Testing Requirements (from Tech-Spec):**
+   - Manual testing approach (no automated unit tests)
+   - Test scenarios: High-quality (>0.7), Medium (0.3-0.7), Low (<0.3)
+   - Validate PostgreSQL logging after 5-10 evaluations
+   - Optional: Mock 429 response for retry logic testing
+
+7. **Performance Target (NFR001):**
+   - Haiku evaluation latency: ~500ms median
+   - Not in critical path (can run async)
+   - Fits within <5s end-to-end budget
+
+8. **Code Style (from pyproject.toml):**
+   - Black formatting (line-length 88)
+   - Type hints required (Python 3.11+)
+   - Async/await pattern for API calls
+   - Ruff linting compliance
+  </constraints>
+
+  <interfaces>
+<!-- API and Interface Definitions -->
+
+<interface>
+  <name>HaikuClient.evaluate_answer</name>
+  <kind>async method</kind>
+  <signature>
+async def evaluate_answer(
+    self,
+    query: str,
+    context: List[str],
+    answer: str,
+) -> Dict[str, Any]:
+    """Returns: {reward_score: float, reasoning: str}"""
+  </signature>
+  <path>mcp_server/external/anthropic_client.py</path>
+  <usage>
+Called after CoT generation (Story 2.3) to evaluate answer quality. Input: original query, Top-5 retrieved L2 Insights (context), generated answer. Output: reward_score (-1.0 to +1.0) and reasoning (1-2 sentences explaining score).
+  </usage>
+</interface>
+
+<interface>
+  <name>Anthropic Messages API</name>
+  <kind>REST API</kind>
+  <signature>
+client.messages.create(
+    model="claude-3-5-haiku-20241022",
+    temperature=0.0,
+    max_tokens=500,
+    messages=[{"role": "user", "content": prompt}]
+)
+  </signature>
+  <path>External: https://api.anthropic.com</path>
+  <usage>
+Haiku API call for evaluation. Response includes: content (evaluation text), usage.input_tokens, usage.output_tokens. Parse JSON from content to extract reward_score and reasoning.
+  </usage>
+</interface>
+
+<interface>
+  <name>api_cost_log table</name>
+  <kind>PostgreSQL table</kind>
+  <signature>
+INSERT INTO api_cost_log (date, api_name, num_calls, token_count, estimated_cost)
+VALUES (CURRENT_DATE, 'haiku_eval', 1, total_tokens, cost_eur)
+  </signature>
+  <path>mcp_server/db/migrations/004_api_tracking_tables.sql</path>
+  <usage>
+Log evaluation cost after each API call. api_name='haiku_eval', token_count=input+output tokens, estimated_cost in EUR.
+  </usage>
+</interface>
+
+<interface>
+  <name>should_trigger_reflection (Story 2.6 Integration)</name>
+  <kind>function</kind>
+  <signature>
+def should_trigger_reflection(reward_score: float, threshold: float = 0.3) -> bool:
+    """Returns True if reward_score < threshold"""
+  </signature>
+  <path>To be created in Story 2.5</path>
+  <usage>
+Helper function for Story 2.6 integration. Reads threshold from config.yaml (base.memory.evaluation.reward_threshold). Returns True to trigger reflexion, False otherwise.
+  </usage>
+</interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+Manual testing approach for Stories 1-2 (per Tech-Spec). No automated unit tests required for personal use project. Testing via Claude Code interface and direct API calls. PostgreSQL validation via psql queries. Performance benchmarking in Story 2.7 (End-to-End Pipeline Testing).
+    </standards>
+
+    <locations>
+- tests/ (exists but not required for Story 2.5)
+- Manual testing via Claude Code MCP interface
+- PostgreSQL queries: SELECT * FROM api_cost_log WHERE api_name='haiku_eval'
+- PostgreSQL queries: SELECT * FROM evaluation_log (if created)
+    </locations>
+
+    <ideas>
+<!-- Test Ideas Mapped to Acceptance Criteria -->
+
+**AC-2.5.1 (Haiku API Call):**
+- Test 1: Call evaluate_answer() with sample query, context, answer
+- Verify: API call succeeds with model=claude-3-5-haiku-20241022, temperature=0.0
+- Check: Response includes reward_score and reasoning fields
+
+**AC-2.5.2 (Reward Score Calculation):**
+- Test 2: High-quality answer (e.g., "Was denke ich über Bewusstsein?" with matching L2 context)
+- Expected: reward_score >0.7, reasoning mentions "relevant", "accurate", "complete"
+- Test 3: Medium-quality answer (ambiguous query, partial context match)
+- Expected: reward_score 0.3-0.7, reasoning mixed
+- Test 4: Low-quality answer (query without matching context, poor retrieval)
+- Expected: reward_score <0.3, reasoning mentions "irrelevant" or "incomplete"
+
+**AC-2.5.3 (Evaluation Logging):**
+- Test 5: After 5-10 evaluations, query api_cost_log table
+- Verify: Entries with api_name='haiku_eval', token_count >0, estimated_cost ~€0.001
+- Verify: Date = today, num_calls increments correctly
+
+**AC-2.5.4 (Reflexion Trigger):**
+- Test 6: Reward score <0.3 triggers should_trigger_reflection() = True
+- Test 7: Reward score ≥0.3 triggers should_trigger_reflection() = False
+- Verify: Threshold configurable via config.yaml
+
+**Retry Logic (Optional):**
+- Test 8: Mock 429 response from Haiku API
+- Verify: 4 retries with delays ~1s, 2s, 4s, 8s (±20% jitter)
+- Verify: Retry count logged to api_retry_log table
+    </ideas>
+  </tests>
+</story-context>

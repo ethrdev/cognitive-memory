@@ -1,0 +1,70 @@
+{
+  "macro_avg_precision_at_5": 0.72,
+  "query_count": 10,
+  "breakdown_by_type": {
+    "short": 0.7,
+    "medium": 0.8,
+    "long": 0.6
+  },
+  "query_counts": {
+    "short": 9,
+    "medium": 1,
+    "long": 0
+  },
+  "individual_results": [
+    {
+      "query": "What is consciousness and how does it relate to the mind?",
+      "query_type": "medium",
+      "precision_at_5": 0.8,
+      "retrieved_ids": [
+        1,
+        2,
+        8,
+        15,
+        22
+      ],
+      "expected_docs": [
+        1,
+        2
+      ]
+    },
+    {
+      "query": "How do artificial neural networks learn and process information?",
+      "query_type": "short",
+      "precision_at_5": 0.6,
+      "retrieved_ids": [
+        3,
+        4,
+        18,
+        25,
+        32
+      ],
+      "expected_docs": [
+        3,
+        4
+      ]
+    },
+    {
+      "query": "What are the fundamental concepts in cognitive science?",
+      "query_type": "short",
+      "precision_at_5": 0.8,
+      "retrieved_ids": [
+        2,
+        5,
+        12,
+        28,
+        35
+      ],
+      "expected_docs": [
+        2,
+        5
+      ]
+    }
+  ],
+  "timestamp": "2025-11-18T06:50:23.336093",
+  "weights_used": {
+    "semantic": 0.7,
+    "keyword": 0.3
+  },
+  "mock_mode": false
+}

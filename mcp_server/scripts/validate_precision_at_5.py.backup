@@ -1,0 +1,411 @@
+#!/usr/bin/env python3
+"""
+Precision@5 Validation on Ground Truth Set
+
+Story 2.9: Final validation of calibrated Hybrid Search weights to ensure
+NFR002 (Precision@5 >0.75) is met and system is production-ready.
+
+Graduated Success Criteria:
+- Full Success (P@5 ≥0.75): System ready for production, Epic 2 complete
+- Partial Success (P@5 0.70-0.74): Deploy with monitoring, re-calibrate in 2 weeks
+- Failure (P@5 <0.70): Architecture review required
+
+Implementation:
+- Uses calibrated weights from config.yaml (semantic=0.7, keyword=0.3)
+- Runs hybrid_search for all Ground Truth queries
+- Calculates Macro-Average Precision@5
+- Generates query-type breakdown (Short/Medium/Long)
+
+Note: This version uses MOCK DATA for infrastructure testing.
+      Real validation requires PostgreSQL connection and actual Ground Truth Set.
+"""
+
+import json
+import random
+import yaml
+from typing import List, Dict, Tuple
+from datetime import datetime
+from pathlib import Path
+
+
+# =============================================================================
+# Configuration
+# =============================================================================
+
+MOCK_MODE = True  # Set to False when PostgreSQL connection available
+MOCK_DATA_FILE = "/home/user/i-o/mcp_server/scripts/mock_ground_truth.json"
+CONFIG_FILE = "/home/user/i-o/config.yaml"
+OUTPUT_FILE = "/home/user/i-o/mcp_server/scripts/validation_results.json"
+
+# Success Thresholds (Graduated Criteria)
+FULL_SUCCESS_THRESHOLD = 0.75
+PARTIAL_SUCCESS_THRESHOLD = 0.70
+
+# Query Type Classification (based on word count)
+SHORT_QUERY_MAX_WORDS = 10
+LONG_QUERY_MIN_WORDS = 30
+
+
+# =============================================================================
+# Reused from Story 2.8: Precision@5 Calculation
+# =============================================================================
+
+def calculate_precision_at_5(retrieved_ids: List[int], expected_ids: List[int]) -> float:
+    """
+    Calculate Precision@5 metric (REUSED from Story 2.8)
+
+    Formula: (relevant_docs_in_top5) / 5
+
+    Args:
+        retrieved_ids: Top-5 L2 Insight IDs from hybrid_search
+        expected_ids: Relevant L2 IDs from Ground Truth
+
+    Returns:
+        Float 0.0-1.0 (0.0 = no relevant docs, 1.0 = all 5 relevant)
+    """
+    top_5 = retrieved_ids[:5]
+    relevant_count = len(set(top_5) & set(expected_ids))
+    return relevant_count / 5.0
+
+
+# =============================================================================
+# Query Type Classification
+# =============================================================================
+
+def classify_query_type(query: str) -> str:
+    """
+    Classify query by length (Story 2.9 requirement)
+
+    Ground Truth table does not have query_type column (that's in golden_test_set
+    from Epic 3). We classify dynamically via word count.
+
+    Classification:
+    - Short: ≤10 words (e.g., "Was denke ich über Bewusstsein?")
+    - Medium: 11-29 words (balanced queries)
+    - Long: ≥30 words (complex philosophical questions)
+
+    Args:
+        query: Query text
+
+    Returns:
+        "short" | "medium" | "long"
+    """
+    word_count = len(query.split())
+
+    if word_count <= SHORT_QUERY_MAX_WORDS:
+        return "short"
+    elif word_count >= LONG_QUERY_MIN_WORDS:
+        return "long"
+    else:
+        return "medium"
+
+
+# =============================================================================
+# Mock Hybrid Search (for testing without DB connection)
+# =============================================================================
+
+def mock_hybrid_search(query: str, top_k: int, weights: Dict[str, float]) -> List[int]:
+    """
+    Simulate hybrid_search results for testing (REUSED from Story 2.8)
+
+    In production: Replace with actual hybrid_search tool call
+
+    Args:
+        query: Query text
+        top_k: Number of results (always 5 for Precision@5)
+        weights: {semantic: float, keyword: float}
+
+    Returns:
+        List of L2 Insight IDs (simulated)
+    """
+    # Simulate retrieval: random 5 IDs from pool
+    # In production: This would be actual MCP hybrid_search tool call
+    return random.sample(range(1, 101), top_k)
+
+
+# =============================================================================
+# Load Configuration and Ground Truth
+# =============================================================================
+
+def load_calibrated_weights() -> Dict[str, float]:
+    """
+    Load calibrated weights from config.yaml (Story 2.8 output)
+
+    Returns:
+        {semantic: float, keyword: float}
+    """
+    with open(CONFIG_FILE, 'r') as f:
+        config = yaml.safe_load(f)
+
+    weights = config.get('hybrid_search_weights', {})
+    return {
+        'semantic': weights.get('semantic', 0.7),
+        'keyword': weights.get('keyword', 0.3)
+    }
+
+
+def load_ground_truth() -> List[Dict]:
+    """
+    Load Ground Truth Set
+
+    In MOCK_MODE: Load from mock_ground_truth.json (Story 2.8)
+    In Production: Load from PostgreSQL ground_truth table
+
+    Returns:
+        List of {query: str, expected_docs: List[int]}
+    """
+    if MOCK_MODE:
+        with open(MOCK_DATA_FILE, 'r') as f:
+            data = json.load(f)
+        # Mock file is direct array, not wrapped in object
+        return data
+    else:
+        # Production: Load from PostgreSQL
+        # import psycopg2
+        # conn = psycopg2.connect(...)
+        # cur = conn.cursor()
+        # cur.execute("SELECT query, expected_docs FROM ground_truth")
+        # return [{"query": row[0], "expected_docs": row[1]} for row in cur.fetchall()]
+        raise NotImplementedError("Production PostgreSQL loading not yet implemented")
+
+
+# =============================================================================
+# Validation Execution
+# =============================================================================
+
+def run_validation() -> Dict:
+    """
+    Execute Precision@5 validation on complete Ground Truth Set
+
+    Implements:
+    - AC-2.9.1: Finale Precision@5 Berechnung
+    - Macro-average aggregation
+    - Query-type breakdown (Short/Medium/Long)
+
+    Returns:
+        {
+            "macro_avg_precision_at_5": float,
+            "query_count": int,
+            "breakdown_by_type": {"short": float, "medium": float, "long": float},
+            "query_counts": {"short": int, "medium": int, "long": int},
+            "individual_results": [{query, precision, query_type}],
+            "timestamp": str,
+            "weights_used": {semantic: float, keyword: float}
+        }
+    """
+    print("🔍 Starting Precision@5 Validation...")
+    print("=" * 60)
+
+    # Load configuration
+    weights = load_calibrated_weights()
+    print(f"✅ Loaded calibrated weights: semantic={weights['semantic']}, keyword={weights['keyword']}")
+
+    # Load Ground Truth
+    ground_truth = load_ground_truth()
+    print(f"✅ Loaded Ground Truth Set: {len(ground_truth)} queries")
+
+    if len(ground_truth) < 50:
+        print(f"⚠️ WARNING: Ground Truth Set has only {len(ground_truth)} queries")
+        print(f"   NFR002 requires 50-100 queries for statistical robustness")
+
+    # Initialize tracking
+    precision_scores = []
+    results_by_type = {"short": [], "medium": [], "long": []}
+    individual_results = []
+
+    # Run validation for each query
+    print("\n🔄 Running hybrid_search for all queries...")
+    for i, gt_item in enumerate(ground_truth, 1):
+        query = gt_item['query']
+        expected_docs = gt_item['expected_docs']
+
+        # Classify query type
+        query_type = classify_query_type(query)
+
+        # Execute hybrid_search (mock or real)
+        retrieved_ids = mock_hybrid_search(query, top_k=5, weights=weights)
+
+        # Calculate Precision@5
+        precision = calculate_precision_at_5(retrieved_ids, expected_docs)
+
+        # Track results
+        precision_scores.append(precision)
+        results_by_type[query_type].append(precision)
+        individual_results.append({
+            "query": query,
+            "query_type": query_type,
+            "precision_at_5": precision,
+            "retrieved_ids": retrieved_ids,
+            "expected_docs": expected_docs
+        })
+
+        if (i % 20 == 0) or (i == len(ground_truth)):
+            print(f"  Processed {i}/{len(ground_truth)} queries...")
+
+    # Calculate macro-average Precision@5
+    macro_avg_precision = sum(precision_scores) / len(precision_scores)
+
+    # Calculate breakdown by query type
+    breakdown_by_type = {}
+    query_counts = {}
+    for qtype in ["short", "medium", "long"]:
+        if results_by_type[qtype]:
+            breakdown_by_type[qtype] = sum(results_by_type[qtype]) / len(results_by_type[qtype])
+            query_counts[qtype] = len(results_by_type[qtype])
+        else:
+            breakdown_by_type[qtype] = 0.0
+            query_counts[qtype] = 0
+
+    # Compile results
+    results = {
+        "macro_avg_precision_at_5": macro_avg_precision,
+        "query_count": len(ground_truth),
+        "breakdown_by_type": breakdown_by_type,
+        "query_counts": query_counts,
+        "individual_results": individual_results,
+        "timestamp": datetime.now().isoformat(),
+        "weights_used": weights,
+        "mock_mode": MOCK_MODE
+    }
+
+    return results
+
+
+# =============================================================================
+# Success Criteria Evaluation
+# =============================================================================
+
+def evaluate_success_criteria(precision_at_5: float) -> Tuple[str, str]:
+    """
+    Determine success level based on Graduated Success Criteria
+
+    Implements AC-2.9.2, AC-2.9.3, AC-2.9.4
+
+    Args:
+        precision_at_5: Macro-average Precision@5
+
+    Returns:
+        (success_level, recommendation)
+        success_level: "full" | "partial" | "failure"
+    """
+    if precision_at_5 >= FULL_SUCCESS_THRESHOLD:
+        # AC-2.9.2: Full Success (P@5 ≥0.75)
+        return "full", "System ready for production. Epic 2 COMPLETE. Transition to Epic 3."
+
+    elif precision_at_5 >= PARTIAL_SUCCESS_THRESHOLD:
+        # AC-2.9.3: Partial Success (P@5 0.70-0.74)
+        return "partial", (
+            "Deploy system in production with monitoring. "
+            "Continue data collection (100+ additional L2 Insights). "
+            "Re-run calibration after 2 weeks with extended data."
+        )
+
+    else:
+        # AC-2.9.4: Failure (P@5 <0.70)
+        return "failure", (
+            "Architecture review required. "
+            "Options: (1) Collect more Ground Truth queries, "
+            "(2) Upgrade embedding model (text-embedding-3-large), "
+            "(3) Improve L2 compression quality."
+        )
+
+
+# =============================================================================
+# Results Output and Reporting
+# =============================================================================
+
+def print_results_summary(results: Dict):
+    """
+    Print validation results summary to console
+    """
+    print("\n" + "=" * 60)
+    print("📊 PRECISION@5 VALIDATION RESULTS")
+    print("=" * 60)
+
+    precision = results['macro_avg_precision_at_5']
+    print(f"\n🎯 Overall Precision@5: {precision:.4f}")
+    print(f"   Query Count: {results['query_count']}")
+
+    # Success level
+    success_level, recommendation = evaluate_success_criteria(precision)
+
+    if success_level == "full":
+        print(f"\n✅ SUCCESS LEVEL: FULL SUCCESS (P@5 ≥{FULL_SUCCESS_THRESHOLD})")
+    elif success_level == "partial":
+        print(f"\n⚠️ SUCCESS LEVEL: PARTIAL SUCCESS (P@5 {PARTIAL_SUCCESS_THRESHOLD}-{FULL_SUCCESS_THRESHOLD})")
+    else:
+        print(f"\n❌ SUCCESS LEVEL: FAILURE (P@5 <{PARTIAL_SUCCESS_THRESHOLD})")
+
+    print(f"\n📋 Recommendation: {recommendation}")
+
+    # Breakdown by query type
+    print("\n📈 Breakdown by Query Type:")
+    breakdown = results['breakdown_by_type']
+    counts = results['query_counts']
+    for qtype in ["short", "medium", "long"]:
+        percentage = (counts[qtype] / results['query_count'] * 100) if results['query_count'] > 0 else 0
+        print(f"   {qtype.capitalize():8} ({counts[qtype]:3} queries, {percentage:5.1f}%): P@5 = {breakdown[qtype]:.4f}")
+
+    # Analysis
+    print("\n🔍 Analysis:")
+    best_type = max(breakdown.items(), key=lambda x: x[1])
+    worst_type = min(breakdown.items(), key=lambda x: x[1])
+    print(f"   Best performing: {best_type[0].capitalize()} queries (P@5 = {best_type[1]:.4f})")
+    print(f"   Worst performing: {worst_type[0].capitalize()} queries (P@5 = {worst_type[1]:.4f})")
+
+    # Weights used
+    weights = results['weights_used']
+    print(f"\n⚙️ Weights Used:")
+    print(f"   Semantic: {weights['semantic']}")
+    print(f"   Keyword: {weights['keyword']}")
+
+    if results['mock_mode']:
+        print("\n⚠️ WARNING: Results based on MOCK DATA")
+        print("   Production validation requires real Ground Truth Set from PostgreSQL")
+        print("   Expected production P@5 >0.75 with real semantic embeddings")
+
+    print("=" * 60)
+
+
+def save_results(results: Dict):
+    """
+    Save validation results to JSON file
+    """
+    with open(OUTPUT_FILE, 'w') as f:
+        json.dump(results, f, indent=2)
+
+    print(f"\n💾 Results saved to: {OUTPUT_FILE}")
+
+
+# =============================================================================
+# Main Execution
+# =============================================================================
+
+def main():
+    """
+    Main validation execution
+    """
+    print("=" * 60)
+    print("Story 2.9: Precision@5 Validation on Ground Truth Set")
+    print("=" * 60)
+    print(f"Mode: {'MOCK (Infrastructure Testing)' if MOCK_MODE else 'PRODUCTION'}")
+    print(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print("=" * 60)
+
+    # Run validation
+    results = run_validation()
+
+    # Print summary
+    print_results_summary(results)
+
+    # Save results
+    save_results(results)
+
+    # Return success level for automation
+    success_level, _ = evaluate_success_criteria(results['macro_avg_precision_at_5'])
+    return success_level
+
+
+if __name__ == "__main__":
+    success_level = main()
+    print(f"\n✨ Validation complete. Success level: {success_level.upper()}")

@@ -1,0 +1,355 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>2</epicId>
+    <storyId>8</storyId>
+    <title>Hybrid Weight Calibration via Grid Search</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-16</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>bmad-docs/stories/2-8-hybrid-weight-calibration-via-grid-search.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Entwickler</asA>
+    <iWant>optimale Hybrid Search Gewichte (Semantic vs. Keyword) via Grid Search finden</iWant>
+    <soThat>Precision@5 >0.75 auf dem Ground Truth Set erreicht wird</soThat>
+    <tasks>
+## Task 1: Ground Truth Set Vorbereitung (AC: 2.8.1)
+- Subtask 1.1: Verify Ground Truth Queries in PostgreSQL
+  - Query: SELECT COUNT(*) FROM ground_truth WHERE expected_docs IS NOT NULL
+  - Erwartung: 50-100 Queries vorhanden
+  - Falls <50: HALT mit Warnung (statistisch nicht robust)
+- Subtask 1.2: Validate expected_docs Format
+  - Check: expected_docs ist INTEGER[] Array mit L2 Insight IDs
+  - Verify: Mindestens 1 expected_doc pro Query
+  - Check: Alle IDs existieren in l2_insights Tabelle
+- Subtask 1.3: Prepare Embedding Infrastructure
+  - Verify: OpenAI API Key configured (.env.development)
+  - Decision: Real embeddings RECOMMENDED for accurate calibration
+
+## Task 2: Grid Search Script Implementation (AC: 2.8.1, 2.8.2)
+- Subtask 2.1: Create calibration script structure
+  - File: mcp_server/scripts/calibrate_hybrid_weights.py
+  - Implementation: Direct import from mcp_server.tools (no MCP client needed)
+  - Load Ground Truth Set from PostgreSQL via db.connection
+  - Define Weight Grid (5 combinations)
+- Subtask 2.2: Implement Precision@5 Calculation Function
+  - Function: calculate_precision_at_5(top_k_results: List[int], expected_docs: List[int]) -> float
+  - Logic: len(set(top_k_results[:5]) & set(expected_docs)) / 5
+  - Edge case: If <5 results returned, still divide by 5 (standard Precision@5 metric)
+- Subtask 2.3: Implement Grid Search Loop
+  - For each weight combination: Call hybrid_search with weights parameter
+  - Extract Top-5 L2 IDs from results
+  - Calculate Precision@5 for this query
+  - Aggregate: Macro-Average Precision@5 over all queries
+- Subtask 2.4: Add Baseline Comparison
+  - Run Grid Search with MEDRAG-Default (semantic=0.7, keyword=0.3)
+  - Calculate uplift for all other combinations
+
+## Task 3: Grid Search Execution (AC: 2.8.2)
+- Subtask 3.1: Run Grid Search Script
+  - Execute: python mcp_server/scripts/calibrate_hybrid_weights.py
+  - Runtime: ~8-10 Minuten (100 queries × 5 combinations × ~1s per query)
+  - Monitor: Progress logging
+- Subtask 3.2: Collect Results
+  - Output: Grid Search Results Table (semantic, keyword, precision@5)
+  - Identify best weight combination
+- Subtask 3.3: Validate Results Quality
+  - Check: Precision@5 values reasonable (0.5-0.9 range expected)
+  - Check: Best combination has Precision@5 >0.70
+
+## Task 4: Configuration Update (AC: 2.8.3)
+- Subtask 4.1: Determine Configuration Storage
+  - Location: /home/user/i-o/config.yaml (project root)
+  - Format: Structured YAML config
+- Subtask 4.2: Update Configuration File
+  - Add hybrid_search_weights section with calibrated values
+- Subtask 4.3: Verify MCP Server Reads Config
+  - Test: Run hybrid_search without explicit weights → uses calibrated defaults
+
+## Task 5: Documentation (AC: 2.8.3, 2.8.4)
+- Subtask 5.1: Create Calibration Results Document
+  - File: bmad-docs/calibration-results.md
+  - Sections: Overview, Grid Search Results, Best Weights, Baseline Comparison
+- Subtask 5.2: Document Precision@5 Uplift
+  - Calculate: uplift = (best_precision - baseline_precision) / baseline_precision
+  - Success Criteria: Uplift ≥ +5% (AC-2.8.4)
+- Subtask 5.3: Add Learnings and Recommendations
+  - Observations: Which weight combinations performed well/poorly
+  - Recommendations: Re-calibration frequency
+
+## Task 6: Validation Testing (AC: 2.8.4)
+- Subtask 6.1: Run Spot-Check Queries
+  - Select 5 random queries from Ground Truth Set
+  - Manually verify: Top-5 results contain expected_docs
+- Subtask 6.2: Verify Config Integration
+  - Test: Restart MCP Server, verify calibrated weights are loaded
+- Subtask 6.3: Confirm Success Criteria Met
+  - Precision@5 Uplift ≥ +5% over baseline
+  - Best Precision@5 ≥ 0.70 (preferably >0.75 for Story 2.9 readiness)
+  - Calibrated weights saved in config
+  - Documentation complete
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+**AC-2.8.1: Grid Definition**
+- Semantic Weights: {0.5, 0.6, 0.7, 0.8, 0.9}
+- Keyword Weights: {0.5, 0.4, 0.3, 0.2, 0.1}
+- Constraint: semantic + keyword = 1.0
+- Total: 5 Gewichts-Kombinationen
+
+**AC-2.8.2: Precision@5 Calculation**
+- Führe hybrid_search Tool-Call für alle Ground Truth Queries aus
+- Verwende kalibrierte Gewichte via weights Parameter
+- Vergleiche Top-5 Ergebnisse mit expected_docs aus Ground Truth Tabelle
+- Berechne Precision@5 = (Anzahl relevanter Docs in Top-5) / 5
+- Aggregiere Macro-Average Precision@5 über alle Queries
+
+**AC-2.8.3: Best Weights Identified & Saved**
+- Gewichts-Kombination mit höchstem Macro-Average Precision@5
+- Erwartetes Optimum: semantic=0.8, keyword=0.2 (basierend auf Literatur)
+- Speichere kalibrierte Gewichte in config.yaml
+- Dokumentiere Grid Search Results in bmad-docs/calibration-results.md
+
+**AC-2.8.4: Precision@5 Uplift Achieved**
+- Uplift von +5-10% über MEDRAG-Default (semantic=0.7, keyword=0.3)
+- Baseline: Precision@5 mit Default Weights als Vergleich
+- Optimierte: Precision@5 mit kalibrierten Gewichten
+- Delta: (Optimierte - Baseline) / Baseline >= 0.05
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>bmad-docs/tech-spec-epic-2.md</path>
+        <title>Epic 2 Technical Specification</title>
+        <section>Story 2.8: Hybrid Weight Calibration via Grid Search</section>
+        <snippet>Grid Search durchgeführt wird mit semantic={0.5-0.9}, keyword={0.5-0.1}. Precision@5 für jede Kombination auf allen Ground Truth Queries berechnet. Beste Gewichte in config.yaml gespeichert (erwartet: semantic=0.8, keyword=0.2). Precision@5 Uplift +5-10% über MEDRAG-Default.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/tech-spec-epic-2.md</path>
+        <title>Epic 2 Technical Specification</title>
+        <section>Grid Search Calibration Sequence</section>
+        <snippet>Load Ground Truth Set (50-100 Queries), define weight grid with semantic/keyword constraints (sum=1.0), run hybrid_search for all combinations, calculate Precision@5=(relevant_docs_in_top5)/5, select best combination with highest Macro-Average Precision@5.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/tech-spec-epic-2.md</path>
+        <title>Epic 2 Technical Specification</title>
+        <section>Hybrid Search Interface</section>
+        <snippet>hybrid_search Tool accepts weights parameter as Dict[str, float] with {"semantic": float, "keyword": float}. Default weights loaded from config.yaml or MEDRAG-Default (0.7, 0.3). Tool auto-generates embeddings from query_text if query_embedding not provided.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/epics.md</path>
+        <title>Epic Breakdown</title>
+        <section>Story 2.8: Hybrid Weight Calibration via Grid Search</section>
+        <snippet>Grid: semantic={0.5, 0.6, 0.7, 0.8, 0.9}, keyword={0.5, 0.4, 0.3, 0.2, 0.1}. Expected optimum: semantic=0.8, keyword=0.2 for semantic-heavy psychological dialogues. Target: +5-10% Precision@5 uplift over baseline. Runtime: ~10-20 minutes for 100 queries × 5 combinations.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/stories/2-7-end-to-end-rag-pipeline-testing.md</path>
+        <title>Story 2.7 Completion Notes</title>
+        <section>Infrastructure Validation</section>
+        <snippet>Neon PostgreSQL infrastructure ready (eu-central-1). MCP Server operational with 7 tools functional. hybrid_search tool accepts query_text parameter (auto-generates embeddings). Weights parameter supports explicit Dict format. 30 L2 Insights populated, ground_truth table exists and ready.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/architecture.md</path>
+        <title>System Architecture</title>
+        <section>ADR-002: Strategische API-Nutzung</section>
+        <snippet>Budget-Optimierung: Grid Search einmalig ~€0.01 für Embeddings (falls real embeddings). Ongoing €0/mo nach Kalibrierung (Calibrated Weights sind statisch). Re-Calibration nur bei signifikantem Domain Shift.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/PRD.md</path>
+        <title>Product Requirements Document</title>
+        <section>NFR002: Precision@5 >0.75</section>
+        <snippet>Hybrid Search Precision@5 Target >0.75 auf Ground Truth Set. Story 2.8 findet optimale Gewichte via Grid Search, Story 2.9 validiert finale Metrik. Graduated Success Criteria: ≥0.75 full success, 0.70-0.74 partial success mit monitoring.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>mcp_server/tools/__init__.py</path>
+        <kind>service</kind>
+        <symbol>hybrid_search</symbol>
+        <lines>Story 2.7 modified - query_embedding optional, query_text parameter added</lines>
+        <reason>Grid Search calibration script will import and call hybrid_search with different weight combinations. Tool accepts weights parameter as Dict[str, float].</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/db/migrations/001_initial_schema.sql</path>
+        <kind>schema</kind>
+        <symbol>ground_truth table</symbol>
+        <lines>92-102</lines>
+        <reason>Ground Truth Set storage with query, expected_docs (INTEGER[] of L2 IDs), and dual judge scores. Used as calibration dataset for Grid Search.</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/db/connection.py</path>
+        <kind>infrastructure</kind>
+        <symbol>Database connection pool</symbol>
+        <lines>Full file</lines>
+        <reason>Grid Search script will use db.connection to load Ground Truth Set from PostgreSQL. Provides psycopg2 connection pool.</reason>
+      </artifact>
+      <artifact>
+        <path>bmad-docs/stories/2-7-end-to-end-rag-pipeline-testing.md</path>
+        <kind>documentation</kind>
+        <symbol>Infrastructure validation results</symbol>
+        <lines>671-776 (Completion Notes)</lines>
+        <reason>Documents Neon PostgreSQL setup, MCP Server operational status, hybrid_search tool functionality verified. Key learnings: Tool accepts query_text, auto-generates embeddings, weights parameter available.</reason>
+      </artifact>
+      <artifact>
+        <path>.env.development</path>
+        <kind>config</kind>
+        <symbol>Environment variables</symbol>
+        <lines>Gitignored file</lines>
+        <reason>Contains Neon PostgreSQL connection string and OpenAI API key (for embedding generation during Grid Search).</reason>
+      </artifact>
+      <artifact>
+        <path>start_mcp_server.sh</path>
+        <kind>script</kind>
+        <symbol>MCP Server wrapper script</symbol>
+        <lines>Full file</lines>
+        <reason>Secure wrapper to load .env.development and start MCP Server. May need reference for Grid Search script environment setup.</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <python>
+        <package>psycopg2-binary</package>
+        <version>Latest</version>
+        <reason>PostgreSQL database adapter for Ground Truth Set queries</reason>
+      </python>
+      <python>
+        <package>openai</package>
+        <version>Latest</version>
+        <reason>Embedding generation for Ground Truth queries (if using real embeddings)</reason>
+      </python>
+      <python>
+        <package>mcp</package>
+        <version>Latest</version>
+        <reason>MCP Python SDK (optional - Grid Search can use direct imports)</reason>
+      </python>
+      <python>
+        <package>python-dotenv</package>
+        <version>Latest</version>
+        <reason>Load .env.development for database connection and API keys</reason>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+- **Implementation Method**: Direct import from mcp_server.tools (no MCP client needed). Grid Search script runs as standalone Python script, imports hybrid_search function directly.
+- **Configuration Storage**: config.yaml in project root (/home/user/i-o/config.yaml). Preferred over .env for structured multi-value settings.
+- **Ground Truth Set Size**: Minimum 50 queries required for statistical robustness. Script should HALT if fewer than 50 queries found.
+- **Weight Grid Constraint**: semantic + keyword = 1.0 always. Grid: [(0.5, 0.5), (0.6, 0.4), (0.7, 0.3), (0.8, 0.2), (0.9, 0.1)]
+- **Precision@5 Formula**: Standard metric - always divide by 5, even if fewer results returned. Formula: len(set(top_5_ids) & set(expected_docs)) / 5.0
+- **Expected Runtime**: ~8-10 minutes for 100 queries × 5 combinations × ~1s per hybrid_search call
+- **Success Criteria**: Best Precision@5 ≥0.70 minimum, preferably >0.75 for Story 2.9 readiness. Uplift ≥+5% over MEDRAG-Default (0.7/0.3).
+- **Documentation Required**: Create bmad-docs/calibration-results.md with Grid Search results table, best weights, baseline comparison, uplift percentage.
+- **Testing Approach**: Manual script execution + spot-check validation (5 random queries). No automated tests required.
+- **Database**: Neon PostgreSQL (eu-central-1). Connection via .env.development. Use existing db.connection module.
+  </constraints>
+  <interfaces>
+    <interface>
+      <name>hybrid_search Tool</name>
+      <kind>MCP Tool / Python Function</kind>
+      <signature>
+def hybrid_search(
+    query_embedding: Optional[List[float]] = None,
+    query_text: str = None,
+    top_k: int = 5,
+    weights: Optional[Dict[str, float]] = None
+) -> List[SearchResult]
+      </signature>
+      <path>mcp_server/tools/__init__.py</path>
+      <notes>Accepts weights as Dict {"semantic": float, "keyword": float}. Auto-generates embedding from query_text if query_embedding not provided. Returns list of SearchResult dicts with L2 IDs and scores.</notes>
+    </interface>
+    <interface>
+      <name>ground_truth Table</name>
+      <kind>PostgreSQL Table</kind>
+      <signature>
+CREATE TABLE ground_truth (
+    id SERIAL PRIMARY KEY,
+    query TEXT NOT NULL,
+    expected_docs INTEGER[] NOT NULL,  -- L2 Insight IDs
+    judge1_score FLOAT,
+    judge2_score FLOAT,
+    judge1_model VARCHAR(100),
+    judge2_model VARCHAR(100),
+    kappa FLOAT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+)
+      </signature>
+      <path>mcp_server/db/migrations/001_initial_schema.sql</path>
+      <notes>Key fields: query (TEXT) for Ground Truth queries, expected_docs (INTEGER[]) for relevant L2 Insight IDs. Grid Search loads all rows with: SELECT query, expected_docs FROM ground_truth WHERE expected_docs IS NOT NULL</notes>
+    </interface>
+    <interface>
+      <name>config.yaml Hybrid Weights</name>
+      <kind>YAML Configuration</kind>
+      <signature>
+hybrid_search_weights:
+  semantic: 0.8
+  keyword: 0.2
+  calibration_date: "2025-11-16"
+  calibration_precision_at_5: 0.78
+  baseline_precision_at_5: 0.72
+  uplift_percentage: 8.3
+      </signature>
+      <path>config.yaml</path>
+      <notes>Calibrated weights stored after Grid Search. MCP Server loads these on startup as default weights for hybrid_search tool (when weights parameter not explicitly provided).</notes>
+    </interface>
+  </interfaces>
+  <tests>
+    <standards>
+Story 2.8 is primarily **Script Execution + Validation** - no UI-based or automated testing required.
+
+**Testing Approach:**
+- **Manual Script Execution**: Run Grid Search script (mcp_server/scripts/calibrate_hybrid_weights.py)
+- **Spot-Check Validation**: Select 5 random queries, manually verify Top-5 results contain expected_docs
+- **Configuration Verification**: Restart MCP Server, verify calibrated weights loaded from config.yaml
+- **Success Criteria Validation**: Confirm Precision@5 uplift ≥+5%, best Precision@5 ≥0.70
+
+**Edge Cases to Test:**
+- Empty Ground Truth Set: Script should HALT with clear error
+- Ground Truth Set <50 queries: HALT with warning (statistical robustness)
+- Missing expected_docs: Skip query with warning
+- All L2 IDs invalid: Precision@5 = 0.0 (expected for invalid data)
+
+**No Automated Tests Required:** Grid Search is one-time calibration, manual validation sufficient.
+    </standards>
+    <locations>
+- mcp_server/scripts/ - Grid Search calibration script location
+- bmad-docs/calibration-results.md - Documentation output for results validation
+- config.yaml - Configuration file to verify calibrated weights saved
+    </locations>
+    <ideas>
+      <idea ac="AC-2.8.1">
+        <description>Verify Ground Truth Set has ≥50 queries</description>
+        <test>Run: SELECT COUNT(*) FROM ground_truth WHERE expected_docs IS NOT NULL. Expected: ≥50</test>
+      </idea>
+      <idea ac="AC-2.8.2">
+        <description>Validate Precision@5 calculation for known query</description>
+        <test>Use test query with known expected_docs. Run hybrid_search with test weights. Calculate Precision@5 manually, compare with script output.</test>
+      </idea>
+      <idea ac="AC-2.8.2">
+        <description>Verify all 5 weight combinations tested</description>
+        <test>Script should output results for: (0.5,0.5), (0.6,0.4), (0.7,0.3), (0.8,0.2), (0.9,0.1). Check Grid Search Results Table completeness.</test>
+      </idea>
+      <idea ac="AC-2.8.3">
+        <description>Verify config.yaml created/updated with calibrated weights</description>
+        <test>After Grid Search: Check config.yaml exists at /home/user/i-o/config.yaml. Verify hybrid_search_weights section populated with best weights.</test>
+      </idea>
+      <idea ac="AC-2.8.3">
+        <description>Verify MCP Server loads calibrated weights on startup</description>
+        <test>Restart MCP Server. Call hybrid_search without explicit weights parameter. Verify tool uses calibrated defaults (not MEDRAG-Default 0.7/0.3).</test>
+      </idea>
+      <idea ac="AC-2.8.4">
+        <description>Validate Precision@5 uplift calculation</description>
+        <test>Compare baseline (0.7/0.3) Precision@5 with best combination Precision@5. Calculate uplift percentage. Expected: ≥+5%.</test>
+      </idea>
+      <idea ac="AC-2.8.4">
+        <description>Spot-check 5 random queries with calibrated weights</description>
+        <test>SELECT 5 random queries from Ground Truth Set. Run hybrid_search with calibrated weights. Manually verify Top-5 results overlap with expected_docs.</test>
+      </idea>
+      <idea ac="All">
+        <description>Validate calibration-results.md documentation completeness</description>
+        <test>Check bmad-docs/calibration-results.md contains: Overview, Grid Search Results Table, Best Weights, Baseline Comparison, Uplift Percentage, Observations/Learnings.</test>
+      </idea>
+    </ideas>
+  </tests>
+</story-context>

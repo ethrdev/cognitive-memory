@@ -1,0 +1,338 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>3</epicId>
+    <storyId>6</storyId>
+    <title>PostgreSQL Backup Strategy Implementation</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-18</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>bmad-docs/stories/3-6-postgresql-backup-strategy-implementation.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Entwickler</asA>
+    <iWant>automatisierte PostgreSQL Backups mit 7-day Retention haben</iWant>
+    <soThat>catastrophic data loss verhindert wird (NFR004)</soThat>
+    <tasks>
+### Task 1: Create Backup Script mit pg_dump (AC: 3.6.1, 3.6.2)
+- [ ] Subtask 1.1: Create `scripts/backup_postgres.sh` Bash script
+- [ ] Subtask 1.2: Implement pg_dump command: `pg_dump -U mcp_user -Fc cognitive_memory > /backups/postgres/cognitive_memory_$(date +%Y-%m-%d).dump`
+- [ ] Subtask 1.3: Add environment variable loading (DB credentials from .env)
+- [ ] Subtask 1.4: Verify backup file size >1MB (sanity check für erfolgreichen Dump)
+- [ ] Subtask 1.5: Implement backup rotation logic (find backups older than 7 days, delete)
+- [ ] Subtask 1.6: Create `/backups/postgres/` directory if not exists (with chmod 700 permissions)
+- [ ] Subtask 1.7: Set backup file permissions to chmod 600 (owner-only read/write)
+
+### Task 2: L2 Insights Git Export Script (AC: 3.6.3)
+- [ ] Subtask 2.1: Create `scripts/export_l2_insights.py` Python script
+- [ ] Subtask 2.2: Query PostgreSQL `l2_insights` table for all active insights (Content + Metadata, OHNE embedding_vector)
+- [ ] Subtask 2.3: Export to JSON format: `/memory/l2-insights/YYYY-MM-DD.json`
+- [ ] Subtask 2.4: Add config flag `git_export_enabled: true/false` in config.yaml
+- [ ] Subtask 2.5: If git_export_enabled=true → Git add + commit + push (automated)
+- [ ] Subtask 2.6: Create `/memory/l2-insights/` directory if not exists
+- [ ] Subtask 2.7: Add error handling for Git failures (log warning, don't block backup)
+
+### Task 3: Cron Job Setup für Daily Backup (AC: 3.6.1)
+- [ ] Subtask 3.1: Create crontab entry: `0 3 * * * /path/to/scripts/backup_postgres.sh`
+- [ ] Subtask 3.2: Verify Cron user has permissions für /backups/postgres/ directory
+- [ ] Subtask 3.3: Redirect script output to log file: `>> /var/log/cognitive-memory/backup.log 2>&1`
+- [ ] Subtask 3.4: Test Cron execution manually: `bash scripts/backup_postgres.sh`
+
+### Task 4: Backup Logging und Monitoring (AC: 3.6.5)
+- [ ] Subtask 4.1: Add logging to backup script (timestamp, file size, duration, success/failure)
+- [ ] Subtask 4.2: Create `/var/log/cognitive-memory/backup.log` with proper permissions
+- [ ] Subtask 4.3: Implement failure detection: Check exit code von pg_dump (0=success, non-zero=failure)
+- [ ] Subtask 4.4: Add consecutive failure counter (2 failures → ERROR level log)
+- [ ] Subtask 4.5: Log retention execution details (Anzahl gelöschter Backups)
+- [ ] Subtask 4.6: Add backup size validation: If file <1MB → log ERROR (incomplete dump)
+
+### Task 5: Recovery Documentation (AC: 3.6.4)
+- [ ] Subtask 5.1: Create `/docs/backup-recovery.md` documentation
+- [ ] Subtask 5.2: Document backup strategy (pg_dump schedule, retention, L2 Git fallback)
+- [ ] Subtask 5.3: Document restore procedure: `pg_restore -U mcp_user -d cognitive_memory -c /backups/postgres/cognitive_memory_YYYY-MM-DD.dump`
+- [ ] Subtask 5.4: Document L2 Insights fallback restore (JSON import, embedding regeneration steps)
+- [ ] Subtask 5.5: Document backup integrity testing (restore zu Test-Database für Validation)
+- [ ] Subtask 5.6: Document troubleshooting (disk space, permission errors, corrupt backup files)
+- [ ] Subtask 5.7: Add RTO/RPO specifications (<1h RTO, <24h RPO)
+
+### Task 6: Testing and Validation (All ACs)
+- [ ] Subtask 6.1: Run backup script manually, verify dump file created in /backups/postgres/
+- [ ] Subtask 6.2: Verify backup file size >1MB (expected: 100MB-2GB für 10K insights)
+- [ ] Subtask 6.3: Test backup rotation: Create mock old backups, verify deletion after 7 days
+- [ ] Subtask 6.4: Test L2 Insights export: Verify JSON file created with correct structure
+- [ ] Subtask 6.5: Test restore procedure: `pg_restore` zu Test-Database, verify data integrity
+- [ ] Subtask 6.6: Test Git export (if enabled): Verify commit created, pushed to remote
+- [ ] Subtask 6.7: Test failure logging: Simulate pg_dump failure (invalid credentials), verify ERROR log
+- [ ] Subtask 6.8: Test Cron execution: Wait for 3 AM execution, verify backup created
+</tasks>
+  </story>
+
+  <acceptanceCriteria>
+### AC-3.6.1: Daily PostgreSQL Backups mit pg_dump
+- Tool: pg_dump (native PostgreSQL Backup)
+- Schedule: Täglich 3 Uhr nachts via Cron (0 3 * * *)
+- Format: Custom Format (-Fc, komprimiert, parallel restore möglich)
+- Target: /backups/postgres/cognitive_memory_YYYY-MM-DD.dump
+- Performance: <5min Backup-Zeit für ~10GB Database
+
+### AC-3.6.2: Backup-Rotation mit 7-day Retention
+- Script löscht Backups älter als 7 Tage automatisch
+- Keeps: Letzten 7 Tage (ausreichend für Recovery von Transient Issues)
+- Disk Space: ~1-2 GB pro Backup (geschätzt für 10K L2 Insights + Embeddings)
+- RPO (Recovery Point Objective): <24 hours (täglich)
+
+### AC-3.6.3: L2 Insights Git Export (Read-Only Fallback)
+- Täglicher Export: L2 Insights (Content + Metadata, OHNE Embeddings) → /memory/l2-insights/YYYY-MM-DD.json
+- Git Commit + Push: Optional, konfigurierbar via config flag
+- Rationale: Text ist klein (~10-20 KB pro Insight), Embeddings können re-generated werden (via OpenAI API)
+- Fallback-Scenario: Bei Totalausfall PostgreSQL → L2 Insights aus Git laden, Embeddings neu generieren
+
+### AC-3.6.4: Recovery-Prozedur Dokumentation
+- RTO (Recovery Time Objective): <1 hour
+- RPO (Recovery Point Objective): <24 hours
+- Dokumentation: /docs/backup-recovery.md mit Step-by-Step Restore-Anleitung
+- Sections: Backup-Strategie Overview, Restore-Prozedur, L2 Insights Fallback-Restore, Testing Backup Integrity, Troubleshooting
+
+### AC-3.6.5: Backup Success Logging und Alerts
+- Log Entry nach jedem Backup: timestamp, backup_size, backup_duration, success/failure
+- Alert bei Backup-Failure: 2 aufeinanderfolgende Failures → ERROR log
+- Metrics: Backup File Size (soll >1MB sein), Execution Time (<5min erwartet), Retention Execution (Anzahl gelöschter Backups)
+</acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>bmad-docs/tech-spec-epic-3.md</path>
+        <title>Technical Specification - Epic 3 (Production Readiness)</title>
+        <section>Backup Manager Component</section>
+        <snippet>Automated PostgreSQL backups mit rotation. DB Connection, Backup Config → Backup Files (.dump), Git Export (JSON). Story 3.6 implementation.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/tech-spec-epic-3.md</path>
+        <title>Technical Specification - Epic 3</title>
+        <section>Workflow 3: Daily Backup + L2 Insights Export</section>
+        <snippet>Cron Job (3 AM daily) → scripts/backup.sh → Backup Manager: 1) pg_dump -Fc cognitive_memory, 2) Backup Rotation (find backups older than 7 days, delete), 3) L2 Insights Export (query PostgreSQL, export JSON), 4) Optional Git commit/push</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/tech-spec-epic-3.md</path>
+        <title>Technical Specification - Epic 3</title>
+        <section>Performance Requirements</section>
+        <snippet>PostgreSQL Backup: <5min for pg_dump on ~10GB database</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/tech-spec-epic-3.md</path>
+        <title>Technical Specification - Epic 3</title>
+        <section>Security Requirements - Backup Security</section>
+        <snippet>Backup files permissions: chmod 600 (owner-only). Backup location: /backups/postgres (not world-readable). Optional encryption: GPG encryption for backups (out of scope v3.1, but documented).</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/tech-spec-epic-3.md</path>
+        <title>Technical Specification - Epic 3</title>
+        <section>Error Handling - Backup & Recovery</section>
+        <snippet>Daily PostgreSQL backups (3 AM), 7-day retention (RPO: <24h), RTO: <1 hour (restore from latest dump), L2 Insights Git fallback (optional, text-only)</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/architecture.md</path>
+        <title>Architecture - Backup & Disaster Recovery</title>
+        <section>NFR004: Backup Strategy</section>
+        <snippet>PostgreSQL Backups: Tool: pg_dump -Fc (Custom Format, komprimiert), Schedule: Täglich 3 Uhr nachts via Cron (0 3 * * *), Retention: 7 days, Location: /backups/postgres/cognitive_memory_YYYY-MM-DD.dump. L2 Insights Git Backup (optional): Daily Export (Content + Metadata, OHNE Embeddings), Format: JSON → /memory/l2-insights/YYYY-MM-DD.json, Git Commit + Push (konfigurierbar).</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/architecture.md</path>
+        <title>Architecture - Backup & Disaster Recovery</title>
+        <section>Recovery (RTO/RPO)</section>
+        <snippet>Recovery Time Objective (RTO): <1 hour. Recovery Point Objective (RPO): <24 hours. Restore Command: pg_restore -U mcp_user -d cognitive_memory /backups/postgres/cognitive_memory_YYYY-MM-DD.dump</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/PRD.md</path>
+        <title>Product Requirements Document</title>
+        <section>NFR004: Backup Strategy</section>
+        <snippet>PostgreSQL Backups: Daily automated dumps (pg_dump) mit 7-day retention. L2 Insights in Git: Read-only fallback, pushed täglich nach /memory/l2-insights/. Recovery Time Objective (RTO): <1 hour (PostgreSQL restore from latest dump). Recovery Point Objective (RPO): <24 hours (daily backup window). Backup Location: Lokales NAS + optional cloud backup (out of scope v3.1). Rationale: Prevents catastrophic data loss, aligns with local-first philosophy.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/epics.md</path>
+        <title>Epics - Story 3.6</title>
+        <section>Story 3.6: PostgreSQL Backup Strategy Implementation</section>
+        <snippet>Als Entwickler, möchte ich automatisierte PostgreSQL Backups mit 7-day Retention haben, sodass catastrophic data loss verhindert wird (NFR004). Acceptance Criteria: Daily pg_dump (Custom Format, 3 AM Cron), Backup-Rotation (7-day retention), L2 Insights Git Export (Content + Metadata, optional), Recovery Documentation (RTO <1h, RPO <24h), Backup Success Logging und Alerts (2 consecutive failures → ERROR).</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>mcp_server/db/connection.py</path>
+        <kind>database-connection</kind>
+        <symbol>get_connection()</symbol>
+        <lines>96-151</lines>
+        <reason>REUSE for L2 Insights export script - provides connection pooling with health checks, uses DATABASE_URL env variable. Context manager pattern ensures proper connection cleanup.</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/db/migrations/001_initial_schema.sql</path>
+        <kind>database-schema</kind>
+        <symbol>l2_insights table</symbol>
+        <lines>28-46</lines>
+        <reason>Defines l2_insights table structure: id, content (TEXT), embedding (vector 1536), created_at, source_ids, metadata (JSONB). Export script must query content+metadata columns ONLY (exclude embedding_vector for Git export).</reason>
+      </artifact>
+      <artifact>
+        <path>.env.template</path>
+        <kind>configuration-template</kind>
+        <symbol>DATABASE_URL</symbol>
+        <lines>29-40</lines>
+        <reason>Documents DATABASE_URL environment variable format (postgresql://user:password@host:port/dbname). Backup scripts must load DB credentials from .env file, never hardcode.</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <python>
+        <package>psycopg2</package>
+        <version>^2.9</version>
+        <usage>PostgreSQL adapter for Python - used in export_l2_insights.py for database queries</usage>
+      </python>
+      <python>
+        <package>python-dotenv</package>
+        <version>latest</version>
+        <usage>Load environment variables from .env file for database credentials in Python scripts</usage>
+      </python>
+      <system>
+        <package>postgresql-client</package>
+        <usage>pg_dump and pg_restore utilities for backup/restore operations</usage>
+      </system>
+      <system>
+        <package>cron</package>
+        <usage>Task scheduler for daily backup execution (0 3 * * *)</usage>
+      </system>
+      <system>
+        <package>bash</package>
+        <version>>=4.0</version>
+        <usage>Shell scripting for backup_postgres.sh script</usage>
+      </system>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>
+      <category>Security</category>
+      <rule>Backup files must have chmod 600 permissions (owner-only read/write)</rule>
+      <source>bmad-docs/tech-spec-epic-3.md#Security-Requirements</source>
+    </constraint>
+    <constraint>
+      <category>Security</category>
+      <rule>Backup directory /backups/postgres/ must have chmod 700 permissions (owner-only access)</rule>
+      <source>bmad-docs/tech-spec-epic-3.md#Security-Requirements</source>
+    </constraint>
+    <constraint>
+      <category>Security</category>
+      <rule>Database credentials must be loaded from .env file only - NEVER hardcoded in scripts</rule>
+      <source>Story 3.5 Senior Developer Review - Security Best Practices</source>
+    </constraint>
+    <constraint>
+      <category>Security</category>
+      <rule>Logs must NOT contain sensitive data (no database passwords, no full query content)</rule>
+      <source>Story 3.5 Senior Developer Review - Error Messages</source>
+    </constraint>
+    <constraint>
+      <category>Performance</category>
+      <rule>Backup execution must complete in &lt;5min for ~10GB database</rule>
+      <source>bmad-docs/tech-spec-epic-3.md#Performance-Requirements line 673</source>
+    </constraint>
+    <constraint>
+      <category>Performance</category>
+      <rule>pg_dump uses consistent snapshot - non-blocking for ongoing queries</rule>
+      <source>Story 3.6 Dev Notes - Project Structure</source>
+    </constraint>
+    <constraint>
+      <category>Architecture</category>
+      <rule>L2 Insights Git Export is OPTIONAL - pg_dump is critical path. Git failure must log WARNING, not block backup.</rule>
+      <source>bmad-docs/tech-spec-epic-3.md#Workflow-3-Daily-Backup</source>
+    </constraint>
+    <constraint>
+      <category>Architecture</category>
+      <rule>Export l2_insights content+metadata ONLY - exclude embedding_vector column (1536 dimensions too large for Git)</rule>
+      <source>Story 3.6 AC-3.6.3 - L2 Insights Git Export</source>
+    </constraint>
+    <constraint>
+      <category>Error Handling</category>
+      <rule>Bash script must use 'set -e' for early exit on errors, 'trap' for cleanup handlers</rule>
+      <source>Story 3.5 Learnings - Apply to Story 3.6</source>
+    </constraint>
+    <constraint>
+      <category>Error Handling</category>
+      <rule>Python script must use try/except with specific exceptions (no bare excepts)</rule>
+      <source>Story 3.5 Code Review - Error Handling Best Practices</source>
+    </constraint>
+    <constraint>
+      <category>Logging</category>
+      <rule>Log INFO: Backup started, file size, duration, success. Log ERROR: pg_dump failure, disk space full, permission errors.</rule>
+      <source>Story 3.5 Learnings #5 - Logging Best Practices</source>
+    </constraint>
+    <constraint>
+      <category>Configuration</category>
+      <rule>Add git_export_enabled: true/false flag to config.yaml for optional Git export feature</rule>
+      <source>Story 3.6 AC-3.6.3 - Git Commit + Push optional</source>
+    </constraint>
+  </constraints>
+  <interfaces>
+    <interface>
+      <name>get_connection()</name>
+      <kind>Python context manager</kind>
+      <signature>@contextmanager def get_connection() -&gt; Iterator[connection]</signature>
+      <path>mcp_server/db/connection.py:96-151</path>
+      <usage>L2 Insights export script must use this context manager for PostgreSQL queries. Handles connection pooling, health checks, and automatic cleanup.</usage>
+    </interface>
+    <interface>
+      <name>DATABASE_URL environment variable</name>
+      <kind>Environment configuration</kind>
+      <signature>postgresql://user:password@host:port/dbname</signature>
+      <path>.env.template:40</path>
+      <usage>Both bash (backup_postgres.sh) and Python (export_l2_insights.py) scripts must load DATABASE_URL from .env file for pg_dump credentials and PostgreSQL connection.</usage>
+    </interface>
+    <interface>
+      <name>pg_dump command</name>
+      <kind>System utility</kind>
+      <signature>pg_dump -U mcp_user -Fc cognitive_memory &gt; backup.dump</signature>
+      <path>System (PostgreSQL client tools)</path>
+      <usage>Backup script must use Custom Format (-Fc) for compression and parallel restore capability. Supports consistent snapshot (non-blocking).</usage>
+    </interface>
+    <interface>
+      <name>pg_restore command</name>
+      <kind>System utility</kind>
+      <signature>pg_restore -U mcp_user -d cognitive_memory -c backup.dump</signature>
+      <path>System (PostgreSQL client tools)</path>
+      <usage>Restore procedure documented in backup-recovery.md. Flag -c cleans existing objects before restore.</usage>
+    </interface>
+    <interface>
+      <name>l2_insights table query</name>
+      <kind>SQL query</kind>
+      <signature>SELECT id, content, metadata, created_at, source_ids FROM l2_insights</signature>
+      <path>mcp_server/db/migrations/001_initial_schema.sql:28-37</path>
+      <usage>L2 export script must query these columns ONLY - exclude embedding_vector (1536 dimensions) for Git export size optimization.</usage>
+    </interface>
+  </interfaces>
+  <tests>
+    <standards>Manual testing approach similar to Story 3.5 (Backup + Recovery Infrastructure). No automated unit tests required for bash/Python scripts in Story 3.6 scope. Testing focuses on: 1) Script execution validation, 2) Backup file integrity checks, 3) Restore procedure validation, 4) Cron execution verification. Log validation: Check INFO/ERROR levels, timestamps, file sizes, durations in /var/log/cognitive-memory/backup.log. Security validation: Verify chmod 600 on backup files, chmod 700 on backup directory.</standards>
+    <locations>
+      <location>Manual test execution - User runs scripts/backup_postgres.sh manually</location>
+      <location>Test database - Create cognitive_memory_test for restore validation</location>
+      <location>/var/log/cognitive-memory/backup.log - Log validation</location>
+      <location>/backups/postgres/ - Backup file validation</location>
+      <location>/memory/l2-insights/ - L2 export validation</location>
+    </locations>
+    <ideas>
+      <idea ac="AC-3.6.1">Test pg_dump execution: Run backup_postgres.sh manually, verify dump file created in /backups/postgres/ with correct timestamp naming. Expected size: 100MB-2GB for 10K insights + embeddings.</idea>
+      <idea ac="AC-3.6.1">Test backup file format: Verify -Fc (Custom Format) used - file should be binary compressed, not plain SQL text.</idea>
+      <idea ac="AC-3.6.1">Test backup performance: Measure execution time, verify &lt;5min for ~10GB database (NFR compliance).</idea>
+      <idea ac="AC-3.6.2">Test backup rotation: Create mock backups with dates 8+ days old, run script, verify old backups deleted (only last 7 days retained).</idea>
+      <idea ac="AC-3.6.2">Test disk space calculation: Verify ~1-2 GB per backup file size matches expectations.</idea>
+      <idea ac="AC-3.6.3">Test L2 Insights export: Run export_l2_insights.py, verify JSON file created with content+metadata (NO embedding_vector). Expected size: ~1-2 MB for 10K insights.</idea>
+      <idea ac="AC-3.6.3">Test Git export (if enabled): Set git_export_enabled=true, verify Git commit created and pushed to remote repository.</idea>
+      <idea ac="AC-3.6.3">Test Git export failure handling: Disconnect network, run export script, verify Git failure logs WARNING (doesn't block pg_dump).</idea>
+      <idea ac="AC-3.6.4">Test restore procedure: Create test database (cognitive_memory_test), run pg_restore -c, verify data integrity (SELECT COUNT(*) FROM l2_insights matches production).</idea>
+      <idea ac="AC-3.6.4">Test L2 fallback restore: Load JSON export, regenerate embeddings via OpenAI API, verify total cost ~€0.20 for 10K insights.</idea>
+      <idea ac="AC-3.6.5">Test backup success logging: Verify log entry contains timestamp, file size, duration, success status in INFO level.</idea>
+      <idea ac="AC-3.6.5">Test backup failure logging: Simulate pg_dump failure (stop PostgreSQL), verify ERROR log with connection details.</idea>
+      <idea ac="AC-3.6.5">Test consecutive failure alerting: Simulate 2 failures in a row, verify ERROR level escalation.</idea>
+      <idea ac="AC-3.6.5">Test file size validation: Kill pg_dump mid-execution, verify script detects &lt;1MB file, logs ERROR.</idea>
+      <idea ac="All">Test Cron execution: Wait for 3 AM execution, verify backup created automatically, logs appended correctly.</idea>
+      <idea ac="All">Test permissions: Verify backup files chmod 600, backup directory chmod 700, log file permissions correct.</idea>
+      <idea ac="All">Test concurrent execution prevention: Run backup_postgres.sh manually while Cron executes, verify lock file (flock) prevents conflicts.</idea>
+      <idea ac="All">Test PostgreSQL connection failure: Stop PostgreSQL service, run backup script, verify graceful error handling and ERROR log.</idea>
+    </ideas>
+  </tests>
+</story-context>

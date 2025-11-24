@@ -1,0 +1,321 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>3</epicId>
+    <storyId>11</storyId>
+    <title>7-Day Stability Testing & Validation</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-20</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>bmad-docs/stories/3-11-7-day-stability-testing-validation.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Entwickler</asA>
+    <iWant>das System 7 Tage durchgehend laufen lassen ohne Crashes</iWant>
+    <soThat>Production-Readiness validiert ist (NFR004)</soThat>
+    <tasks>
+- Task 1: Pre-Test Validation - System Readiness Check
+  - Verify all Epic 3 Stories (3.1-3.10) marked as "done"
+  - Verify systemd service running
+  - Verify PostgreSQL database accessible
+  - Verify all cron jobs configured
+  - Verify API keys configured
+
+- Task 2: Initialize Stability Test Tracking
+  - Create stability test tracking file
+  - Capture baseline metrics
+  - Clear old test data (optional)
+
+- Task 3: Daily Monitoring & Query Load Generation
+  - Ensure minimum 10 queries per day
+  - Monitor daily cron job execution
+  - Monitor systemd service status
+  - Monitor API retry log for reliability
+  - Monitor budget daily
+
+- Task 4: End-of-Test Metrics Collection
+  - Calculate total uptime
+  - Calculate query success rate
+  - Calculate latency metrics (p50, p95, p99)
+  - Calculate API reliability metrics
+  - Calculate total cost
+
+- Task 5: Root Cause Analysis bei Failures
+  - Crash Analysis (if system crashes)
+  - Latency Analysis (if p95 >5s)
+  - Budget Overage Analysis (if cost >€2)
+  - Query Failure Analysis (if success rate <99%)
+  - Cron Job Failure Analysis (if daily jobs fail)
+
+- Task 6: Daily Operations Validation
+  - Verify drift detection runs daily
+  - Verify PostgreSQL backups created daily
+  - Verify budget alert check runs daily
+  - Verify health checks run every 15 minutes
+  - Verify systemd auto-restart (if crash occurs)
+
+- Task 7: Generate Stability Report
+  - Create report file structure
+  - Populate Executive Summary section
+  - Populate Detailed Metrics section
+  - Populate API Reliability Analysis section
+  - Populate Daily Operations Validation section
+  - Populate Issues Encountered section
+  - Populate Recommendations section
+  - Review and finalize report
+
+- Task 8: Optional - Automated Stability Test Scripts
+  - Create start_stability_test.sh (optional)
+  - Create daily_stability_check.sh (optional)
+  - Create end_stability_test.sh (optional)
+  - Create generate_stability_report.py (optional)
+</tasks>
+  </story>
+
+  <acceptanceCriteria>
+AC-3.11.1: Continuous Operation Duration
+- System läuft 7 Tage (168 Stunden) ohne manuellen Restart
+- Query Load: Mindestens 10 Queries/Tag (70 Queries total)
+- No Critical Crashes: MCP Server mit Auto-Recovery bei minor Errors
+
+AC-3.11.2: System Metrics Measurement
+1. Uptime: 100% (systemd service status = active)
+2. Query Success Rate: >99% (maximal 1 Failed Query von 70)
+3. Latency: p95 <5s über alle 70 Queries (NFR001)
+4. API Reliability: Retry-Logic erfolgreich bei transient Failures
+5. Budget: Total Cost <€2 für 7 Tage (€8/mo projected)
+
+AC-3.11.3: Root Cause Analysis bei Problemen
+- System Crashes: Analyze systemd logs, fix bug, restart test
+- Latency >5s: Profile code, optimize, re-run benchmark
+- Budget Overage: Identify cost driver, optimize API usage
+- Query Failures: Fix error handling, improve retry logic
+
+AC-3.11.4: Daily Operations Monitoring
+- Model Drift Detection (2 AM): 7 successful runs
+- PostgreSQL Backup (3 AM): 7 backups created
+- Budget Alert Check (4 AM): 7 checks executed
+- Health Check (every 15min): >95% success rate
+- systemd Auto-Restart: Functional if crash occurs
+
+AC-3.11.5: Stability Report Documentation
+- Create /docs/7-day-stability-report.md mit 6 Sections:
+  1. Executive Summary (Test Duration, Status, Key Metrics)
+  2. Detailed Metrics (Uptime, Queries, Success Rate, Latency, Cost)
+  3. API Reliability Analysis (API calls, Retry Rate, Fallback)
+  4. Daily Operations Validation (Drift, Backups, Alerts, Health Checks)
+  5. Issues Encountered (List or "None")
+  6. Recommendations (Optimizations, Cost suggestions, Reliability)
+</acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>bmad-docs/epics.md</path>
+        <title>Epic Breakdown</title>
+        <section>Story 3.11: 7-Day Stability Testing & Validation</section>
+        <snippet>7-Day Stability Test validiert Production-Readiness durch kontinuierlichen Betrieb mit 168h Uptime, 70+ Queries, >99% Success Rate, p95 <5s Latency, Budget <€2. Integration Test für alle Epic 3 Features.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/tech-spec-epic-3.md</path>
+        <title>Technical Specification Epic 3</title>
+        <section>Story 3.11: 7-Day Stability Testing</section>
+        <snippet>Stability Test ist finaler Validation Checkpoint für NFR004 (Reliability >99% Uptime). Test nutzt Production Environment mit echten API Keys, echter DB, organischer Query Load. Success Criteria: Uptime 100%, Success Rate >99%, Latency p95 <5s, API Reliability functional, Budget <€2.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/architecture.md</path>
+        <title>System Architecture</title>
+        <section>NFR004: Reliability & Backup Strategy</section>
+        <snippet>NFR004 fordert >99% Uptime mit Auto-Recovery bei Failures. Backup Strategy: täglich pg_dump (3 AM), 7-day retention, RPO <24h, RTO <1h. systemd auto-restart bei Crashes. API Retry Logic mit exponential backoff (4 Retries: 1s, 2s, 4s, 8s).</snippet>
+      </doc>
+      <doc>
+        <path>docs/production-checklist.md</path>
+        <title>Production Deployment Checklist</title>
+        <section>Production Readiness Validation</section>
+        <snippet>Pre-deployment checklist: systemd service active, PostgreSQL accessible, cron jobs configured (drift 2AM, backup 3AM, budget 4AM), API keys present, backups verified. Post-deployment: 7-Day Stability Test validiert NFR004.</snippet>
+      </doc>
+      <doc>
+        <path>docs/budget-monitoring.md</path>
+        <title>Budget Monitoring Guide</title>
+        <section>Cost Tracking & Budget Validation</section>
+        <snippet>Budget CLI Tool: `python -m mcp_server.budget.cli breakdown --days 7` zeigt Cost Breakdown per API. Target: <€2 für 7 Tage (€8/mo projected). api_cost_log table tracked alle API costs (openai_embeddings, gpt4o_judge, haiku_eval, haiku_reflection).</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>mcp_server/budget/cli.py</path>
+        <kind>module</kind>
+        <symbol>BudgetCLI</symbol>
+        <lines>1-446</lines>
+        <reason>Budget Dashboard für Cost Breakdown und Budget Validation (AC-3.11.2 Metric 5). Commands: dashboard, breakdown --days 7, daily, alerts, optimize.</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/db/cost_logger.py</path>
+        <kind>module</kind>
+        <symbol>CostLogger</symbol>
+        <lines>1-303</lines>
+        <reason>API Cost Logging Functions für api_cost_log table. Functions: get_total_cost(), get_cost_by_api(), insert_cost_log(). Used for Budget Metric collection.</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/budget/budget_monitor.py</path>
+        <kind>module</kind>
+        <symbol>BudgetMonitor</symbol>
+        <lines>1-330</lines>
+        <reason>Budget Monitoring Logic für Monthly Aggregation, Projections, Alerts. Functions: get_monthly_cost(), get_daily_costs(), project_monthly_cost(). Used for Budget Analysis.</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/db/migrations/010_api_cost_log_index.sql</path>
+        <kind>migration</kind>
+        <symbol>api_cost_log index</symbol>
+        <lines>1-20</lines>
+        <reason>PostgreSQL index für api_cost_log table (idx_cost_date_api). Performance optimization für Date-Range Queries in Budget Metrics Collection.</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <python>
+        <package name="psycopg2" version=">=2.9.0">PostgreSQL adapter für Python - Database connections</package>
+        <package name="anthropic" version="latest">Anthropic API client für Haiku Evaluation + Reflexion</package>
+        <package name="openai" version="latest">OpenAI API client für Embeddings + GPT-4o Judge</package>
+        <package name="tabulate" version="latest">Table formatting für CLI Tool Output</package>
+        <package name="python-dotenv" version="latest">Environment variable management (.env.production)</package>
+      </python>
+      <system>
+        <tool name="systemd">Service management für MCP Server Daemonization</tool>
+        <tool name="PostgreSQL" version=">=14.0">Database für metrics storage (api_cost_log, api_retry_log, model_drift_log)</tool>
+        <tool name="cron">Scheduled tasks (drift detection, backup, budget alert)</tool>
+      </system>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+- Story 3.11 ist ein Integration Test Story - KEINE neuen Code-Komponenten werden erstellt
+- Alle Epic 3 Stories (3.1-3.10) müssen "done" status haben bevor 7-Day Test startet
+- Test nutzt Production Environment mit echten API Keys (.env.production)
+- Test kann nicht in CI/CD pipeline laufen (requires 168 hours elapsed time)
+- Manual Testing Required: ethr führt Test manuell durch mit daily monitoring
+- Success Criteria sind strikt: Uptime >99%, Success Rate >99%, Latency p95 <5s, Budget <€2
+- Max. 3 Test Iterations erlaubt bei Failures (Crash, Latency, Budget Overage)
+- Stability Report muss in Deutsch (document_output_language) erstellt werden
+- Report Format: Markdown mit 6 required sections (Executive Summary, Detailed Metrics, API Reliability, Daily Operations, Issues, Recommendations)
+- Test validiert NFR001 (Performance), NFR002 (Backup), NFR003 (Budget), NFR004 (Reliability), NFR005 (Observability)
+</constraints>
+
+  <interfaces>
+    <interface>
+      <name>systemctl status mcp-server</name>
+      <kind>CLI command</kind>
+      <signature>systemctl status mcp-server</signature>
+      <path>systemd service</path>
+      <description>Check MCP Server service status for Uptime Metric (AC-3.11.2 Metric 1)</description>
+    </interface>
+    <interface>
+      <name>systemctl show mcp-server</name>
+      <kind>CLI command</kind>
+      <signature>systemctl show mcp-server --property=ActiveEnterTimestamp</signature>
+      <path>systemd service</path>
+      <description>Calculate total uptime from service start timestamp to end timestamp</description>
+    </interface>
+    <interface>
+      <name>Budget CLI - breakdown</name>
+      <kind>CLI command</kind>
+      <signature>python -m mcp_server.budget.cli breakdown --days 7</signature>
+      <path>mcp_server/budget/cli.py</path>
+      <description>Cost breakdown per API for Budget Metric validation (AC-3.11.2 Metric 5)</description>
+    </interface>
+    <interface>
+      <name>Budget CLI - daily</name>
+      <kind>CLI command</kind>
+      <signature>python -m mcp_server.budget.cli daily</signature>
+      <path>mcp_server/budget/cli.py</path>
+      <description>Daily cost monitoring during 7-Day Test (expected €0.20-0.30/day)</description>
+    </interface>
+    <interface>
+      <name>PostgreSQL - api_cost_log query</name>
+      <kind>SQL query</kind>
+      <signature>SELECT SUM(estimated_cost), COUNT(*) FROM api_cost_log WHERE date >= [test_start_date]</signature>
+      <path>mcp_server/db/cost_logger.py</path>
+      <description>Calculate total cost and query count for Budget + Success Rate metrics</description>
+    </interface>
+    <interface>
+      <name>PostgreSQL - api_retry_log query</name>
+      <kind>SQL query</kind>
+      <signature>SELECT COUNT(*) FROM api_retry_log WHERE created_at >= [test_start_timestamp]</signature>
+      <path>mcp_server/db/connection.py</path>
+      <description>Calculate retry count for API Reliability Metric (AC-3.11.2 Metric 4)</description>
+    </interface>
+    <interface>
+      <name>PostgreSQL - model_drift_log query</name>
+      <kind>SQL query</kind>
+      <signature>SELECT avg_retrieval_time FROM model_drift_log WHERE created_at >= [test_start_timestamp]</signature>
+      <path>mcp_server/db/connection.py</path>
+      <description>Extract latency data for Latency Metric calculation (p50, p95, p99)</description>
+    </interface>
+    <interface>
+      <name>journalctl - systemd logs</name>
+      <kind>CLI command</kind>
+      <signature>journalctl -u mcp-server -n 200 --no-pager</signature>
+      <path>systemd journal</path>
+      <description>Crash Analysis bei System Failures - identify exception stack traces</description>
+    </interface>
+    <interface>
+      <name>journalctl - cron logs</name>
+      <kind>CLI command</kind>
+      <signature>journalctl -u cron --since "2 days ago" | grep drift</signature>
+      <path>systemd journal</path>
+      <description>Verify daily cron job execution (drift detection, backup, budget alert)</description>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+Story 3.11 IST der Integration Test für Epic 3 - es gibt keine separaten Unit/Integration Tests. Die Testing Strategy ist der 7-Day Stability Test selbst. Manual Testing Required mit Real Production Environment. Success Criteria: All AC-3.11.2 metrics must pass (Uptime >99%, Success Rate >99%, Latency p95 <5s, API Reliability functional, Budget <€2).
+</standards>
+    <locations>
+- bmad-docs/stories/3-11-7-day-stability-testing-validation.md (Story File mit Tasks/Subtasks)
+- /tmp/stability-test-tracking.json (Temporary tracking file während Test)
+- docs/7-day-stability-report.md (Final Report nach Test completion)
+- scripts/start_stability_test.sh (Optional initialization script)
+- scripts/daily_stability_check.sh (Optional daily monitoring script)
+- scripts/end_stability_test.sh (Optional metrics collection script)
+- scripts/generate_stability_report.py (Optional automated report generation)
+</locations>
+    <ideas>
+Test Phase 1: Pre-Test Validation (Task 1)
+- Verify all Stories 3.1-3.10 marked as "done" in sprint-status.yaml
+- Verify systemd service running: `systemctl status mcp-server` = active (running)
+- Verify PostgreSQL accessible: `psql -U mcp_user -d cognitive_memory -c "SELECT 1"`
+- Verify cron jobs configured: `crontab -l` lists 3 cron entries (drift, backup, budget)
+- Verify API keys present: `.env.production` contains OPENAI_API_KEY, ANTHROPIC_API_KEY
+
+Test Phase 2: Test Execution (Task 3 - 7 days)
+- Query Load: 10+ queries/day (organic or synthetic via generate_test_queries.py)
+- Daily systemd check: `systemctl status mcp-server` → Expected: active (running)
+- Daily cron check: `journalctl -u cron --since today -n 50` → Verify drift, backup, budget executed
+- Daily budget check: `python -m mcp_server.budget.cli daily` → Expected: €0.20-0.30/day
+- Daily API retry check: `SELECT COUNT(*) FROM api_retry_log WHERE created_at >= CURRENT_DATE` → Expected: <10% of total calls
+
+Test Phase 3: Metrics Collection (Task 4 - Day 7)
+- Calculate Uptime: `systemctl show mcp-server --property=ActiveEnterTimestamp` → Target: 168h (100%)
+- Calculate Success Rate: (successful_queries / total_queries) × 100 → Target: >99%
+- Calculate Latency: Extract from model_drift_log, compute p50/p95/p99 → Target: p95 <5s
+- Calculate API Reliability: (api_retry_log count / api_cost_log count) × 100 → Target: <10% retry rate
+- Calculate Total Cost: `SELECT SUM(estimated_cost) FROM api_cost_log WHERE date >= [test_start]` → Target: <€2.00
+
+Test Phase 4: Report Generation (Task 7)
+- Create /docs/7-day-stability-report.md mit 6 Sections
+- Populate Executive Summary: Test PASSED/FAILED, Key Metrics (Uptime %, Success %, p95, Cost)
+- Populate Detailed Metrics: All 5 AC-3.11.2 metrics mit exact values
+- Populate API Reliability: Total API calls, Retry Rate %, Fallback activations, Retry overhead
+- Populate Daily Operations: Drift runs (X/7), Backups (X/7), Budget checks (X/7), Health checks success rate
+- Populate Issues: List all crashes/failures/errors OR "None" if test passed cleanly
+- Populate Recommendations: Performance optimizations, Cost suggestions, Reliability improvements
+
+Failure Scenario Tests (Task 5):
+- IF System Crashes: `journalctl -u mcp-server -n 200` → Identify crash reason → Fix bug → Restart test (max 3 iterations)
+- IF Latency p95 >5s: Profile code → Identify bottleneck → Optimize → Re-run benchmark → Restart test
+- IF Budget >€2: `python -m mcp_server.budget.cli breakdown --days 7` → Identify cost driver → Optimize → Continue with monitoring
+- IF Success Rate <99%: `SELECT * FROM api_retry_log WHERE retry_count >= 4` → Identify failed queries → Fix error handling → Restart test
+- IF Cron Job Fails: `journalctl -u cron --since [test_start] | grep ERROR` → Identify failed job → Fix script → Restart test
+</ideas>
+  </tests>
+</story-context>

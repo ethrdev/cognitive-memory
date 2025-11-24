@@ -1,0 +1,248 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>5</storyId>
+    <title>L2 Insights Storage mit Embedding (MCP Tool: compress_to_l2_insight)</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-12T14:30:00Z</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>bmad-docs/stories/1-5-l2-insights-storage-mit-embedding-mcp-tool-compress-to-l2-insight.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Claude Code</asA>
+    <iWant>komprimierte semantische Insights mit Embeddings speichern</iWant>
+    <soThat>effiziente semantische Suche über meine Memory möglich ist und Information Density validiert wird</soThat>
+    <tasks>- [ ] OpenAI API Client Setup (AC: 1)
+  - [x] ~~Add `openai` dependency zu `pyproject.toml`~~ (bereits vorhanden in pyproject.toml:14)
+  - [ ] Verify openai installation: `python -c "import openai; print(openai.__version__)"`
+  - [ ] Create `.env.development` variable: `OPENAI_API_KEY=sk-...`
+  - [ ] Load API key in tool handler via `os.getenv("OPENAI_API_KEY")`
+  - [ ] Initialize OpenAI client: `from openai import OpenAI; client = OpenAI(api_key=api_key)`
+
+- [ ] Retry Logic Implementation (AC: 1)
+  - [ ] Create helper function: `async def call_with_retry(func, max_retries=3)`
+  - [ ] Exponential backoff delays: [1, 2, 4] seconds
+  - [ ] Catch OpenAI Rate-Limit errors: `openai.RateLimitError`
+  - [ ] Catch OpenAI Transient errors: `openai.APIConnectionError`
+  - [ ] Log retry attempts to stderr (structured JSON logging)
+  - [ ] Return error after max_retries exceeded
+
+- [ ] compress_to_l2_insight Tool Implementation (AC: 1, 2, 4)
+  - [ ] Locate stub in `mcp_server/tools/__init__.py` (Line ~84-99 from Story 1.3)
+  - [ ] Replace stub implementation:
+    - [ ] Import: `from openai import OpenAI`, `import os`, `import asyncio`
+    - [ ] Parameter extraction: content (string), source_ids (list[int])
+    - [ ] API Key validation: check `OPENAI_API_KEY` is set
+    - [ ] Call OpenAI Embeddings API mit retry logic
+    - [ ] Extract embedding vector from response
+    - [ ] INSERT into l2_insights table with parameterized query
+    - [ ] RETURNING id, created_at für Response
+    - [ ] Error handling: OpenAI errors, DB errors, parameter validation
+  - [ ] SQL Query:
+    ```sql
+    INSERT INTO l2_insights (content, embedding, source_ids, metadata)
+    VALUES (%s, %s, %s, %s)
+    RETURNING id, created_at;
+    ```
+  - [ ] Response Format:
+    ```json
+    {
+      "id": 456,
+      "embedding_status": "success",
+      "fidelity_score": 0.73,
+      "timestamp": "2025-11-12T14:30:00Z"
+    }
+    ```
+
+- [ ] Semantic Fidelity Check Implementation (AC: 3)
+  - [ ] Create helper function: `def calculate_fidelity(content: str) -> float`
+  - [ ] Simple heuristic implementation:
+    - [ ] Count tokens: `len(content.split())`
+    - [ ] Count semantic units (Nomen/Verben): Use simple POS tagging or keyword list
+    - [ ] Calculate density: semantic_units / token_count
+    - [ ] Clamp to 0.0-1.0 range
+  - [ ] Load threshold from env: `FIDELITY_THRESHOLD` (default: 0.5)
+  - [ ] Store fidelity_score in metadata JSONB: `{"fidelity_score": 0.73, "fidelity_warning": false}`
+  - [ ] If density &lt;threshold: Add warning to metadata: `{"fidelity_warning": true, "fidelity_score": 0.42}`
+  - [ ] Return fidelity_score in response
+
+- [ ] JSON Schema Update für compress_to_l2_insight (AC: 1, 2)
+  - [ ] Verify existing JSON Schema in `tools/__init__.py` (Story 1.3 created stub)
+  - [ ] Ensure schema has:
+    - [ ] content: type string, required
+    - [ ] source_ids: type array of integers, required
+    - [ ] Test validation with invalid params (missing content, wrong type)
+
+- [ ] Unit Tests für compress_to_l2_insight (AC: 1, 2, 3, 4)
+  - [ ] Test-File: `tests/test_compress_to_l2_insight.py` erstellen
+  - [ ] Test 1: Valid embedding generation - verify ID, embedding_status, fidelity_score returned
+  - [ ] Test 2: OpenAI API Mock - mock API call, verify retry logic
+  - [ ] Test 3: Rate-Limit Retry - mock rate limit error, verify exponential backoff
+  - [ ] Test 4: Fidelity Check - test low density (&lt;0.5) triggers warning
+  - [ ] Test 5: Fidelity Check - test high density (&gt;0.5) no warning
+  - [ ] Test 6: Missing API Key - verify error handling
+  - [ ] Test 7: Invalid source_ids - verify parameter validation
+  - [ ] Test 8: Embedding vector dimensions - verify 1536-dim stored correctly
+  - [ ] Helper: cleanup_test_data() to DELETE inserted rows
+
+- [ ] Integration Test: MCP Tool Call End-to-End (AC: 1, 2, 4)
+  - [ ] Update `tests/test_mcp_server.py`
+  - [ ] Test: call_tool("compress_to_l2_insight", {...}) via stdio transport
+  - [ ] Verify: Response contains id, embedding_status, fidelity_score
+  - [ ] Verify: Embedding actually stored in database (SELECT query)
+  - [ ] Test with parameter validation errors
+  - [ ] Cleanup: DELETE test data after test
+
+- [ ] IVFFlat Index Build (AC: performance - Story 1.2 deferred this)
+  - [ ] Check row count: `SELECT COUNT(*) FROM l2_insights;`
+  - [ ] If count ≥100: Build IVFFlat index (pgvector training requirement)
+  - [ ] SQL: `CREATE INDEX CONCURRENTLY idx_l2_embedding ON l2_insights USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);`
+  - [ ] If count &lt;100: Document in Dev Notes that index will be built after 100 rows
+  - [ ] Test index usage: `EXPLAIN ANALYZE SELECT * FROM l2_insights ORDER BY embedding &lt;=&gt; '[0.1, ...]'::vector LIMIT 5;`
+
+- [ ] Documentation Updates (AC: all)
+  - [ ] README.md: Add OpenAI API setup instructions
+  - [ ] README.md: Add usage example for compress_to_l2_insight tool
+  - [ ] `.env.template`: Add OPENAI_API_KEY variable
+  - [ ] `.env.template`: Add FIDELITY_THRESHOLD variable (default: 0.5)
+  - [ ] API Reference: Document parameters, response format, fidelity check, retry logic</tasks>
+  </story>
+
+  <acceptanceCriteria>**Given** der MCP Server läuft und OpenAI API-Key ist konfiguriert
+**When** Claude Code das Tool `compress_to_l2_insight` aufruft mit (content, source_ids)
+**Then** werden folgende Requirements erfüllt:
+
+1. **OpenAI Embeddings API Integration**
+   - OpenAI Embeddings API wird aufgerufen mit `text-embedding-3-small` model
+   - Embedding (1536-dimensional vector) wird generiert
+   - API-Key aus `.env.development` geladen (`OPENAI_API_KEY`)
+   - Retry-Logic mit Exponential Backoff bei Rate-Limit/Transient Errors (3 Versuche: 1s, 2s, 4s delays)
+   - Bei permanent API-Fehler: Clear error message zurückgeben
+
+2. **Datenpersistierung in l2_insights Tabelle**
+   - Content als TEXT gespeichert
+   - Embedding als vector(1536) gespeichert
+   - source_ids als INTEGER[] gespeichert (Array von L0 Raw IDs)
+   - Timestamp automatisch generiert (UTC) via PostgreSQL `DEFAULT NOW()`
+   - metadata als JSONB gespeichert (optional, für Extension E2 Fidelity-Score)
+
+3. **Semantic Fidelity Check (Enhancement E2)**
+   - Information Density berechnen: Anzahl semantischer Einheiten / Token-Count
+   - Threshold: density &gt;0.5 (configurable via `.env.development` - `FIDELITY_THRESHOLD`)
+   - Einfache Heuristik: Anzahl Nomen/Verben / Token-Count (keine ML)
+   - Bei density &lt;0.5: Warning in metadata speichern, aber trotzdem persistieren
+   - Fidelity-Score im Response zurückgeben
+
+4. **Erfolgsbestätigung und Error Handling**
+   - Response enthält generierte ID (int)
+   - Response enthält embedding_status ("success" oder "retried")
+   - Response enthält fidelity_score (float 0.0-1.0)
+   - Bei API-Fehler nach Retries: Structured error message
+   - Bei Parameter-Validierung Fehler: JSON Schema Validation Error</acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="bmad-docs/tech-spec-epic-1.md" title="Epic Technical Specification: MCP Server Foundation & Ground Truth Collection" section="OpenAI Embeddings API Integration" snippet="OpenAI Embeddings API wird aufgerufen mit text-embedding-3-small model. Embedding (1536-dimensional vector) wird generiert. API-Key aus .env.development geladen (OPENAI_API_KEY). Retry-Logic mit Exponential Backoff bei Rate-Limit/Transient Errors (3 Versuche: 1s, 2s, 4s delays)." />
+      <doc path="bmad-docs/tech-spec-epic-1.md" title="Epic Technical Specification: MCP Server Foundation & Ground Truth Collection" section="Datenpersistierung in l2_insights Tabelle" snippet="Content als TEXT gespeichert. Embedding als vector(1536) gespeichert. source_ids als INTEGER[] gespeichert (Array von L0 Raw IDs). Timestamp automatisch generiert (UTC) via PostgreSQL DEFAULT NOW(). metadata als JSONB gespeichert (optional, für Extension E2 Fidelity-Score)." />
+      <doc path="bmad-docs/tech-spec-epic-1.md" title="Epic Technical Specification: MCP Server Foundation & Ground Truth Collection" section="L2 Compression Service" snippet="L2 Compression Service: Semantic Insight Creation + Embedding. Inputs: (content, source_ids). Outputs: L2 Insight ID + Embedding. Owner: Story 1.5" />
+      <doc path="bmad-docs/architecture.md" title="Cognitive Memory System v3.1.0-Hybrid - Architektur" section="Technologie-Entscheidungen" snippet="Embedding API: OpenAI text-embedding-3-small, 1536 dimensions. Beste Precision@5 (>0.75), €0.02/1M tokens. Vector Index: IVFFlat (pgvector) mit lists=100. Balance Speed/Accuracy für <100k Vektoren." />
+      <doc path="bmad-docs/epics.md" title="i-o - Epic Breakdown" section="Story 1.5: L2 Insights Storage mit Embedding" snippet="Story 1.5 implementiert die Komprimierung von Dialogen zu semantischen Insights mit OpenAI Embeddings. Beinhaltet Semantic Fidelity Check (Enhancement E2) zur Validierung der Informationsdichte." />
+      <doc path="bmad-docs/stories/1-2-postgresql-pgvector-setup.md" title="Story 1.2: PostgreSQL + pgvector Setup" section="Datenbank-Schema" snippet="l2_insights Tabelle: id, content, embedding vector(1536), created_at, source_ids, metadata. IVFFlat-Index wird später gebaut (benötigt ≥100 Vektoren für Training)." />
+    </docs>
+    <code>
+      <artifact path="mcp_server/tools/__init__.py" kind="mcp-tool" symbol="handle_compress_to_l2_insight" lines="139-154" reason="Stub implementation that needs to be replaced with real OpenAI embeddings functionality">
+        <signature>async def handle_compress_to_l2_insight(arguments: Dict[str, Any]) -> Dict[str, Any]</signature>
+      </artifact>
+      <artifact path="mcp_server/tools/__init__.py" kind="mcp-tool" symbol="handle_store_raw_dialogue" lines="69-136" reason="Implementation pattern for database operations with connection pool and error handling">
+        <signature>async def handle_store_raw_dialogue(arguments: Dict[str, Any]) -> Dict[str, Any]</signature>
+      </artifact>
+      <artifact path="mcp_server/tools/__init__.py" kind="mcp-tool" symbol="register_tools" lines="249-456" reason="Tool registration and JSON schema validation pattern">
+        <signature>def register_tools(server: Server) -> List[Tool]</signature>
+      </artifact>
+      <artifact path="mcp_server/tools/__init__.py" kind="json-schema" symbol="compress_to_l2_insight schema" lines="289-308" reason="Current JSON schema needs to be updated to match story requirements (content, source_ids)">
+        <signature>Tool inputSchema for compress_to_l2_insight</signature>
+      </artifact>
+      <artifact path="mcp_server/db/connection.py" kind="database-module" symbol="get_connection" lines="93-146" reason="Connection pool pattern with health checks and error handling">
+        <signature>@contextmanager def get_connection() -> Iterator[connection]</signature>
+      </artifact>
+      <artifact path="tests/test_store_raw_dialogue.py" kind="test-pattern" symbol="cleanup_test_data" lines="20-41" reason="Test cleanup pattern for database tests">
+        <signature>@pytest.fixture(scope="function", autouse=True) def cleanup_test_data()</signature>
+      </artifact>
+      <artifact path="tests/test_compress_to_l2_insight.py" kind="test-file" symbol="new_file" lines="1-300" reason="New unit test file for compress_to_l2_insight tool with OpenAI API mocking, retry logic tests, and fidelity check tests">
+        <signature>Unit tests for Story 1.5 compress_to_l2_insight tool</signature>
+      </artifact>
+    </code>
+    <dependencies>
+      <python>
+        <package name="openai" version="^1.0.0" purpose="OpenAI Embeddings API client for text-embedding-3-small model" />
+        <package name="psycopg2-binary" version="^2.9.0" purpose="PostgreSQL database adapter for vector storage" />
+        <package name="pgvector" version="^0.2.0" purpose="pgvector Python client for vector(1536) operations and register_vector()" />
+        <package name="mcp" version="^1.0.0" purpose="Python MCP SDK for tool registration and protocol handling" />
+        <package name="numpy" version="^1.24.0" purpose="Vector operations and array handling for embeddings" />
+        <package name="python-dotenv" version="^1.0.0" purpose="Environment variable loading for OPENAI_API_KEY" />
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+      <constraint type="implementation-pattern" source="story-1.4-dev-notes">All imports must be at file top (not inside functions). Required imports: import psycopg2, from psycopg2.extras import DictCursor, from psycopg2.extensions import connection. Type hints REQUIRED (mypy --strict). Use Connection Pool pattern: with get_connection() as conn:. Parameterized queries with %s placeholders. Explicit conn.commit() after INSERT.</constraint>
+      <constraint type="error-handling" source="story-1.4-dev-notes">Use try/except with psycopg2.Error and generic Exception. Return structured error: {"error": "...", "details": str(e), "tool": "..."} . Log all errors with structured JSON logging to stderr.</constraint>
+      <constraint type="vector-storage" source="story-1.4-dev-notes">pgvector requires register_vector(conn) call once per connection. pgvector handles list[float] → vector conversion automatically with parameterized queries. No manual string conversion needed.</constraint>
+      <constraint type="api-integration" source="tech-spec">Use OpenAI text-embedding-3-small model (1536 dimensions). Retry logic: 3 attempts with exponential backoff (1s, 2s, 4s delays). Catch RateLimitError and APIConnectionError. Load API key from OPENAI_API_KEY environment variable.</constraint>
+      <constraint type="testing" source="story-1.4-dev-notes">Unit tests with real PostgreSQL database. Integration tests via MCP stdio transport. Mock external APIs (OpenAI) for unit tests. Cleanup test data in teardown/finally.</constraint>
+    </constraints>
+    <interfaces>
+      <interface name="compress_to_l2_insight" kind="mcp-tool" signature="compress_to_l2_insight(content: string, source_ids: array[int])">
+        <description>MCP tool to compress dialogue content into semantic insights with OpenAI embeddings</description>
+        <input>
+          <param name="content" type="string" required="true" description="Compressed insight content to store with embedding" />
+          <param name="source_ids" type="array[int]" required="true" description="Array of L0 raw memory IDs that were compressed into this insight" />
+        </input>
+        <output>
+          <field name="id" type="int" description="Generated ID of the stored L2 insight" />
+          <field name="embedding_status" type="string" description="Status of embedding generation: 'success' or 'retried'" />
+          <field name="fidelity_score" type="float" description="Information density score (0.0-1.0) from semantic fidelity check" />
+          <field name="timestamp" type="string" description="ISO timestamp of insight creation" />
+        </output>
+      </interface>
+      <interface name="OpenAI Embeddings API" kind="external-api" signature="client.embeddings.create(model="text-embedding-3-small", input=text, encoding_format="float")">
+        <description>OpenAI API for generating 1536-dimensional text embeddings</description>
+        <config>
+          <param name="model" value="text-embedding-3-small" />
+          <param name="encoding_format" value="float" />
+          <param name="api_key_env" value="OPENAI_API_KEY" />
+        </config>
+        <response>
+          <field name="data[0].embedding" type="array[float]" length="1536" description="Generated embedding vector" />
+        </response>
+      </interface>
+      <interface name="PostgreSQL l2_insights Table" kind="database-schema" signature="INSERT INTO l2_insights (content, embedding, source_ids, metadata) VALUES (%s, %s, %s, %s) RETURNING id, created_at">
+        <description>PostgreSQL table for storing semantic insights with pgvector embeddings</description>
+        <schema>
+          <field name="id" type="SERIAL PRIMARY KEY" />
+          <field name="content" type="TEXT NOT NULL" />
+          <field name="embedding" type="vector(1536) NOT NULL" />
+          <field name="created_at" type="TIMESTAMPTZ DEFAULT NOW()" />
+          <field name="source_ids" type="INTEGER[] NOT NULL" />
+          <field name="metadata" type="JSONB" />
+        </schema>
+      </interface>
+    </interfaces>
+  <tests>
+    <standards>Unit tests mit real PostgreSQL database. Integration tests via MCP stdio transport. Mock external APIs (OpenAI) for unit tests. Cleanup test data in teardown/finally. Type hints REQUIRED (mypy --strict). Use pytest framework with async support. Test coverage >80% for business logic.</standards>
+    <locations>tests/test_compress_to_l2_insight.py (unit tests), tests/test_mcp_server.py (integration tests), tests/ directory for all test files, PostgreSQL cognitive_memory_test database for isolated testing</locations>
+    <ideas>
+      <test idea="Test 1: Valid embedding generation" acceptance_criteria="1,2,4">Mock OpenAI API call, verify ID, embedding_status, fidelity_score returned. Check embedding stored in database with correct dimensions (1536).</test>
+      <test idea="Test 2: OpenAI API Mock with retry logic" acceptance_criteria="1">Mock API call to return RateLimitError, verify exponential backoff retry logic (1s, 2s, 4s delays). Test successful retry after 2 attempts.</test>
+      <test idea="Test 3: Rate-Limit Retry Failure" acceptance_criteria="1">Mock RateLimitError for all 3 attempts, verify error returned after max retries. Verify structured error response.</test>
+      <test idea="Test 4: Fidelity Check High Density" acceptance_criteria="3">Test content with high semantic density (>0.5), verify fidelity_score calculated and no warning stored in metadata.</test>
+      <test idea="Test 5: Fidelity Check Low Density" acceptance_criteria="3">Test content with low density (<0.5), verify fidelity_score calculated and warning stored in metadata JSONB.</test>
+      <test idea="Test 6: Missing API Key" acceptance_criteria="1">Test with OPENAI_API_KEY not set, verify ValueError raised and structured error response.</test>
+      <test idea="Test 7: Invalid source_ids Parameter" acceptance_criteria="4">Test with non-integer source_ids, verify JSON Schema validation error returned.</test>
+      <test idea="Test 8: Embedding Vector Dimensions" acceptance_criteria="2">Verify 1536-dimensional embedding correctly stored in pgvector field. Query back and verify vector integrity.</test>
+      <test idea="Integration Test: MCP Tool Call End-to-End" acceptance_criteria="1,2,4">Call compress_to_l2_insight via MCP stdio transport, verify response format and database storage.</test>
+      <test idea="Performance Test: IVFFlat Index Check" acceptance_criteria="performance">Test index creation when ≥100 rows exist, verify index usage with EXPLAIN ANALYZE.</test>
+    </ideas>
+  </tests>
+</story-context>
