@@ -352,7 +352,7 @@ Examples:
   %(prog)s --status --format json     # JSON output
   %(prog)s --validate-spot-checks     # Monthly validation (cron job)
 
-For more information, see: docs/staged-dual-judge.md
+For more information, see: docs/guides/staged-dual-judge.md
         """
     )
 
