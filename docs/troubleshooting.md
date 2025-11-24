@@ -24,7 +24,7 @@ python -c "import mcp_server; print('OK')"
 ### Checks
 ```bash
 systemctl status cognitive-memory-mcp
-cat .mcp.json
+cat .mcp.json  # Should exist (copy from .mcp.json.template if missing)
 poetry run which python
 psql -U mcp_user -d cognitive_memory -c "SELECT 1;"
 ```
@@ -39,18 +39,14 @@ journalctl -u cognitive-memory-mcp --since "5m"
 
 **Fix configuration:**
 ```bash
-# Regenerate .mcp.json
-PYTHON_PATH=$(poetry run which python)
-cat > .mcp.json << EOF
-{
-  "mcpServers": {
-    "cognitive-memory": {
-      "command": "$PYTHON_PATH",
-      "args": ["-m", "mcp_server"]
-    }
-  }
-}
-EOF
+# Create .mcp.json from template
+cp .mcp.json.template .mcp.json
+
+# Edit .mcp.json and replace ${PROJECT_ROOT} with your actual path
+# Example: /home/user/cognitive-memory/start_mcp_server.sh
+
+# Verify JSON syntax
+python -m json.tool .mcp.json
 ```
 
 **Restart Claude Code** to reload MCP configuration.
