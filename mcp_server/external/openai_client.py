@@ -94,13 +94,13 @@ class OpenAIEmbeddingsClient:
             # Extract embedding vector from response
             embedding = response.data[0].embedding
 
-            # Extract token count from API response (Story 3.10: Budget Monitoring)
+            # Extract token count from API response (: Budget Monitoring)
             token_count = response.usage.total_tokens if hasattr(response, 'usage') else len(text) // 4
 
-            # Calculate cost (Story 3.10: Budget Monitoring)
+            # Calculate cost (: Budget Monitoring)
             estimated_cost = calculate_api_cost('openai_embeddings', token_count)
 
-            # Log API cost to database (Story 3.10: Budget Monitoring)
+            # Log API cost to database (: Budget Monitoring)
             insert_cost_log(
                 api_name='openai_embeddings',
                 num_calls=1,

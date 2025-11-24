@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Populate L2 Insights Test Data for Story 2.7
+Populate L2 Insights Test Data for 
 ============================================
 
 Inserts 30 realistic L2 insights with embeddings into Neon database.
@@ -312,7 +312,7 @@ def main():
     conn.close()
 
     print(f"\n✅ Database connection closed")
-    print(f"🚀 Ready for Story 2.7 RAG Pipeline Testing!")
+    print(f"🚀 Ready for  RAG Pipeline Testing!")
 
 if __name__ == "__main__":
     main()

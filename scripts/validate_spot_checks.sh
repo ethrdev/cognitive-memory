@@ -1,5 +1,5 @@
 #!/bin/bash
-# Monthly Spot Check Validation Script (Story 3.9)
+# Monthly Spot Check Validation Script ()
 #
 # Purpose: Validate spot check Kappa and revert to Dual Judge if below threshold
 # Schedule: 1st of every month at midnight (cron: 0 0 1 * *)

@@ -3,7 +3,7 @@
 Generate Mock Ground Truth Data for Grid Search Testing
 
 Note: This is MOCK DATA for infrastructure testing only.
-Real Ground Truth Set requires Story 1.10 (Ground Truth Collection UI).
+Real Ground Truth Set requires  (Ground Truth Collection UI).
 
 Generated: 100 mock queries with synthetic expected_docs
 """
@@ -109,4 +109,4 @@ if __name__ == "__main__":
     print(f"   Medium queries (2-4 docs): {sum(1 for q in ground_truth if q['query_type'] == 'medium')}")
     print(f"   Long queries (3-5 docs): {sum(1 for q in ground_truth if q['query_type'] == 'long')}")
     print(f"\n⚠️  NOTE: This is MOCK DATA for infrastructure testing only!")
-    print(f"   Real calibration requires actual Ground Truth Set from Story 1.10")
+    print(f"   Real calibration requires actual Ground Truth Set from ")

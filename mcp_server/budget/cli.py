@@ -244,7 +244,7 @@ def cmd_optimize(args: argparse.Namespace) -> None:
         print("\nNo optimization recommendations available (system already optimized)")
 
     # Staged Dual Judge Transition Status
-    print_section("Staged Dual Judge Transition (Story 3.9)")
+    print_section("Staged Dual Judge Transition ()")
 
     dual_judge_status = validate_staged_dual_judge_transition()
 

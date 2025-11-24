@@ -2,7 +2,7 @@
 """
 Hybrid Search Weight Calibration via Grid Search
 
-Story 2.8: Optimize Hybrid Search weights (semantic vs. keyword) using Grid Search
+: Optimize Hybrid Search weights (semantic vs. keyword) using Grid Search
 to achieve Precision@5 >0.75 on Ground Truth Set.
 
 Implementation:
@@ -209,7 +209,7 @@ def analyze_results(results: List[Dict]) -> Dict:
 def main():
     print("=" * 70)
     print("  Hybrid Search Weight Calibration via Grid Search")
-    print("  Story 2.8: Optimize semantic vs. keyword weights")
+    print("  : Optimize semantic vs. keyword weights")
     print("=" * 70)
     print()
 
@@ -276,11 +276,11 @@ def main():
 
     ac_2_8_3 = best["precision_at_5"] >= 0.70
     ac_2_8_4 = analysis["uplift_percentage"] >= 5.0
-    story_2_9_ready = best["precision_at_5"] >= 0.75
+    production_ready = best["precision_at_5"] >= 0.75
 
     print(f"✅ AC-2.8.3: Best Precision@5 ≥0.70: {'PASS' if ac_2_8_3 else 'FAIL'} ({best['precision_at_5']:.4f})")
     print(f"✅ AC-2.8.4: Uplift ≥+5%: {'PASS' if ac_2_8_4 else 'FAIL'} ({analysis['uplift_percentage']:+.1f}%)")
-    print(f"{'✅' if story_2_9_ready else '⚠️ '} Story 2.9 Ready (Precision@5 ≥0.75): {'YES' if story_2_9_ready else 'NO'} ({best['precision_at_5']:.4f})")
+    print(f"{'✅' if production_ready else '⚠️ '}  Ready (Precision@5 ≥0.75): {'YES' if production_ready else 'NO'} ({best['precision_at_5']:.4f})")
     print()
 
     # Save results to JSON
@@ -296,7 +296,7 @@ def main():
         "acceptance_criteria": {
             "ac_2_8_3_precision_gte_070": ac_2_8_3,
             "ac_2_8_4_uplift_gte_5pct": ac_2_8_4,
-            "story_2_9_ready_precision_gte_075": story_2_9_ready
+            "production_ready_precision_gte_075": production_ready
         }
     }
 

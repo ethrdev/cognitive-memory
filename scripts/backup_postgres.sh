@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # PostgreSQL Backup Script for Cognitive Memory System
-# Story 3.6: PostgreSQL Backup Strategy Implementation
+# 
 #
 # Features:
 # - Daily pg_dump backups with Custom Format (-Fc)

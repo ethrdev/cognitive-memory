@@ -2,7 +2,7 @@
 Reflexion Utilities Module
 
 Provides utility functions for reflexion trigger logic and configuration.
-Story 2.5: Implements should_trigger_reflection() for Story 2.6 integration.
+: Implements should_trigger_reflection() for  integration.
 """
 
 from __future__ import annotations
@@ -105,8 +105,8 @@ def should_trigger_reflection(
 
     Reflexion is triggered when reward_score < threshold.
 
-    Integration Point for Story 2.6:
-    - When this function returns True, Story 2.6 will call generate_reflection()
+    Integration Point for :
+    - When this function returns True,  will call generate_reflection()
     - When False, only evaluation logging occurs (no reflexion)
 
     Args:

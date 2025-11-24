@@ -1,5 +1,5 @@
 """
-Golden Test Results Tool - Story 3.2
+Golden Test Results Tool - 
 
 Daily execution of Golden Test Set for model drift detection.
 Calculates Precision@5 metric, detects drift, and stores results in model_drift_log.
@@ -25,7 +25,7 @@ from pgvector.psycopg2 import register_vector
 
 from mcp_server.db.connection import get_connection
 
-# Import calculate_precision_at_5 from Story 2.9
+# Import calculate_precision_at_5 from 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 from validate_precision_at_5 import calculate_precision_at_5
 

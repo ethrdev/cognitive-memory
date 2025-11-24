@@ -1,5 +1,5 @@
--- Migration 001: Initial Schema for Cognitive Memory System v3.1.0-Hybrid
--- Created: Story 1.2 - PostgreSQL + pgvector Setup
+-- Migration 001: Initial Schema for Cognitive Memory System v1.0.0
+-- 
 --
 -- Tables: l0_raw, l2_insights, working_memory, episode_memory, stale_memory, ground_truth
 -- Indizes: IVFFlat (commented - needs training data), GIN Full-Text, Session, LRU
@@ -37,7 +37,7 @@ CREATE TABLE l2_insights (
 );
 
 -- ⚠️ IVFFlat Index - NICHT sofort bauen (benötigt ≥100 Vektoren für Training)
--- Wird gebaut in Story 1.5 nach ersten Daten-Inserts:
+-- Wird gebaut in 
 -- CREATE INDEX CONCURRENTLY idx_l2_embedding
 --   ON l2_insights USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 
@@ -71,7 +71,7 @@ CREATE TABLE episode_memory (
 );
 
 -- ⚠️ IVFFlat Index - NICHT sofort bauen (benötigt ≥100 Vektoren für Training)
--- Wird gebaut in Story 1.5:
+-- Wird gebaut in 
 -- CREATE INDEX CONCURRENTLY idx_episode_embedding
 --   ON episode_memory USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 

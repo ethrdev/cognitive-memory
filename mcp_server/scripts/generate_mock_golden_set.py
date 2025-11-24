@@ -2,7 +2,7 @@
 """
 Generate Mock Golden Test Set Data
 
-Story 3.1: Infrastructure validation with mock data before production deployment.
+: Infrastructure validation with mock data before production deployment.
 
 Generates:
 - 100 mock queries with stratified distribution (40% Short, 40% Medium, 20% Long)
@@ -306,7 +306,7 @@ def validate_stratification(golden_set: List[Dict]) -> Dict:
 def main():
     """Generate and save mock Golden Test Set"""
     print("=" * 60)
-    print("Story 3.1: Mock Golden Test Set Generation")
+    print(": Mock Golden Test Set Generation")
     print("=" * 60)
     print(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print()

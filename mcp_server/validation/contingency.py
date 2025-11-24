@@ -1,5 +1,5 @@
 """
-Contingency Plan Module for Story 1.12
+Contingency Plan Module for 
 
 This module implements the contingency plan for low IRR scenarios:
 - Human Tiebreaker UI integration

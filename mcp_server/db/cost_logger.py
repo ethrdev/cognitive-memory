@@ -174,7 +174,7 @@ def get_total_cost(days: int = 30) -> float:
         >>> isinstance(total, float)
         True
     """
-    # Input validation (Story 3.10: Prevent invalid day ranges)
+    # Input validation (: Prevent invalid day ranges)
     if not isinstance(days, int) or days <= 0 or days > 365:
         raise ValueError(f"days must be an integer between 1 and 365, got {days}")
 
@@ -182,7 +182,7 @@ def get_total_cost(days: int = 30) -> float:
         with get_connection() as conn:
             cursor = conn.cursor()
 
-            # Calculate start_date using Python timedelta (Story 3.10: SQL injection fix)
+            # Calculate start_date using Python timedelta (: SQL injection fix)
             start_date = date.today() - timedelta(days=days)
 
             query = """
@@ -222,7 +222,7 @@ def get_cost_by_api(days: int = 30) -> list[dict[str, Any]]:
         >>> isinstance(breakdown, list)
         True
     """
-    # Input validation (Story 3.10: Prevent invalid day ranges)
+    # Input validation (: Prevent invalid day ranges)
     if not isinstance(days, int) or days <= 0 or days > 365:
         raise ValueError(f"days must be an integer between 1 and 365, got {days}")
 
@@ -230,7 +230,7 @@ def get_cost_by_api(days: int = 30) -> list[dict[str, Any]]:
         with get_connection() as conn:
             cursor = conn.cursor()
 
-            # Calculate start_date using Python timedelta (Story 3.10: SQL injection fix)
+            # Calculate start_date using Python timedelta (: SQL injection fix)
             start_date = date.today() - timedelta(days=days)
 
             query = """
@@ -274,7 +274,7 @@ def delete_old_costs(days_to_keep: int = 365) -> int:
     """
     Delete cost entries older than specified number of days.
 
-    Note: By default, Story 3.10 specifies unlimited retention for historical
+    Note: By default,  specifies unlimited retention for historical
     trend analysis. This function is provided for future use if retention
     policy changes.
 

@@ -1,5 +1,5 @@
 -- Migration 009: Fallback Status Log Table
--- Story 3.4: Claude Code Fallback für Haiku API Ausfall (Degraded Mode)
+-- : Claude Code Fallback für Haiku API Ausfall (Degraded Mode)
 -- Date: 2025-11-18
 
 -- =============================================================================

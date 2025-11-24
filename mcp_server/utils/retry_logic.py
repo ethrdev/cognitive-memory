@@ -6,7 +6,7 @@ Implements retry decorator with:
 - Jitter: ±20% randomization (prevents Thundering Herd)
 - Max 4 retries
 - Retry conditions: Rate Limit (429), Service Unavailable (503), Timeout
-- Logging to api_retry_log table (Story 3.3)
+- Logging to api_retry_log table ()
 """
 
 from __future__ import annotations
@@ -66,7 +66,7 @@ def retry_with_backoff(
         >>> result = await call_haiku_api()  # Retries automatically on failure
 
     Implementation Notes:
-    - Retry logging to api_retry_log table will be added in Story 2.4 Task 4
+    - Retry logging to api_retry_log table will be added in  Task 4
     - Fallback to Claude Code Evaluation (degraded mode) handled by caller
     - Only retries on specific exception types (Rate Limit, Service Unavailable, Timeout)
     """

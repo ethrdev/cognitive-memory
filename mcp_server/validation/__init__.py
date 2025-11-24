@@ -1,5 +1,5 @@
 """
-Validation Package for Story 1.12
+Validation Package for 
 
 This package provides Inter-Rater Reliability (IRR) validation capabilities
 for ground truth queries with dual judge scores.
@@ -30,4 +30,4 @@ __all__ = [
 ]
 
 __version__ = "1.0.0"
-__author__ = "Story 1.12 Development"
+__author__ = " Development"

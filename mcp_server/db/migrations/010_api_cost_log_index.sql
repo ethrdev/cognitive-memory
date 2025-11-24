@@ -1,5 +1,5 @@
 -- Migration 010: API Cost Log Composite Index
--- Story 3.10: Budget Monitoring & Cost Optimization Dashboard
+-- : Budget Monitoring & Cost Optimization Dashboard
 -- Date: 2025-11-20
 --
 -- Purpose:
@@ -8,7 +8,7 @@
 --
 -- Note:
 --   - api_cost_log table already exists from Migration 004
---   - This migration adds additional composite index for Story 3.10 requirements
+--   - This migration adds additional composite index for  requirements
 --   - Existing indexes (idx_api_cost_date, idx_api_cost_name) remain for backward compatibility
 
 -- =============================================================================
@@ -24,7 +24,7 @@ CREATE INDEX IF NOT EXISTS idx_cost_date_api ON api_cost_log(date DESC, api_name
 -- =============================================================================
 
 COMMENT ON INDEX idx_cost_date_api IS
-'Composite index for budget monitoring queries: date-range filtering + API grouping (Story 3.10)';
+'Composite index for budget monitoring queries: date-range filtering + API grouping ()';
 
 -- =============================================================================
 -- Validation Queries

@@ -1,5 +1,5 @@
 -- Migration 006: Golden Test Set Table
--- Story 3.1: Golden Test Set Creation (separate von Ground Truth)
+-- : Golden Test Set Creation (separate von Ground Truth)
 -- Date: 2025-11-18
 
 -- =============================================================================

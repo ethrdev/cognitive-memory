@@ -2,7 +2,7 @@
 """
 Ground Truth Collection UI (Streamlit App)
 
-Story 1.10: Streamlit-based interface for efficient labeling of 50-100 Ground Truth Queries
+: Streamlit-based interface for efficient labeling of 50-100 Ground Truth Queries
 Features: Stratified query extraction, direct DB hybrid search, progress tracking, PostgreSQL storage
 """
 

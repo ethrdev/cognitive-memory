@@ -4,7 +4,7 @@ Global Fallback State Management
 Manages in-memory fallback state for external API services (Haiku Evaluation, Haiku Reflexion).
 Provides thread-safe state management for degraded mode activation and recovery.
 
-Story 3.4: Claude Code Fallback für Haiku API Ausfall (Degraded Mode)
+: Claude Code Fallback für Haiku API Ausfall (Degraded Mode)
 """
 
 import asyncio

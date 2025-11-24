@@ -2,7 +2,7 @@
 """
 Golden Test Set Creation Script
 
-Story 3.1: Create separate Golden Test Set (50-100 queries) for daily
+: Create separate Golden Test Set (50-100 queries) for daily
 Precision@5 regression testing and model drift detection.
 
 Key Requirements:
@@ -34,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from db.connection import get_connection, initialize_pool
 
-# Import classify_query_type from Story 2.9 (REUSE)
+# Import classify_query_type from  (REUSE)
 # We'll import from validate_precision_at_5 once we verify path
 sys.path.insert(0, str(Path(__file__).parent))
 from validate_precision_at_5 import classify_query_type
@@ -351,7 +351,7 @@ def main():
     args = parser.parse_args()
 
     logger.info("=" * 80)
-    logger.info("Golden Test Set Creation Script - Story 3.1")
+    logger.info("Golden Test Set Creation Script - ")
     logger.info("=" * 80)
     logger.info(f"Target query count: {args.target_count}")
     logger.info(f"Dry run mode: {args.dry_run}")
