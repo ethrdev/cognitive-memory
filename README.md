@@ -126,9 +126,9 @@ PGPASSWORD=your_secure_password psql -U mcp_user -d cognitive_memory \
 ### Running the MCP Server
 
 ```bash
-# Load environment
+# Activate virtual environment and load environment variables
 source venv/bin/activate
-export $(cat .env.development | xargs)
+set -a && source .env.development && set +a
 
 # Start MCP Server
 python -m mcp_server
