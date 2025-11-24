@@ -8,12 +8,11 @@ Complete setup instructions for the Cognitive Memory System from scratch.
 
 | Component | Minimum | Recommended |
 |-----------|---------|-------------|
-| OS | Linux (Arch, Ubuntu 20.04+) | Arch Linux |
+| OS | Linux (Arch, Ubuntu 20.04+), macOS | Arch Linux |
 | RAM | 2GB | 4GB+ |
 | CPU | 2 Cores | 4 Cores |
 | Storage | 10GB | 20GB |
 | Python | 3.11+ | 3.12+ |
-| PostgreSQL | 15+ | 16+ |
 
 ### Required API Keys
 
@@ -35,9 +34,42 @@ git clone https://github.com/ethrdev/cognitive-memory.git
 cd cognitive-memory
 ```
 
-### 2. Install PostgreSQL and pgvector
+### 2. Database Setup
 
-#### Arch Linux
+Choose one of the following options:
+
+---
+
+#### Option A: Neon Cloud (Recommended)
+
+[Neon](https://neon.tech) provides serverless PostgreSQL with pgvector pre-installed. No local installation required.
+
+**Step 1: Create Neon Account and Project**
+
+1. Go to [console.neon.tech](https://console.neon.tech)
+2. Sign up or log in
+3. Click **"New Project"**
+4. Choose a region close to you (e.g., `eu-central-1`)
+5. Note your connection string:
+   ```
+   postgresql://neondb-user:PASSWORD@ep-xxx.REGION.aws.neon.tech/neondb?sslmode=require
+   ```
+
+**Step 2: Enable pgvector Extension**
+
+In the Neon SQL Editor:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+---
+
+#### Option B: Local PostgreSQL (Alternative)
+
+For offline development or if you prefer local infrastructure.
+
+**Arch Linux:**
 
 ```bash
 # Install PostgreSQL
@@ -53,7 +85,7 @@ sudo systemctl enable --now postgresql
 yay -S pgvector
 ```
 
-#### Ubuntu/Debian
+**Ubuntu/Debian:**
 
 ```bash
 # Install PostgreSQL
@@ -64,7 +96,7 @@ sudo apt install postgresql postgresql-contrib
 sudo apt install postgresql-15-pgvector
 ```
 
-### 3. Create Database
+**Create Database (Local only):**
 
 ```bash
 sudo -u postgres psql << EOF
@@ -76,7 +108,9 @@ CREATE EXTENSION vector;
 EOF
 ```
 
-### 4. Setup Python Environment
+---
+
+### 3. Setup Python Environment
 
 ```bash
 # Create virtual environment
@@ -88,7 +122,7 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### 5. Configure Environment
+### 4. Configure Environment
 
 ```bash
 # Copy template
@@ -99,10 +133,25 @@ chmod 600 .env.development
 nano .env.development
 ```
 
-Required variables in `.env.development`:
+**For Neon Cloud** - set in `.env.development`:
 
 ```bash
-# Database
+# Database (Neon Cloud)
+DATABASE_URL=postgresql://neondb-user:PASSWORD@ep-xxx.neon.tech/neondb?sslmode=require
+
+# API Keys
+OPENAI_API_KEY=sk-your-openai-key
+ANTHROPIC_API_KEY=sk-ant-your-anthropic-key
+
+# Environment
+ENVIRONMENT=development
+LOG_LEVEL=INFO
+```
+
+**For Local PostgreSQL** - set in `.env.development`:
+
+```bash
+# Database (Local)
 DATABASE_URL=postgresql://mcp_user:your_password@localhost:5432/cognitive_memory
 
 # API Keys
@@ -114,30 +163,74 @@ ENVIRONMENT=development
 LOG_LEVEL=INFO
 ```
 
-### 6. Run Database Migrations
+### 5. Run Database Migrations
+
+The database schema is split across multiple migration files. Run all migrations in order:
+
+**For Neon Cloud:**
 
 ```bash
-PGPASSWORD=your_password psql -U mcp_user -d cognitive_memory \
-  -f mcp_server/db/migrations/001_initial_schema.sql
+# Set connection string
+export DATABASE_URL="postgresql://neondb-user:PASSWORD@ep-xxx.neon.tech/neondb?sslmode=require"
+
+# Run all migrations in order
+for f in mcp_server/db/migrations/*.sql; do
+  echo "Running: $f"
+  psql "$DATABASE_URL" -f "$f"
+done
+
+# Verify tables (should show 10 tables)
+psql "$DATABASE_URL" -c "\dt"
+```
+
+**For Local PostgreSQL:**
+
+```bash
+# Run all migrations in order
+for f in mcp_server/db/migrations/*.sql; do
+  echo "Running: $f"
+  PGPASSWORD=your_password psql -U mcp_user -d cognitive_memory -f "$f"
+done
 
 # Verify tables (should show 10 tables)
 PGPASSWORD=your_password psql -U mcp_user -d cognitive_memory -c "\dt"
 ```
 
-### 7. Test MCP Server
+### 6. Test MCP Server
 
 ```bash
 # Load environment
 source venv/bin/activate
-export $(cat .env.development | xargs)
+set -a && source .env.development && set +a
 
 # Start server
 python -m mcp_server
 ```
 
-### 8. Configure Claude Code
+### 7. Configure Claude Code
 
 Create or update `~/.config/claude-code/mcp-settings.json`:
+
+**For Neon Cloud:**
+
+```json
+{
+  "mcpServers": {
+    "cognitive-memory": {
+      "command": "python",
+      "args": ["-m", "mcp_server"],
+      "cwd": "/path/to/cognitive-memory",
+      "env": {
+        "DATABASE_URL": "postgresql://neondb-user:PASSWORD@ep-xxx.neon.tech/neondb?sslmode=require",
+        "OPENAI_API_KEY": "sk-your-key",
+        "ANTHROPIC_API_KEY": "sk-ant-your-key"
+      }
+    }
+  }
+}
+```
+
+**For Local PostgreSQL:**
 
 ```json
 {
@@ -171,6 +264,27 @@ The template uses `start_mcp_server.sh` which automatically loads environment va
 ## Verification Checklist
 
 Run these commands to verify your installation:
+
+**For Neon Cloud:**
+
+```bash
+# 1. Test database connection
+psql "$DATABASE_URL" -c "SELECT 1;"
+
+# 2. Verify pgvector extension
+psql "$DATABASE_URL" -c "SELECT extversion FROM pg_extension WHERE extname='vector';"
+
+# 3. Check tables
+psql "$DATABASE_URL" -c "\dt"
+
+# 4. Python dependencies
+python -c "import mcp_server; print('OK')"
+
+# 5. MCP Server startup
+timeout 5s python -m mcp_server || echo "Server test passed"
+```
+
+**For Local PostgreSQL:**
 
 ```bash
 # 1. PostgreSQL status
@@ -225,7 +339,18 @@ See [Troubleshooting Guide](troubleshooting.md) for common issues.
 
 ### Quick Fixes
 
-**PostgreSQL won't start:**
+**Database connection failed (Neon):**
+```bash
+# Verify connection string format (must include ?sslmode=require)
+echo $DATABASE_URL
+
+# Test connection
+psql "$DATABASE_URL" -c "SELECT 1;"
+
+# Note: First query after idle may take ~1s (auto-suspend on free tier)
+```
+
+**PostgreSQL won't start (Local):**
 ```bash
 sudo systemctl status postgresql
 journalctl -xeu postgresql
@@ -244,7 +369,7 @@ python -m json.tool .mcp.json
 python -m mcp_server
 ```
 
-**Database connection failed:**
+**Database connection failed (Local):**
 ```bash
 # Test connection
 psql -U mcp_user -d cognitive_memory -h localhost
