@@ -1,0 +1,178 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>8</storyId>
+    <title>Episode Memory Storage (MCP Tool: store_episode)</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-12</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>/home/ethr/01-projects/ai-experiments/i-o/bmad-docs/stories/1-8-episode-memory-storage-mcp-tool-store-episode.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>MCP Server</asA>
+    <iWant>verbalisierte Reflexionen aus Haiku API in Episode Memory speichern</iWant>
+    <soThat>vergangene Lektionen bei ähnlichen Queries abrufbar sind</soThat>
+    <tasks>- [ ] Episode Memory Storage Logic (AC: 1)
+  - [ ] Create `async def add_episode(query: str, reward: float, reflection: str, conn) -> dict`
+  - [ ] **Validate reward range BEFORE API call:** -1.0 ≤ reward ≤ 1.0 (save costs on invalid input)
+  - [ ] Validate query and reflection are non-empty
+  - [ ] Call `get_embedding_with_retry(query)` from Story 1.5 (import from existing implementation)
+  - [ ] Register vector type: `register_vector(conn)` before INSERT (pgvector requirement)
+  - [ ] SQL Query: `INSERT INTO episode_memory (query, reward, reflection, embedding, created_at) VALUES (%s, %s, %s, %s, NOW()) RETURNING id, created_at`
+  - [ ] Return dict: {id: int, embedding_status: "success", query: str, reward: float, created_at: str}
+
+- [ ] OpenAI Embeddings Integration (AC: 1)
+  - [ ] **Import existing embedding function from Story 1.5:** `from mcp_server.tools import get_embedding_with_retry`
+  - [ ] **Verify Story 1.5 extracted reusable function** (if NOT: extract `get_embedding_with_retry()` to shared module first)
+  - [ ] Embed query text (NOT reflection - query is used for similarity search)
+  - [ ] Retry-Logic already implemented in Story 1.5: 3 attempts mit Exponential Backoff (1s, 2s, 4s)
+  - [ ] Error handling: If all retries fail → raise exception, do NOT store episode (embedding REQUIRED for retrieval)
+
+- [ ] store_episode Tool Implementation (AC: 1, 2)
+  - [ ] Locate existing tool registration in `mcp_server/tools/__init__.py`
+  - [ ] Implement tool handler: `async def handle_store_episode(query: str, reward: float, reflection: str) -> dict`
+  - [ ] Parameter extraction and validation:
+    - [ ] query: string (required, non-empty)
+    - [ ] reward: float (required, range -1.0 to +1.0)
+    - [ ] reflection: string (required, non-empty)
+  - [ ] Call add_episode(query, reward, reflection, conn)
+  - [ ] Return success response: {id: int, embedding_status: "success", query: str, reward: float, created_at: str}
+  - [ ] Return error response: {error: str, details: str, tool: "store_episode", embedding_status: "failed"}
+  - [ ] Error handling: DB errors (rollback), API errors (after retries), invalid parameters (before API call)
+  - [ ] Logging: All operations (validation, embedding, insert) mit structured JSON logging
+
+- [ ] JSON Schema Update für store_episode (AC: 2)
+  - [ ] Add tool definition to MCP server tool registry
+  - [ ] Schema properties:
+    - [ ] query: type string, required, minLength 1, description "User query that triggered the episode"
+    - [ ] reward: type number, required, minimum -1.0, maximum 1.0, description "Reward score from evaluation (-1.0=poor, +1.0=excellent)"
+    - [ ] reflection: type string, required, minLength 1, description "Verbalized lesson learned (format: 'Problem: ... Lesson: ...')"
+  - [ ] Test schema validation with MCP Inspector
+
+- [ ] Unit Tests für store_episode (AC: 1, 2)
+  - [ ] Test-File: `tests/test_episode_memory.py` erstellen
+  - [ ] Test 1: Valid episode insertion - verify episode added to DB with all fields
+  - [ ] Test 2: Reward validation - test boundary values (-1.0, 0.0, +1.0) and invalid (1.5, -1.5)
+  - [ ] Test 3: Empty query/reflection - verify error returned
+  - [ ] Test 4: Embedding generation - verify query is embedded (1536-dim vector)
+  - [ ] Test 5: Similarity search preparation - add 3 episodes, verify embeddings differ
+  - [ ] Test 6: API failure handling - mock OpenAI API failure (all 3 retries fail), verify retry logic (3 attempts), verify episode NOT stored in DB, verify error response returned with embedding_status="failed"
+  - [ ] Test 7: DB constraint validation - verify reward CHECK constraint enforced at DB level
+  - [ ] Test Cleanup: DELETE test episodes in teardown/finally blocks (prevent test data accumulation)
+  - [ ] Helper: Seed test DB mit varied episodes (different queries, rewards, reflections)
+
+- [ ] Integration Test: MCP Tool Call End-to-End (AC: 1, 2)
+  - [ ] Update `tests/test_mcp_server.py`
+  - [ ] Test: call_tool("store_episode", {"query": "test query", "reward": 0.8, "reflection": "test reflection"})
+  - [ ] Verify: Response contains id (int) and embedding_status ("success")
+  - [ ] Test: Add 5 episodes → verify all stored in episode_memory table
+  - [ ] Test: Invalid reward (-2.0) → verify error response
+  - [ ] Test: Empty reflection → verify error response
+  - [ ] Cleanup: DELETE test data after test
+
+- [ ] Documentation Updates (AC: all)
+  - [ ] README.md: Add usage example for store_episode tool
+  - [ ] README.md: Explain Episode Memory purpose (Verbal Reinforcement Learning)
+  - [ ] README.md: Document retrieval parameters (Top-3, Cosine Similarity >0.70 from FR009)
+  - [ ] API Reference: Document parameters, response format, reward scale interpretation</tasks>
+  </story>
+
+  <acceptanceCriteria>**Given** Haiku API hat eine Reflexion generiert
+**When** Claude Code `store_episode` aufruft mit (query, reward, reflection)
+**Then** wird das Episode in `episode_memory` gespeichert:
+- Query, Reward (-1.0 bis +1.0), Reflection als Text persistiert
+- Query wird embedded (OpenAI API) für spätere Similarity-Suche
+- Timestamp wird automatisch gesetzt (DEFAULT NOW())
+
+**And** das Tool gibt strukturierte Response zurück:
+- **Success Response:** `{id: int, embedding_status: "success", query: str, reward: float, created_at: str}`
+- **Error Response:** `{error: str, details: str, tool: "store_episode", embedding_status: "failed"}`
+- Bei API-Fehler: Retry mit Exponential Backoff (3 Versuche wie in Story 1.5)
+- Bei permanent Failure: Episode wird NICHT gespeichert (Embedding ist REQUIRED)</acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="bmad-docs/epics.md" title="Epic 1: MCP Server Foundation & Ground Truth Collection" section="Story 1.8: Episode Memory Storage" snippet="Story 1.8 implements the store_episode MCP tool for storing verbalized reflections from Haiku API in Episode Memory, enabling retrieval of past lessons for similar queries." />
+      <doc path="bmad-docs/tech-spec-epic-1.md" title="Epic Technical Specification: MCP Server Foundation & Ground Truth Collection" section="Episode Memory Service" snippet="The Episode Memory Service stores verbalized reflexions with query embeddings for similarity search. Accepts query, reward (-1.0 to +1.0), and reflection. Returns episode ID with embedding status." />
+      <doc path="bmad-docs/architecture.md" title="Cognitive Memory System v3.1.0-Hybrid - Architektur" section="episode_memory Table Schema" snippet="episode_memory stores verbalized reflections with query embedding vector(1536) for similarity search. Includes query TEXT, reward FLOAT CHECK (-1.0 to 1.0), reflection TEXT, and created_at TIMESTAMPTZ." />
+      <doc path="bmad-docs/stories/1-5-l2-insights-storage-mit-embedding-mcp-tool-compress-to-l2-insight.md" title="Story 1.5: L2 Insights Storage mit Embedding" section="OpenAI Embeddings Reuse Strategy" snippet="Story 1.5 implements get_embedding_with_retry() function with 3 attempts exponential backoff (1s, 2s, 4s) for OpenAI text-embedding-3-small API. Cost: €0.02 per 1M tokens (~€0.00002 per query)." />
+      <doc path="bmad-docs/stories/1-2-postgresql-pgvector-setup.md" title="Story 1.2: PostgreSQL + pgvector Setup" section="Database Schema" snippet="episode_memory table with id SERIAL PRIMARY KEY, query TEXT NOT NULL, reward FLOAT NOT NULL CHECK (reward BETWEEN -1.0 AND 1.0), reflection TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW(), embedding vector(1536) NOT NULL" />
+    </docs>
+    <code>
+      <artifact path="mcp_server/tools/__init__.py" kind="tools" symbol="get_embedding_with_retry" lines="340-401" reason="Reusable embedding function from Story 1.5 with 3-retry exponential backoff (1s, 2s, 4s) for OpenAI text-embedding-3-small API" />
+      <artifact path="mcp_server/tools/__init__.py" kind="tools" symbol="handle_store_episode" lines="979-994" reason="Current stub implementation that needs to be replaced with full Episode Memory functionality" />
+      <artifact path="mcp_server/tools/__init__.py" kind="tools" symbol="register_tools" lines="1033-1262" reason="Tool registration system where store_episode schema needs to be updated from current incorrect parameter names" />
+      <artifact path="mcp_server/db/connection.py" kind="database" symbol="get_connection" lines="93-146" reason="Database connection pattern using context manager with automatic health checks and connection pooling" />
+      <artifact path="mcp_server/db/migrations/001_initial_schema.sql" kind="database" symbol="episode_memory table" lines="64-76" reason="Database schema with query TEXT, reward FLOAT CHECK(-1.0 to 1.0), reflection TEXT, created_at TIMESTAMPTZ, embedding vector(1536)" />
+      <artifact path="tests/test_compress_to_l2_insight.py" kind="test" symbol="test pattern" lines="1-50" reason="Testing pattern using pytest fixtures, mock OpenAI client, cleanup fixtures, and real database integration" />
+    </code>
+    <dependencies>
+      <dependency name="Python" version="^3.11" used_as="Core runtime with async/await support" kind="language_runtime" />
+      <dependency name="MCP SDK" version="^1.0.0" used_as="Model Context Protocol server framework with stdio transport" kind="framework" />
+      <dependency name="psycopg2-binary" version="^2.9.0" used_as="PostgreSQL database driver with connection pooling" kind="database_driver" />
+      <dependency name="pgvector" version="^0.2.0" used_as="PostgreSQL vector extension for similarity search" kind="database_extension" />
+      <dependency name="openai" version="^1.0.0" used_as="OpenAI API client for text-embedding-3-small embeddings" kind="external_api" />
+      <dependency name="anthropic" version="^0.25.0" used_as="Anthropic API client for future Haiku evaluation integration" kind="external_api" />
+      <dependency name="numpy" version="^1.24.0" used_as="Numerical computing for embedding vector operations" kind="library" />
+      <dependency name="python-dotenv" version="^1.0.0" used_as="Environment variable management for API keys and database credentials" kind="library" />
+      <dependency name="pytest" version="^7.4.0" used_as="Testing framework with fixtures and mocking support" kind="testing_framework" />
+      <dependency name="pytest-cov" version="^4.1.0" used_as="Test coverage reporting for code quality metrics" kind="testing_tool" />
+      <dependency name="black" version="^23.0.0" used_as="Code formatting with 88-character line length" kind="development_tool" />
+      <dependency name="ruff" version="^0.1.0" used_as="Fast Python linter with comprehensive rule set" kind="development_tool" />
+      <dependency name="mypy" version="^1.7.0" used_as="Static type checking with strict mode enabled" kind="development_tool" />
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>Database connection must use context manager pattern: with get_connection() as conn:</constraint>
+    <constraint>OpenAI embeddings function get_embedding_with_retry() MUST be imported and reused from existing implementation (Story 1.5)</constraint>
+    <constraint>All external API calls must use async/await pattern for I/O-bound operations</constraint>
+    <constraint>Reward validation (-1.0 to 1.0) must happen BEFORE OpenAI API call to save costs on invalid input</constraint>
+    <constraint>If embedding fails after 3 retries, episode must NOT be stored - embedding is REQUIRED for retrieval</constraint>
+    <constraint>Register pgvector type with register_vector(conn) before any embedding operations</constraint>
+    <constraint>All database operations must use explicit conn.commit() for INSERT/UPDATE/DELETE operations</constraint>
+    <constraint>Error responses must follow structured format: {error, details, tool, embedding_status: "failed"}</constraint>
+    <constraint>Success responses must include: id, embedding_status: "success", query, reward, created_at</constraint>
+    <constraint>Input validation must check: query non-empty string, reflection non-empty string, reward float between -1.0 and 1.0</constraint>
+    <constraint>MCP parameter extraction: extract query=arguments["query"], reward=arguments["reward"], reflection=arguments["reflection"] in handle_store_episode</constraint>
+  </constraints>
+  <interfaces>
+    <interface name="add_episode" kind="function" signature="async def add_episode(query: str, reward: float, reflection: str, conn) -> dict" path="mcp_server/tools/__init__.py" />
+    <interface name="handle_store_episode" kind="function" signature="async def handle_store_episode(arguments: dict[str, Any]) -> dict[str, Any]" path="mcp_server/tools/__init__.py">
+      <note>MCP tools receive arguments as dict. Handler extracts: query = arguments["query"], reward = arguments["reward"], reflection = arguments["reflection"]</note>
+    </interface>
+    <interface name="get_embedding_with_retry" kind="function" signature="async def get_embedding_with_retry(client: OpenAI, text: str, max_retries: int = 3) -> list[float]" path="mcp_server/tools/__init__.py" />
+    <interface name="MCP Tool Schema" kind="json_schema" signature="Tool(name=&quot;store_episode&quot;, inputSchema={query: string(required), reward: number(required, min: -1.0, max: 1.0), reflection: string(required)})" path="mcp_server/tools/__init__.py" />
+    <interface name="PostgreSQL INSERT" kind="sql" signature="INSERT INTO episode_memory (query, reward, reflection, embedding, created_at) VALUES (%s, %s, %s, %s, NOW()) RETURNING id, created_at" path="mcp_server/db/migrations/001_initial_schema.sql" />
+  </interfaces>
+  <tests>
+    <standards>
+      <standard source="tests/test_compress_to_l2_insight.py" category="general">Use pytest framework with function-scoped autouse cleanup fixtures: @pytest.fixture(scope="function", autouse=True) def cleanup_test_data():</standard>
+      <standard source="tests/test_compress_to_l2_insight.py" category="mocking">Mock external APIs with unittest.mock.Mock: @pytest.fixture def mock_openai_client(): mock_client = Mock(); mock_client.embeddings.create.return_value = mock_response</standard>
+      <standard source="tests/test_working_memory.py" category="database">Initialize database connections with session-scoped fixtures: @pytest.fixture(scope="session", autouse=True) def setup_test_database(): initialize_pool(); yield; close_all_connections()</standard>
+      <standard source="tests/test_working_memory.py" category="database">Clean up test data after each test: DELETE FROM episode_memory WHERE content LIKE 'test_%' or reflection LIKE 'test_%'</standard>
+      <standard source="tests/test_working_memory.py" category="async">Use asyncio.run() for calling async functions in synchronous tests: added_id = asyncio.run(add_working_memory_item("Test content", 0.7, conn))</standard>
+      <standard source="tests/test_mcp_server.py" category="integration">Integration tests use subprocess-based testing with stdio transport: process = subprocess.Popen(["python", "-m", "mcp_server"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)</standard>
+      <standard source="pyproject.toml" category="formatting">Follow strict code formatting with black (line-length=88) and ruff linting with comprehensive rule set</standard>
+      <standard source="pyproject.toml" category="type_checking">Use mypy with strict mode: disallow_untyped_defs=true, disallow_incomplete_defs=true, check_untyped_defs=true</standard>
+    </standards>
+    <locations>
+      <location file="tests/test_episode_memory.py" category="unit_tests" description="Unit tests for add_episode function and store_episode tool implementation" />
+      <location file="tests/test_mcp_server.py" category="integration_tests" description="MCP protocol integration tests for tool call validation and response format" />
+      <location file="tests/test_external_apis.py" category="api_tests" description="External API tests for OpenAI embeddings failure scenarios and retry logic" />
+    </locations>
+    <ideas>
+      <idea category="boundary_tests">Test reward validation boundary values: -1.0, 0.0, 1.0 (valid) vs -1.5, 1.5 (invalid) with ValueError expectations</idea>
+      <idea category="api_failure_tests">Mock OpenAI API complete failure scenario: all 3 retries fail, verify embedding_status="failed", verify episode NOT stored in DB</idea>
+      <idea category="embedding_tests">Test embedding generation: verify query is embedded (1536-dim vector), verify embedding varies between different queries</idea>
+      <idea category="similarity_tests">Test similarity search preparation: add 3 episodes, verify embeddings are different and query embedding works for retrieval</idea>
+      <idea category="parameter_validation_tests">Test input validation: empty query string, empty reflection string, None values, non-float reward types</idea>
+      <idea category="response_format_tests">Test success response format: {id: int, embedding_status: "success", query: str, reward: float, created_at: str}</idea>
+      <idea category="response_format_tests">Test error response format: {error: str, details: str, tool: "store_episode", embedding_status: "failed"}</idea>
+      <idea category="integration_tests">Test MCP tool call end-to-end: call_tool("store_episode", {"query": "test", "reward": 0.8, "reflection": "test reflection"})</idea>
+      <idea category="db_constraint_tests">Test database constraint validation: reward CHECK constraint enforced at PostgreSQL level</idea>
+      <idea category="concurrent_tests">Test concurrent episode storage: multiple store_episode calls in parallel, verify all episodes stored correctly</idea>
+    </ideas>
+  </tests>
+</story-context>

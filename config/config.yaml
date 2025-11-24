@@ -1,0 +1,256 @@
+# Cognitive Memory System Configuration
+# =============================================================================
+# Story 3.7: Production Configuration & Environment Setup
+#
+# Structure:
+#   - base: Shared configuration for all environments
+#   - development: Development-specific overrides (localhost, DEBUG logging, test data)
+#   - production: Production-specific overrides (production DB, INFO logging, real data)
+#
+# Environment Loading:
+#   1. ENVIRONMENT variable controls which section is loaded (default: development)
+#   2. Base configuration is merged with environment-specific overrides
+#   3. Environment variables (.env file) provide secrets (API keys, passwords)
+#
+# Usage:
+#   Development: ENVIRONMENT=development python -m mcp_server
+#   Production:  ENVIRONMENT=production python -m mcp_server
+# =============================================================================
+
+# Base Configuration (Shared across all environments)
+base:
+  app:
+    name: "Cognitive Memory System"
+    version: "3.1.0"
+    description: "Hybrid Memory System with PostgreSQL + pgvector"
+
+  memory:
+    # Hybrid Search Configuration
+    semantic_weight: 0.7  # Weight for semantic similarity (0.0-1.0)
+    keyword_weight: 0.3   # Weight for keyword similarity (0.0-1.0)
+
+    # Storage Configuration
+    working_memory_max_items: 50
+    episode_memory_retention_days: 90
+
+    # Embedding Configuration
+    embedding_dimension: 1536  # OpenAI text-embedding-3-small
+    embedding_model: "text-embedding-3-small"
+
+    # Dual Judge Configuration
+    judge_models:
+      primary: "gpt-4o"
+      secondary: "claude-3-haiku"
+
+    # Ground Truth Configuration
+    ground_truth_threshold: 0.8  # IRR validation threshold
+
+    # Query Expansion Configuration (Epic 2, Story 2.2)
+    # Generates semantic query variants for robust retrieval (+10-15% recall uplift)
+    query_expansion:
+      enabled: true
+      num_variants: 3  # Number of semantic variants (2-5 configurable)
+
+      # Variant Strategies (applied in order)
+      strategies:
+        - paraphrase        # Variante 1: Synonyme, andere Wortwahl
+        - perspective_shift # Variante 2: Perspektivwechsel (Frage ↔ Statement)
+        - keyword_focus     # Variante 3: Kern-Konzepte, Keywords
+
+      # Advanced Options
+      temperature: 0.7  # Claude Code expansion temperature (default 0.7)
+      max_tokens_per_variant: 100  # Token limit per variant
+
+      # Performance Tuning
+      parallel_embedding: true  # Embed all 4 queries in parallel (default true)
+      parallel_search: true     # Call hybrid_search 4× in parallel (default true)
+
+      # RRF Fusion Parameters
+      rrf_k: 60  # Reciprocal Rank Fusion constant (literature standard)
+      final_top_k: 5  # Number of final results after fusion
+
+    # Evaluation Configuration (Epic 2, Story 2.4-2.5)
+    # Haiku API for self-evaluation with deterministic scoring
+    evaluation:
+      model: "claude-3-5-haiku-20241022"
+      temperature: 0.0  # Deterministic for consistent reward scores across sessions
+      max_tokens: 500
+      reward_threshold: 0.3  # Trigger reflexion if reward < 0.3 (Story 2.6)
+
+    # Reflexion Configuration (Epic 2, Story 2.4, 2.6)
+    # Verbal reinforcement learning for failed evaluations
+    reflexion:
+      model: "claude-3-5-haiku-20241022"
+      temperature: 0.7  # Creative for lesson learned generation
+      max_tokens: 1000
+
+  # API Limits Configuration (Story 2.4)
+  # Retry logic and rate limit handling for external APIs
+  api_limits:
+    anthropic:
+      rpm_limit: 1000  # Anthropic API rate limit (requests per minute)
+      retry_attempts: 4  # Max retry attempts for failed API calls
+      retry_delays: [1, 2, 4, 8]  # Exponential backoff delays (seconds)
+      jitter: true  # Apply ±20% jitter to prevent Thundering Herd
+
+    openai:
+      rpm_limit: 3000  # OpenAI API rate limit (requests per minute)
+      retry_attempts: 4
+      retry_delays: [1, 2, 4, 8]
+      jitter: true
+
+  # API Cost Rates (Story 3.10: Budget Monitoring)
+  # Hard-coded rates based on API pricing as of 2025-11-20
+  # Update manually when API prices change
+  # All costs in EUR per token (convert USD to EUR if needed)
+  api_cost_rates:
+    # OpenAI API Pricing
+    openai_embeddings: 0.00000002  # €0.02 per 1M tokens (text-embedding-3-small)
+    gpt4o_input: 0.0000025         # €2.50 per 1M input tokens (GPT-4o)
+    gpt4o_output: 0.00001          # €10.00 per 1M output tokens (GPT-4o)
+
+    # Anthropic API Pricing (assuming 1 USD = 0.92 EUR)
+    haiku_input: 0.00000092        # $1.00 per 1M tokens → €0.92 per 1M tokens (Haiku)
+    haiku_output: 0.0000046        # $5.00 per 1M tokens → €4.60 per 1M tokens (Haiku)
+
+    # Exchange Rate Reference
+    # USD to EUR conversion rate: 0.92 (update when rates change significantly)
+
+  # Budget Monitoring (Story 2.4, Story 3.10)
+  budget:
+    monthly_limit_eur: 10.0  # Alert if projected monthly cost exceeds €10/mo
+    alert_threshold_pct: 80  # Alert at 80% of monthly limit (€8.00)
+    alert_email: ""          # Optional: Email address for budget alerts
+    alert_slack_webhook: ""  # Optional: Slack webhook URL for budget alerts
+
+  # Staged Dual Judge Configuration (Story 3.9, Enhancement E8)
+  # Cost optimization via IRR-based transition from Full Dual Judge to Single Judge + Spot Checks
+  # Phase 1: dual_judge_enabled=true (€5-10/mo, both judges all queries)
+  # Phase 2: dual_judge_enabled=false (€2-3/mo, GPT-4o all + Haiku 5%)
+  staged_dual_judge:
+    dual_judge_enabled: true  # Start in Full Dual Judge Mode (Stories 1.11-1.12)
+
+    # Transition Configuration
+    kappa_threshold: 0.85  # Minimum Kappa for Single Judge transition ("Almost Perfect Agreement")
+
+    # Single Judge Mode Settings (activated after transition)
+    primary_judge: "gpt-4o"  # Primary judge for Single Judge Mode
+    spot_check_rate: 0.05    # 5% random sampling with both judges
+
+    # Spot Check Validation
+    spot_check_kappa_threshold: 0.70  # Revert to Dual Judge if spot check Kappa < 0.70
+    spot_check_validation_interval_days: 30  # Monthly validation
+
+    # Cost Projections (for CLI display)
+    cost_dual_judge_eur_per_month: 7.5      # Estimated €5-10/mo midpoint
+    cost_single_judge_eur_per_month: 2.5    # Estimated €2-3/mo midpoint
+    cost_savings_percentage: 40             # -40% budget reduction
+
+  mcp:
+    # MCP Server Configuration
+    transport: "stdio"  # stdio or http
+    timeout_seconds: 30
+
+    # Tool Configuration
+    tools:
+      l0_raw_storage: true
+      l2_insights_compression: true
+      hybrid_search: true
+      working_memory_management: true
+      episode_storage: true
+      dual_judge_scoring: true
+      golden_test_results: true
+
+    # Resource Configuration
+    resources:
+      raw_memory: true
+      insights_memory: true
+      working_memory: true
+      episode_memory: true
+      system_status: true
+
+# =============================================================================
+# Development Environment Configuration
+# =============================================================================
+# Database: cognitive_memory_dev (test data, can be dropped/recreated)
+# Logging: DEBUG level for verbose output
+# Features: Debug mode, profiling enabled
+# Purpose: Local development, testing, aggressive queries (grid search, benchmarks)
+# =============================================================================
+development:
+  database:
+    host: "localhost"
+    port: 5432
+    name: "cognitive_memory_dev"  # Development database (Story 3.7)
+    user: "mcp_user"
+    # Password from environment variable (DATABASE_URL in .env.development)
+    ssl_mode: "prefer"
+    pool_size: 5
+    max_overflow: 10
+
+  logging:
+    level: "DEBUG"
+    format: "text"
+    file: "logs/cognitive_memory_dev.log"
+    console: true
+
+  api:
+    openai_base_url: "https://api.openai.com/v1"
+    anthropic_base_url: "https://api.anthropic.com"
+    request_timeout: 30
+    retry_attempts: 3
+
+  features:
+    debug_mode: true
+    dev_features: true
+    mock_external_apis: false  # Set to true for offline development
+
+  performance:
+    enable_profiling: true
+    slow_query_threshold_ms: 1000
+
+# =============================================================================
+# Production Environment Configuration
+# =============================================================================
+# Database: cognitive_memory (real user data, backed up daily via Story 3.6)
+# Logging: INFO level to reduce noise
+# Features: Debug mode disabled, profiling disabled
+# Purpose: Production deployment, real conversations, rate limiting enabled
+# Security: Requires SSL, larger connection pool for production load
+# =============================================================================
+production:
+  database:
+    host: "${POSTGRES_HOST}"  # From environment variable (.env.production)
+    port: "${POSTGRES_PORT}"
+    name: "${POSTGRES_DB}"    # Production database: cognitive_memory
+    user: "${POSTGRES_USER}"
+    # Password from environment variable (DATABASE_URL in .env.production)
+    ssl_mode: "require"
+    pool_size: 20
+    max_overflow: 40
+
+  logging:
+    level: "INFO"
+    format: "json"
+    file: "logs/cognitive_memory_prod.log"
+    console: false
+
+  api:
+    openai_base_url: "https://api.openai.com/v1"
+    anthropic_base_url: "https://api.anthropic.com"
+    request_timeout: 60
+    retry_attempts: 5
+
+  features:
+    debug_mode: false
+    dev_features: false
+    mock_external_apis: false
+
+  performance:
+    enable_profiling: false
+    slow_query_threshold_ms: 500
+
+  security:
+    enable_rate_limiting: true
+    max_requests_per_minute: 100
+    enable_request_logging: true

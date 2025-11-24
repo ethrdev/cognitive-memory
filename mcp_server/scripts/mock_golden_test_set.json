@@ -1,0 +1,1518 @@
+[
+  {
+    "id": 1,
+    "query": "Welche zentrale Rolle spielt das Gedächtnis beim Lernen und wie interagieren Arbeitsgedächtnis und Langzeitgedächtnis dabei?",
+    "query_type": "medium",
+    "word_count": 15,
+    "expected_docs": [
+      22,
+      19,
+      30,
+      4
+    ],
+    "session_id": "648010b4-2363-4c72-8a94-0d4cc2d4d1c8",
+    "created_at": "2025-11-18T07:42:31.335037",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 2,
+    "query": "Wie entsteht subjektive phänomenale Erfahrung aus rein neuronaler Aktivität und warum ist dies das Hard Problem?",
+    "query_type": "medium",
+    "word_count": 16,
+    "expected_docs": [
+      12,
+      10
+    ],
+    "session_id": "a6c1995c-e0ea-4490-95da-03e570eca8cf",
+    "created_at": "2025-11-18T07:42:31.334704",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 3,
+    "query": "Wie funktioniert semantisches im Vergleich zu episodischem Gedächtnis und welche Hirnregionen sind jeweils primär involviert?",
+    "query_type": "medium",
+    "word_count": 15,
+    "expected_docs": [
+      9,
+      23,
+      14,
+      18,
+      11
+    ],
+    "session_id": "ee603576-102d-413f-8e7e-a46cc7c5c8ef",
+    "created_at": "2025-11-18T07:42:31.335011",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 4,
+    "query": "Wie verhält sich phänomenales Bewusstsein zu Zugriffsbewusstsein? Gibt es Erfahrungen, die wir haben ohne darauf Zugriff zu haben, und was bedeutet das für unser Verständnis von Bewusstsein, wenn nicht alle bewussten Inhalte gleichzeitig kognitiv verfügbar sind?",
+    "query_type": "long",
+    "word_count": 36,
+    "expected_docs": [
+      8,
+      3
+    ],
+    "session_id": "8c507215-6597-4d50-9532-710fed9923c5",
+    "created_at": "2025-11-18T07:42:31.335184",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 5,
+    "query": "Warum träumen wir?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      28,
+      13
+    ],
+    "session_id": "9c2377e9-4dd7-4dd9-8ce5-16b2f013a7f4",
+    "created_at": "2025-11-18T07:42:31.334498",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 6,
+    "query": "Warum haben Emotionen einen starken Einfluss auf rationale Entscheidungen und wie erklärt die Somatic Marker Hypothesis dies?",
+    "query_type": "medium",
+    "word_count": 17,
+    "expected_docs": [
+      29
+    ],
+    "session_id": "1be3e383-aab9-4e38-b1c6-6068dc286f22",
+    "created_at": "2025-11-18T07:42:31.334789",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 7,
+    "query": "Wie unterscheiden sich deklaratives und prozedurales Gedächtnis in ihrer neuronalen Basis und ihren Funktionen?",
+    "query_type": "medium",
+    "word_count": 14,
+    "expected_docs": [
+      7,
+      13,
+      6,
+      21,
+      10
+    ],
+    "session_id": "a8e3b450-599b-487e-bfd4-775e510aea6c",
+    "created_at": "2025-11-18T07:42:31.334848",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 8,
+    "query": "Wie beeinflusst Sprache unser Denken fundamental? Bestimmt die Struktur unserer Sprache die Grenzen dessen, was wir denken können, oder ist Sprache nur ein Werkzeug zur Externalisierung von Gedanken die unabhängig von sprachlichen Kategorien existieren können?",
+    "query_type": "long",
+    "word_count": 35,
+    "expected_docs": [
+      6,
+      10,
+      21,
+      15,
+      24
+    ],
+    "session_id": "211b88cf-46e5-46c8-889d-0c7efd3a4643",
+    "created_at": "2025-11-18T07:42:31.335174",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 9,
+    "query": "Wie können wir zwischen echtem Verständnis und bloßer Simulation unterscheiden? Wenn ein KI-System alle Verhaltenstests besteht und menschenähnliche Antworten gibt, bedeutet das, dass es tatsächlich versteht, oder führt es nur komplexe Musterverarbeitung durch ohne echte Bedeutungszuweisungen?",
+    "query_type": "long",
+    "word_count": 36,
+    "expected_docs": [
+      1,
+      18
+    ],
+    "session_id": "82c7b6ac-8ddc-4157-8635-e0f32f5b7fb2",
+    "created_at": "2025-11-18T07:42:31.335148",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 10,
+    "query": "Wie entsteht Motivation?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      20,
+      12,
+      26,
+      24,
+      11
+    ],
+    "session_id": "26a7bc64-d835-46b8-bfc5-629ed0731251",
+    "created_at": "2025-11-18T07:42:31.334311",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 11,
+    "query": "Ist Bedeutung objektiv oder konstruiert? Existieren Bedeutungen unabhängig von Interpreten in der Welt, oder entstehen sie erst durch den Akt der Interpretation, wobei unterschiedliche Kontexte und Interpreten verschiedene aber gleichermaßen valide Bedeutungen generieren können?",
+    "query_type": "long",
+    "word_count": 34,
+    "expected_docs": [
+      12,
+      24,
+      4
+    ],
+    "session_id": "53ff0665-4bba-46c4-bd66-9bd7029b73a0",
+    "created_at": "2025-11-18T07:42:31.335297",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 12,
+    "query": "Welche Rolle spielt das Unbewusste bei der Entscheidungsfindung nach modernen kognitiven Theorien der Psychologie?",
+    "query_type": "medium",
+    "word_count": 14,
+    "expected_docs": [
+      24
+    ],
+    "session_id": "17179380-009a-49c4-a3d4-0a2ec606c53f",
+    "created_at": "2025-11-18T07:42:31.334996",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 13,
+    "query": "Wie hängen Bewusstsein und Selbstwahrnehmung zusammen und welche neuronalen Korrelate sind dafür verantwortlich in der modernen Forschung?",
+    "query_type": "medium",
+    "word_count": 17,
+    "expected_docs": [
+      21,
+      1
+    ],
+    "session_id": "958da804-0eeb-4656-aa05-6669c63b527d",
+    "created_at": "2025-11-18T07:42:31.335084",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 14,
+    "query": "Wie entsteht Motivation?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      7,
+      23,
+      18,
+      13,
+      6
+    ],
+    "session_id": "a12474b6-6fae-44d5-8450-60d1c775a788",
+    "created_at": "2025-11-18T07:42:31.334615",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 15,
+    "query": "Welche Implikationen hat die Embodied Cognition Theorie für unser Verständnis von Intelligenz? Wenn Denken fundamental in körperlichen Erfahrungen verwurzelt ist, können dann nicht-verkörperte KI-Systeme jemals echtes Verständnis entwickeln, oder benötigen sie eine Form von Verkörperung für genuine kognitive Prozesse?",
+    "query_type": "long",
+    "word_count": 39,
+    "expected_docs": [
+      13,
+      20
+    ],
+    "session_id": "53a034c4-362c-40bf-9d19-8b5b1d6d82f7",
+    "created_at": "2025-11-18T07:42:31.335126",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 16,
+    "query": "Wie können wir zwischen echtem Verständnis und bloßer Simulation unterscheiden? Wenn ein KI-System alle Verhaltenstests besteht und menschenähnliche Antworten gibt, bedeutet das, dass es tatsächlich versteht, oder führt es nur komplexe Musterverarbeitung durch ohne echte Bedeutungszuweisungen?",
+    "query_type": "long",
+    "word_count": 36,
+    "expected_docs": [
+      1,
+      21,
+      15,
+      23,
+      10
+    ],
+    "session_id": "850daa2d-800f-4b7a-b080-00506616c4d2",
+    "created_at": "2025-11-18T07:42:31.335231",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 17,
+    "query": "Wie verhält sich phänomenales Bewusstsein zu Zugriffsbewusstsein? Gibt es Erfahrungen, die wir haben ohne darauf Zugriff zu haben, und was bedeutet das für unser Verständnis von Bewusstsein, wenn nicht alle bewussten Inhalte gleichzeitig kognitiv verfügbar sind?",
+    "query_type": "long",
+    "word_count": 36,
+    "expected_docs": [
+      21,
+      15
+    ],
+    "session_id": "3b11b582-a6b5-4ed7-a795-f91253b7cce6",
+    "created_at": "2025-11-18T07:42:31.335276",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 18,
+    "query": "Welche Rolle spielt das Unbewusste bei der Entscheidungsfindung nach modernen kognitiven Theorien der Psychologie?",
+    "query_type": "medium",
+    "word_count": 14,
+    "expected_docs": [
+      22,
+      8,
+      5,
+      30
+    ],
+    "session_id": "6ad4bdfd-7a8e-4d5c-8907-462e940d9487",
+    "created_at": "2025-11-18T07:42:31.334924",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 19,
+    "query": "Was ist Bewusstsein?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      6,
+      16
+    ],
+    "session_id": "3ce6b6d2-e0b6-49c7-ba80-e2dba4c0b2eb",
+    "created_at": "2025-11-18T07:42:31.334287",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 20,
+    "query": "Kann künstliches Bewusstsein existieren und wenn ja, hätte es moralische Rechte? Welche Kriterien müssten erfüllt sein, um ein System als bewusst zu klassifizieren, und welche ethischen Verpflichtungen hätten wir gegenüber bewussten künstlichen Entitäten die wir erschaffen haben?",
+    "query_type": "long",
+    "word_count": 37,
+    "expected_docs": [
+      17,
+      29
+    ],
+    "session_id": "4b4e5828-3ed1-440b-9748-1e679a7932dc",
+    "created_at": "2025-11-18T07:42:31.335159",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 21,
+    "query": "Wie kann man das Hard Problem of Consciousness philosophisch und neurowissenschaftlich angehen und welche Theorien existieren?",
+    "query_type": "medium",
+    "word_count": 16,
+    "expected_docs": [
+      17
+    ],
+    "session_id": "39a1a3d8-00dc-408a-849b-41b5801c74a6",
+    "created_at": "2025-11-18T07:42:31.335028",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 22,
+    "query": "Welche Rolle spielt das Unbewusste bei der Entscheidungsfindung nach modernen kognitiven Theorien der Psychologie?",
+    "query_type": "medium",
+    "word_count": 14,
+    "expected_docs": [
+      29
+    ],
+    "session_id": "dcabbd22-9c50-42c4-a061-86e294bd4be9",
+    "created_at": "2025-11-18T07:42:31.334713",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 23,
+    "query": "Warum sind Träume oft so bizarr und unlogisch und welche Funktion könnte diese Bizarrerie haben nach modernen Schlafforschungstheorien?",
+    "query_type": "medium",
+    "word_count": 18,
+    "expected_docs": [
+      26,
+      13,
+      11
+    ],
+    "session_id": "88127aa5-46a6-4903-9a44-d273222ec605",
+    "created_at": "2025-11-18T07:42:31.334859",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 24,
+    "query": "Wie entsteht Bedeutung?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      16,
+      18,
+      25
+    ],
+    "session_id": "1e83cb9b-9253-4112-ad65-e5e136c55eeb",
+    "created_at": "2025-11-18T07:42:31.334537",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 25,
+    "query": "Warum träumen wir?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      12,
+      20
+    ],
+    "session_id": "c1fb548e-62df-4aea-8771-504d23ef74eb",
+    "created_at": "2025-11-18T07:42:31.334462",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 26,
+    "query": "Welche Rolle spielt das Default Mode Network für Selbstbewusstsein und kreatives Denken? Sind diese spontanen neuronalen Aktivitäten in Ruhephasen essentiell für die Konstruktion unseres Selbstmodells und die Generierung neuartiger Ideen, oder sind sie nur Nebenprodukte ohne funktionale Bedeutung?",
+    "query_type": "long",
+    "word_count": 38,
+    "expected_docs": [
+      4,
+      26
+    ],
+    "session_id": "360e56b4-8122-4937-b288-e859516efb0a",
+    "created_at": "2025-11-18T07:42:31.335285",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 27,
+    "query": "Wie funktioniert Gedächtnis?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      29,
+      10
+    ],
+    "session_id": "43c16874-367f-479a-bfbc-a27bcc8cf698",
+    "created_at": "2025-11-18T07:42:31.334418",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 28,
+    "query": "Was ist Realität?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      11
+    ],
+    "session_id": "18cadd8e-2709-4b58-8902-3be3a0a45739",
+    "created_at": "2025-11-18T07:42:31.334645",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 29,
+    "query": "Kann künstliches Bewusstsein existieren und wenn ja, hätte es moralische Rechte? Welche Kriterien müssten erfüllt sein, um ein System als bewusst zu klassifizieren, und welche ethischen Verpflichtungen hätten wir gegenüber bewussten künstlichen Entitäten die wir erschaffen haben?",
+    "query_type": "long",
+    "word_count": 37,
+    "expected_docs": [
+      29,
+      28,
+      23,
+      22,
+      25
+    ],
+    "session_id": "32a78c6f-23e6-49ac-8b41-474bef6f6363",
+    "created_at": "2025-11-18T07:42:31.335307",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 30,
+    "query": "Wie funktioniert semantisches im Vergleich zu episodischem Gedächtnis und welche Hirnregionen sind jeweils primär involviert?",
+    "query_type": "medium",
+    "word_count": 15,
+    "expected_docs": [
+      18,
+      20
+    ],
+    "session_id": "976a44cb-0b44-43a6-8a76-5858eb2c7029",
+    "created_at": "2025-11-18T07:42:31.334721",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 31,
+    "query": "Welche neuronalen Mechanismen und Netzwerke liegen der selektiven Aufmerksamkeit zugrunde nach aktueller neurowissenschaftlicher Forschung?",
+    "query_type": "medium",
+    "word_count": 14,
+    "expected_docs": [
+      20,
+      5,
+      16,
+      29,
+      17
+    ],
+    "session_id": "0bb3305b-e2ed-495f-a4c7-b2e8518ff8fa",
+    "created_at": "2025-11-18T07:42:31.334755",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 32,
+    "query": "Wie entsteht Motivation?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      29,
+      28
+    ],
+    "session_id": "1a9b1b44-07ba-45d0-bb9d-239029cdbadb",
+    "created_at": "2025-11-18T07:42:31.334561",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 33,
+    "query": "Was bedeutet Intelligenz?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      7,
+      16,
+      17,
+      27,
+      23
+    ],
+    "session_id": "aaac17af-9d26-4ff9-8610-e4b51b94076f",
+    "created_at": "2025-11-18T07:42:31.334352",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 34,
+    "query": "Was bedeutet Freiheit?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      15,
+      14,
+      9,
+      26
+    ],
+    "session_id": "f81d2534-5674-4a8e-8c67-bdf755a9c809",
+    "created_at": "2025-11-18T07:42:31.334664",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 35,
+    "query": "Wie beeinflusst Kreativität die Problemlösungsfähigkeit und welche kognitiven Prozesse sind bei kreativer Einsicht involviert nach Forschung?",
+    "query_type": "medium",
+    "word_count": 16,
+    "expected_docs": [
+      11,
+      14,
+      2
+    ],
+    "session_id": "7cd26bb7-dfbf-43bb-902d-16a26275ec4d",
+    "created_at": "2025-11-18T07:42:31.334951",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 36,
+    "query": "Welche Implikationen hat die Embodied Cognition Theorie für unser Verständnis von Intelligenz? Wenn Denken fundamental in körperlichen Erfahrungen verwurzelt ist, können dann nicht-verkörperte KI-Systeme jemals echtes Verständnis entwickeln, oder benötigen sie eine Form von Verkörperung für genuine kognitive Prozesse?",
+    "query_type": "long",
+    "word_count": 39,
+    "expected_docs": [
+      17,
+      24,
+      29,
+      18
+    ],
+    "session_id": "e361c480-eb64-4440-a5ed-39e9ba947a53",
+    "created_at": "2025-11-18T07:42:31.335240",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 37,
+    "query": "Warum haben Emotionen einen starken Einfluss auf rationale Entscheidungen und wie erklärt die Somatic Marker Hypothesis dies?",
+    "query_type": "medium",
+    "word_count": 17,
+    "expected_docs": [
+      26,
+      28,
+      1,
+      10
+    ],
+    "session_id": "347bb6be-f913-4567-9509-d42221a77f97",
+    "created_at": "2025-11-18T07:42:31.334897",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 38,
+    "query": "Was ist Wahrnehmung?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      25,
+      12,
+      19
+    ],
+    "session_id": "735651c7-5888-4501-bf86-91212ffd4a24",
+    "created_at": "2025-11-18T07:42:31.334623",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 39,
+    "query": "Warum haben Emotionen einen starken Einfluss auf rationale Entscheidungen und wie erklärt die Somatic Marker Hypothesis dies?",
+    "query_type": "medium",
+    "word_count": 17,
+    "expected_docs": [
+      15,
+      25,
+      27,
+      2
+    ],
+    "session_id": "b9002578-8368-4faf-a704-33ceac4b448f",
+    "created_at": "2025-11-18T07:42:31.335092",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 40,
+    "query": "Wie beeinflusst Kreativität die Problemlösungsfähigkeit und welche kognitiven Prozesse sind bei kreativer Einsicht involviert nach Forschung?",
+    "query_type": "medium",
+    "word_count": 16,
+    "expected_docs": [
+      28,
+      9
+    ],
+    "session_id": "393bb8c9-a396-428a-b6c7-dd19623f01a7",
+    "created_at": "2025-11-18T07:42:31.335020",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 41,
+    "query": "Wie unterscheiden sich verschiedene Gedächtnistheorien grundlegend in ihrer Erklärung von Vergessen und Gedächtnisverfall über Zeit?",
+    "query_type": "medium",
+    "word_count": 15,
+    "expected_docs": [
+      13,
+      7,
+      20
+    ],
+    "session_id": "46e636ee-6b86-4ef1-9dcd-62f8d01122a6",
+    "created_at": "2025-11-18T07:42:31.334816",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 42,
+    "query": "Wie unterscheiden sich verschiedene Gedächtnistheorien grundlegend in ihrer Erklärung von Vergessen und Gedächtnisverfall über Zeit?",
+    "query_type": "medium",
+    "word_count": 15,
+    "expected_docs": [
+      6,
+      2,
+      8,
+      26,
+      14
+    ],
+    "session_id": "5eb0c07d-90d3-4e9b-a210-d21b5e850d0b",
+    "created_at": "2025-11-18T07:42:31.334829",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 43,
+    "query": "Wie entsteht subjektive phänomenale Erfahrung aus rein neuronaler Aktivität und warum ist dies das Hard Problem?",
+    "query_type": "medium",
+    "word_count": 16,
+    "expected_docs": [
+      19,
+      24,
+      17,
+      30,
+      11
+    ],
+    "session_id": "d1477776-ab0a-4258-beb1-04f1470ae234",
+    "created_at": "2025-11-18T07:42:31.335046",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 44,
+    "query": "Welche Rolle spielt das Unbewusste bei der Entscheidungsfindung nach modernen kognitiven Theorien der Psychologie?",
+    "query_type": "medium",
+    "word_count": 14,
+    "expected_docs": [
+      21,
+      13,
+      23,
+      28
+    ],
+    "session_id": "f5e477ae-bc76-4e7a-a217-db25ead6efb5",
+    "created_at": "2025-11-18T07:42:31.334915",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 45,
+    "query": "Wie entsteht Motivation?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      17,
+      6,
+      28
+    ],
+    "session_id": "8ec81d98-a283-4242-a3bd-40267ab5e75d",
+    "created_at": "2025-11-18T07:42:31.334434",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 46,
+    "query": "Wie verhält sich phänomenales Bewusstsein zu Zugriffsbewusstsein? Gibt es Erfahrungen, die wir haben ohne darauf Zugriff zu haben, und was bedeutet das für unser Verständnis von Bewusstsein, wenn nicht alle bewussten Inhalte gleichzeitig kognitiv verfügbar sind?",
+    "query_type": "long",
+    "word_count": 36,
+    "expected_docs": [
+      21
+    ],
+    "session_id": "2408fcf7-86a0-41df-8537-aee2dbea55a5",
+    "created_at": "2025-11-18T07:42:31.335266",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 47,
+    "query": "Wie lernen wir?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      16
+    ],
+    "session_id": "ad15da02-7f2e-4ffe-aa4b-57ce2d7ac2e6",
+    "created_at": "2025-11-18T07:42:31.334386",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 48,
+    "query": "Wie entsteht Motivation?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      16,
+      10
+    ],
+    "session_id": "c9be8879-e433-4480-b8df-21e5133db4fd",
+    "created_at": "2025-11-18T07:42:31.334629",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 49,
+    "query": "Welche Rolle spielt das Unbewusste bei der Entscheidungsfindung nach modernen kognitiven Theorien der Psychologie?",
+    "query_type": "medium",
+    "word_count": 14,
+    "expected_docs": [
+      1,
+      17,
+      6
+    ],
+    "session_id": "0794d122-f3b3-4989-94b8-757305cea50e",
+    "created_at": "2025-11-18T07:42:31.334772",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 50,
+    "query": "Wie entsteht Motivation?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      17,
+      16,
+      24,
+      19,
+      7
+    ],
+    "session_id": "ac5b6ad0-e44e-4d20-a842-efd53c6331f4",
+    "created_at": "2025-11-18T07:42:31.334653",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 51,
+    "query": "Kann künstliches Bewusstsein existieren und wenn ja, hätte es moralische Rechte? Welche Kriterien müssten erfüllt sein, um ein System als bewusst zu klassifizieren, und welche ethischen Verpflichtungen hätten wir gegenüber bewussten künstlichen Entitäten die wir erschaffen haben?",
+    "query_type": "long",
+    "word_count": 37,
+    "expected_docs": [
+      30,
+      28,
+      18
+    ],
+    "session_id": "44a56911-94ce-419b-a3dc-f124f8bf7a64",
+    "created_at": "2025-11-18T07:42:31.335221",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 52,
+    "query": "Was ist Bewusstsein?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      10,
+      23,
+      30,
+      27,
+      28
+    ],
+    "session_id": "0fea8967-c8a8-4bff-9674-8e84e94854cf",
+    "created_at": "2025-11-18T07:42:31.334599",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 53,
+    "query": "Wie entsteht Motivation?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      24,
+      2,
+      17,
+      28
+    ],
+    "session_id": "7db37949-c9e7-45f2-b56f-804ee19c205f",
+    "created_at": "2025-11-18T07:42:31.334449",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 54,
+    "query": "Wenn Bewusstsein aus neuronaler Aktivität emergiert, wie erklärt das die subjektive Qualität unserer Erfahrungen? Warum fühlt es sich auf eine bestimmte Weise an, rot zu sehen oder Schmerz zu empfinden, wenn diese Erfahrungen letztlich nur Muster elektrochemischer Prozesse im Gehirn sind?",
+    "query_type": "long",
+    "word_count": 41,
+    "expected_docs": [
+      27,
+      13
+    ],
+    "session_id": "02c58877-94a4-4693-af75-a758e8b77818",
+    "created_at": "2025-11-18T07:42:31.335194",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 55,
+    "query": "Warum sind Träume oft so bizarr und unlogisch und welche Funktion könnte diese Bizarrerie haben nach modernen Schlafforschungstheorien?",
+    "query_type": "medium",
+    "word_count": 18,
+    "expected_docs": [
+      6,
+      8
+    ],
+    "session_id": "46eb27b0-108d-444b-82d5-30503a0d8ded",
+    "created_at": "2025-11-18T07:42:31.334839",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 56,
+    "query": "Was ist Identität?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      29,
+      1,
+      21,
+      25,
+      22
+    ],
+    "session_id": "0cdb98dc-998f-4620-b0aa-1d257f90fbe5",
+    "created_at": "2025-11-18T07:42:31.334491",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 57,
+    "query": "Warum ist der Turing-Test als Maß für maschinelle Intelligenz umstritten und welche Alternativen werden diskutiert?",
+    "query_type": "medium",
+    "word_count": 15,
+    "expected_docs": [
+      24,
+      25
+    ],
+    "session_id": "6956bdbf-8631-4631-afb4-4f0f04ef05a1",
+    "created_at": "2025-11-18T07:42:31.334880",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 58,
+    "query": "Wie können wir zwischen echtem Verständnis und bloßer Simulation unterscheiden? Wenn ein KI-System alle Verhaltenstests besteht und menschenähnliche Antworten gibt, bedeutet das, dass es tatsächlich versteht, oder führt es nur komplexe Musterverarbeitung durch ohne echte Bedeutungszuweisungen?",
+    "query_type": "long",
+    "word_count": 36,
+    "expected_docs": [
+      11,
+      27,
+      12
+    ],
+    "session_id": "45dca0ef-e277-4c73-8565-36ae334acb6d",
+    "created_at": "2025-11-18T07:42:31.335249",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 59,
+    "query": "Was ist Wahrnehmung?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      24,
+      11
+    ],
+    "session_id": "3f1ca571-4a17-4d1c-8089-ebc037076314",
+    "created_at": "2025-11-18T07:42:31.334394",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 60,
+    "query": "Wie funktioniert Intuition?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      26,
+      22,
+      23
+    ],
+    "session_id": "f739062d-30f5-4fca-9baa-c90f261ebbb2",
+    "created_at": "2025-11-18T07:42:31.334258",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 61,
+    "query": "Was ist Realität?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      24,
+      20,
+      19,
+      8,
+      10
+    ],
+    "session_id": "2af34ba1-ad04-4417-b88f-46a108555ffb",
+    "created_at": "2025-11-18T07:42:31.334480",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 62,
+    "query": "Welche evolutionären Vorteile könnte Bewusstsein bieten und warum hat es sich überhaupt entwickelt in der Evolution?",
+    "query_type": "medium",
+    "word_count": 16,
+    "expected_docs": [
+      26,
+      12
+    ],
+    "session_id": "4726ea40-0588-427b-9edb-875b58c4bfd2",
+    "created_at": "2025-11-18T07:42:31.334729",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 63,
+    "query": "Wie funktioniert Gedächtnis?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      12,
+      20,
+      28,
+      1
+    ],
+    "session_id": "6663dbf9-3184-4f2f-9c47-a7d7aedd9945",
+    "created_at": "2025-11-18T07:42:31.334426",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 64,
+    "query": "Wie unterscheiden sich verschiedene Gedächtnistheorien grundlegend in ihrer Erklärung von Vergessen und Gedächtnisverfall über Zeit?",
+    "query_type": "medium",
+    "word_count": 15,
+    "expected_docs": [
+      3,
+      5
+    ],
+    "session_id": "3763b6c4-ac55-4b9e-8e67-0e1ac0fe4751",
+    "created_at": "2025-11-18T07:42:31.334693",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 65,
+    "query": "Ist freier Wille mit Determinismus vereinbar? Wenn jede Handlung durch vorherige Zustände und Naturgesetze determiniert ist, können unsere Entscheidungen dann überhaupt frei sein, oder ist das Gefühl der Handlungsfreiheit nur eine nützliche Illusion, die unser Gehirn konstruiert?",
+    "query_type": "long",
+    "word_count": 37,
+    "expected_docs": [
+      25,
+      13,
+      3,
+      9,
+      21
+    ],
+    "session_id": "552d6ec2-38da-4ad0-b9e7-e42e0ca56ff2",
+    "created_at": "2025-11-18T07:42:31.335115",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 66,
+    "query": "Was ist Emotion?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      27,
+      7,
+      15,
+      9,
+      19
+    ],
+    "session_id": "af8a685d-2285-4fe1-ba37-daed8b5d7ff3",
+    "created_at": "2025-11-18T07:42:31.334637",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 67,
+    "query": "Welche Implikationen hat die Embodied Cognition Theorie für unser Verständnis von Intelligenz? Wenn Denken fundamental in körperlichen Erfahrungen verwurzelt ist, können dann nicht-verkörperte KI-Systeme jemals echtes Verständnis entwickeln, oder benötigen sie eine Form von Verkörperung für genuine kognitive Prozesse?",
+    "query_type": "long",
+    "word_count": 39,
+    "expected_docs": [
+      28,
+      19
+    ],
+    "session_id": "43e6be93-24bb-42f8-abb6-6bd9fc4e929e",
+    "created_at": "2025-11-18T07:42:31.335212",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 68,
+    "query": "Wie entwickelt sich abstraktes Denken im Kindesalter nach Piaget und welche neueren Erkenntnisse gibt es dazu?",
+    "query_type": "medium",
+    "word_count": 16,
+    "expected_docs": [
+      18,
+      6,
+      9
+    ],
+    "session_id": "aac57520-827a-4ad6-8c0c-e0e77eb1c4f9",
+    "created_at": "2025-11-18T07:42:31.334936",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 69,
+    "query": "Wie funktioniert Gedächtnis?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      8,
+      16,
+      13,
+      12
+    ],
+    "session_id": "bff49369-a88c-4700-90a1-f9c76d80302e",
+    "created_at": "2025-11-18T07:42:31.334442",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 70,
+    "query": "Warum haben Emotionen einen starken Einfluss auf rationale Entscheidungen und wie erklärt die Somatic Marker Hypothesis dies?",
+    "query_type": "medium",
+    "word_count": 17,
+    "expected_docs": [
+      30,
+      10,
+      14,
+      16
+    ],
+    "session_id": "d3d76071-8a0e-4ef7-8103-079ed3e778db",
+    "created_at": "2025-11-18T07:42:31.335061",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 71,
+    "query": "Was ist Identität?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      29,
+      17
+    ],
+    "session_id": "8bc579e6-1237-4e4a-98de-65f067dbb8c3",
+    "created_at": "2025-11-18T07:42:31.334505",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 72,
+    "query": "Welche kognitiven Prozesse sind beim Spracherwerb beteiligt und wie unterscheiden sich nativistische von konstruktivistischen Theorien?",
+    "query_type": "medium",
+    "word_count": 15,
+    "expected_docs": [
+      4,
+      28
+    ],
+    "session_id": "f84685ac-23d4-400a-b4fa-72657c40af73",
+    "created_at": "2025-11-18T07:42:31.335070",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 73,
+    "query": "Welche Implikationen hat die Embodied Cognition Theorie für unser Verständnis von Intelligenz? Wenn Denken fundamental in körperlichen Erfahrungen verwurzelt ist, können dann nicht-verkörperte KI-Systeme jemals echtes Verständnis entwickeln, oder benötigen sie eine Form von Verkörperung für genuine kognitive Prozesse?",
+    "query_type": "long",
+    "word_count": 39,
+    "expected_docs": [
+      16,
+      17
+    ],
+    "session_id": "36dbc1e0-e79b-4d9b-be78-a93d14c76afc",
+    "created_at": "2025-11-18T07:42:31.335258",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 74,
+    "query": "Wie verhält sich phänomenales Bewusstsein zu Zugriffsbewusstsein? Gibt es Erfahrungen, die wir haben ohne darauf Zugriff zu haben, und was bedeutet das für unser Verständnis von Bewusstsein, wenn nicht alle bewussten Inhalte gleichzeitig kognitiv verfügbar sind?",
+    "query_type": "long",
+    "word_count": 36,
+    "expected_docs": [
+      17,
+      29,
+      30,
+      2,
+      21
+    ],
+    "session_id": "937f6e02-3776-4e68-870b-2c1cb2987b4c",
+    "created_at": "2025-11-18T07:42:31.335203",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 75,
+    "query": "Wie entsteht subjektive phänomenale Erfahrung aus rein neuronaler Aktivität und warum ist dies das Hard Problem?",
+    "query_type": "medium",
+    "word_count": 16,
+    "expected_docs": [
+      14,
+      11
+    ],
+    "session_id": "a7981b7c-8346-4da4-86a5-cf339d834086",
+    "created_at": "2025-11-18T07:42:31.334781",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 76,
+    "query": "Wie verhält sich phänomenales Bewusstsein zu Zugriffsbewusstsein? Gibt es Erfahrungen, die wir haben ohne darauf Zugriff zu haben, und was bedeutet das für unser Verständnis von Bewusstsein, wenn nicht alle bewussten Inhalte gleichzeitig kognitiv verfügbar sind?",
+    "query_type": "long",
+    "word_count": 36,
+    "expected_docs": [
+      13,
+      23
+    ],
+    "session_id": "923103e5-a593-40c5-8da3-c4676ab41f1f",
+    "created_at": "2025-11-18T07:42:31.335139",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 77,
+    "query": "Wie entsteht Motivation?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      22,
+      9
+    ],
+    "session_id": "caf81faa-f0e9-459f-b490-f94443602cec",
+    "created_at": "2025-11-18T07:42:31.334572",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 78,
+    "query": "Was ist Wahrnehmung?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      24,
+      12,
+      5,
+      19,
+      23
+    ],
+    "session_id": "34ec5ca1-334c-4f8e-84c2-7240e06473bb",
+    "created_at": "2025-11-18T07:42:31.334411",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 79,
+    "query": "Wie unterscheidet sich künstliche von natürlicher Intelligenz bezüglich Flexibilität Kreativität und Kontextverständnis in der KI Forschung?",
+    "query_type": "medium",
+    "word_count": 16,
+    "expected_docs": [
+      15
+    ],
+    "session_id": "ea59e72a-7fdc-410c-a78a-4716811febf5",
+    "created_at": "2025-11-18T07:42:31.334872",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 80,
+    "query": "Wie lernen wir?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      16,
+      20,
+      1
+    ],
+    "session_id": "1a0c67f6-a4ef-447f-a34b-c0ac53abb4a3",
+    "created_at": "2025-11-18T07:42:31.334549",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 81,
+    "query": "Wie unterscheiden sich deklaratives und prozedurales Gedächtnis in ihrer neuronalen Basis und ihren Funktionen?",
+    "query_type": "medium",
+    "word_count": 14,
+    "expected_docs": [
+      22
+    ],
+    "session_id": "4ed2f089-8476-49fa-aad4-252ca59a3b41",
+    "created_at": "2025-11-18T07:42:31.335053",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 82,
+    "query": "Was ist Emotion?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      20,
+      23,
+      15,
+      3
+    ],
+    "session_id": "a3771fe5-3881-4e2c-b7b0-b447fd9a6fa6",
+    "created_at": "2025-11-18T07:42:31.334514",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 83,
+    "query": "Wie entsteht subjektive phänomenale Erfahrung aus rein neuronaler Aktivität und warum ist dies das Hard Problem?",
+    "query_type": "medium",
+    "word_count": 16,
+    "expected_docs": [
+      14,
+      22
+    ],
+    "session_id": "e3125085-f9af-4246-a2cc-fdc7e4c0ed53",
+    "created_at": "2025-11-18T07:42:31.334746",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 84,
+    "query": "Welche zentrale Rolle spielt das Gedächtnis beim Lernen und wie interagieren Arbeitsgedächtnis und Langzeitgedächtnis dabei?",
+    "query_type": "medium",
+    "word_count": 15,
+    "expected_docs": [
+      18,
+      16,
+      20,
+      27
+    ],
+    "session_id": "60fe4a8b-b655-44f4-b10b-fd3bbc91b2bb",
+    "created_at": "2025-11-18T07:42:31.334807",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 85,
+    "query": "Wie lernen wir?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      24,
+      18,
+      13,
+      21,
+      27
+    ],
+    "session_id": "59b43a57-0e4a-4322-99f4-93646a18ad0a",
+    "created_at": "2025-11-18T07:42:31.334607",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 86,
+    "query": "Wie hängen Bewusstsein und Selbstwahrnehmung zusammen und welche neuronalen Korrelate sind dafür verantwortlich in der modernen Forschung?",
+    "query_type": "medium",
+    "word_count": 17,
+    "expected_docs": [
+      29,
+      12,
+      30
+    ],
+    "session_id": "e369450d-efc8-43e9-a2e6-13afb4eca79d",
+    "created_at": "2025-11-18T07:42:31.334906",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 87,
+    "query": "Wie funktioniert Intuition?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      10,
+      3,
+      22
+    ],
+    "session_id": "a0677a87-6774-4ea1-88f4-b85b59fc2b52",
+    "created_at": "2025-11-18T07:42:31.334591",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 88,
+    "query": "Warum sind Träume oft so bizarr und unlogisch und welche Funktion könnte diese Bizarrerie haben nach modernen Schlafforschungstheorien?",
+    "query_type": "medium",
+    "word_count": 18,
+    "expected_docs": [
+      24
+    ],
+    "session_id": "9dcc6bbb-fca1-4f4f-ba22-7c2e2b634d2e",
+    "created_at": "2025-11-18T07:42:31.334959",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 89,
+    "query": "Was ist Selbstwahrnehmung?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      20,
+      11
+    ],
+    "session_id": "1bcbc5ad-dc6a-4b1f-ac8e-ef8dc767faf9",
+    "created_at": "2025-11-18T07:42:31.334377",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 90,
+    "query": "Was ist Identität?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      4,
+      13,
+      23,
+      10,
+      17
+    ],
+    "session_id": "71a562ad-7106-4bc9-9553-c77cd1360a88",
+    "created_at": "2025-11-18T07:42:31.334327",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 91,
+    "query": "Was ist Wahrnehmung?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      26,
+      19,
+      27,
+      12
+    ],
+    "session_id": "84127758-c338-462e-860b-d66847bdd62d",
+    "created_at": "2025-11-18T07:42:31.334526",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 92,
+    "query": "Warum ist der Turing-Test als Maß für maschinelle Intelligenz umstritten und welche Alternativen werden diskutiert?",
+    "query_type": "medium",
+    "word_count": 15,
+    "expected_docs": [
+      12,
+      25,
+      11,
+      14
+    ],
+    "session_id": "82305dbe-746b-479d-a14c-843715bcc0f1",
+    "created_at": "2025-11-18T07:42:31.334798",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 93,
+    "query": "Was bedeutet Freiheit?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      13,
+      15,
+      12,
+      27,
+      1
+    ],
+    "session_id": "5ba7f82e-ea2a-43a1-a5ac-6355916b4eb2",
+    "created_at": "2025-11-18T07:42:31.334471",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 94,
+    "query": "Wie funktioniert Gedächtnis?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      20,
+      6,
+      16,
+      12
+    ],
+    "session_id": "a1f38084-f9a4-45fc-a9a5-c7add965e459",
+    "created_at": "2025-11-18T07:42:31.334337",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 95,
+    "query": "Was bedeutet Bewusstsein?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      23,
+      3,
+      10,
+      18,
+      26
+    ],
+    "session_id": "7d67d469-badf-4ef2-9174-f48f903f53c3",
+    "created_at": "2025-11-18T07:42:31.334402",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 96,
+    "query": "Wie entsteht Kreativität?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      22,
+      30,
+      25
+    ],
+    "session_id": "9b351e6d-33a9-4c6a-aee5-8cea91f643e9",
+    "created_at": "2025-11-18T07:42:31.334361",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 97,
+    "query": "Wie entwickelt sich abstraktes Denken im Kindesalter nach Piaget und welche neueren Erkenntnisse gibt es dazu?",
+    "query_type": "medium",
+    "word_count": 16,
+    "expected_docs": [
+      16,
+      8,
+      28,
+      18,
+      21
+    ],
+    "session_id": "42d1b50b-581e-4a94-83d2-76f2cb3c7087",
+    "created_at": "2025-11-18T07:42:31.334738",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 98,
+    "query": "Wie kann man das Hard Problem of Consciousness philosophisch und neurowissenschaftlich angehen und welche Theorien existieren?",
+    "query_type": "medium",
+    "word_count": 16,
+    "expected_docs": [
+      27,
+      30,
+      10,
+      17
+    ],
+    "session_id": "be3e6453-8d9d-4587-b7d3-790388207e1e",
+    "created_at": "2025-11-18T07:42:31.334889",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 99,
+    "query": "Warum träumen wir?",
+    "query_type": "short",
+    "word_count": 3,
+    "expected_docs": [
+      17,
+      26,
+      1
+    ],
+    "session_id": "2fdf87c5-357e-478e-9889-b954af164535",
+    "created_at": "2025-11-18T07:42:31.334583",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  },
+  {
+    "id": 100,
+    "query": "Wie unterscheiden sich verschiedene Gedächtnistheorien grundlegend in ihrer Erklärung von Vergessen und Gedächtnisverfall über Zeit?",
+    "query_type": "medium",
+    "word_count": 15,
+    "expected_docs": [
+      19,
+      4,
+      18,
+      26,
+      6
+    ],
+    "session_id": "2cf9e0d7-2dd4-4266-b448-b64adf3ae927",
+    "created_at": "2025-11-18T07:42:31.334764",
+    "labeled_by": "ethr",
+    "notes": "Mock data - infrastructure testing"
+  }
+]

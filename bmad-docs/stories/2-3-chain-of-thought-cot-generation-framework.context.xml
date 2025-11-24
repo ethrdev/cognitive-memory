@@ -1,0 +1,372 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>2</epicId>
+    <storyId>3</storyId>
+    <title>Chain-of-Thought (CoT) Generation Framework</title>
+    <status>ready-for-dev</status>
+    <generatedAt>2025-11-16</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>bmad-docs/stories/2-3-chain-of-thought-cot-generation-framework.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Claude Code</asA>
+    <iWant>Antworten mit explizitem Reasoning (CoT: Thought → Reasoning → Answer → Confidence) generieren</iWant>
+    <soThat>Transparenz und Nachvollziehbarkeit gewährleistet sind</soThat>
+    <tasks>
+- Document CoT Generation Pattern &amp; Structure (AC: 1, 2)
+  - Erstelle `/docs/cot-generation-guide.md` mit CoT-Pattern-Dokumentation
+  - Dokumentiere alle 4 Komponenten (Thought, Reasoning, Answer, Confidence)
+  - Definiere Internal Reasoning Template für Claude Code
+  - Dokumentiere Ausgabe-Format für User (Answer + Confidence + Sources)
+
+- Implement Confidence Score Calculation Logic (AC: 3, 4)
+  - Dokumentiere Confidence-Berechnung basierend auf Retrieval Scores
+  - Definiere Score-Thresholds (High &gt;0.8, Medium 0.5-0.8, Low &lt;0.5)
+  - Implementiere Score-Aggregation aus Top-K Retrieval Results
+  - Dokumentiere Edge Cases (keine Results, alle Low Scores, etc.)
+
+- Create CoT Output Format &amp; Templates (AC: 1, 2, 4)
+  - Definiere strukturiertes Markdown-Format für CoT-Ausgabe
+  - Erstelle User-facing Format (Answer + Confidence + Sources)
+  - Definiere expandierbare Thought + Reasoning Sections (Power-User Feature)
+  - Dokumentiere L2 Insight ID Referenzierung in Sources
+
+- Test CoT Generation End-to-End (AC: alle)
+  - Test mit 5 Sample Queries (High/Medium/Low Confidence Mix)
+  - Verifiziere CoT 4-Teil Struktur wird generiert
+  - Verifiziere Confidence Scores korrekt berechnet werden
+  - Verifiziere User-Ausgabe korrekt formatiert ist
+  - Verifiziere Episode Memory Integration (falls ähnliche Queries vorhanden)
+  - Messe Latency (~2-3s für CoT Generation akzeptabel)
+
+- Document Performance &amp; Cost-Savings (AC: alle)
+  - Dokumentiere CoT Generation Latency (erwartete ~2-3s median)
+  - Dokumentiere Cost-Savings (€0/mo vs. Opus €92.50/mo)
+  - Dokumentiere Transparency Benefits (Thought + Reasoning sichtbar)
+  - Dokumentiere in `/docs/cot-evaluation.md`
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+**Given** Retrieved Context (Top-5 Dokumente) und Episode Memory (falls vorhanden)
+**When** Answer Generation durchgeführt wird
+**Then** wird CoT-Struktur generiert:
+
+1. **CoT 4-Teil Struktur:** Thought → Reasoning → Answer → Confidence wird für jede Antwort generiert (AC-2.3.1)
+
+2. **Strukturierte Komponenten:**
+   - **Thought:** Erste Intuition/Hypothese zur Antwort (1-2 Sätze)
+   - **Reasoning:** Explizite Begründung basierend auf Retrieved Docs + Episodes (3-5 Sätze)
+   - **Answer:** Finale Antwort an User (klar, präzise, direkt)
+   - **Confidence:** Score 0.0-1.0 basierend auf Retrieval-Quality (AC-2.3.2)
+
+3. **Confidence-Berechnung:** Score basiert auf Retrieval Quality (AC-2.3.3)
+   - **Hohe Confidence (&gt;0.8):** Top-1 Retrieval Score &gt;0.85, mehrere Docs übereinstimmend
+   - **Medium Confidence (0.5-0.8):** Top-1 Score 0.7-0.85, einzelnes Dokument relevant
+   - **Low Confidence (&lt;0.5):** Alle Scores &lt;0.7, inkonsistente oder fehlende Docs
+
+4. **Strukturierte Ausgabe:** User sieht Answer + Confidence + Quellen (L2 IDs), optional Thought + Reasoning expandierbar (AC-2.3.4)
+
+**And** CoT-Generation läuft intern in Claude Code ohne externe API-Calls (€0/mo):
+- Ersetzt Claude Opus API (hätte €92.50/mo gekostet)
+- Keine zusätzlichen Latency durch externe Calls
+- Cost-Savings: €92.50/mo → €0/mo (100% Reduktion)
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <!-- Technical Specification - Story 2.3 ACs (Authoritative) -->
+      <doc>
+        <path>bmad-docs/tech-spec-epic-2.md</path>
+        <title>Epic 2 Technical Specification</title>
+        <section>Story 2.3: Chain-of-Thought (CoT) Generation Framework (lines 399-403)</section>
+        <snippet>AC-2.3.1: CoT 4-Teil Struktur (Thought → Reasoning → Answer → Confidence). AC-2.3.2: Strukturierte Komponenten mit spezifischen Anforderungen (Thought 1-2 Sätze, Reasoning 3-5 Sätze mit Quellen, Answer klar/präzise, Confidence 0.0-1.0). AC-2.3.3: Confidence basiert auf Retrieval Quality (High &gt;0.8, Medium 0.5-0.8, Low &lt;0.5). AC-2.3.4: Strukturierte Ausgabe (Answer + Confidence + Sources für User, optional expandierbare Details).</snippet>
+      </doc>
+
+      <!-- CoT Generator Module Documentation -->
+      <doc>
+        <path>bmad-docs/tech-spec-epic-2.md</path>
+        <title>Epic 2 Technical Specification</title>
+        <section>Services and Modules - CoT Generator (lines 40-50)</section>
+        <snippet>CoT Generator ist in Claude Code implementiert und verantwortlich für Chain-of-Thought Reasoning. Input: Retrieved Context (Top-5 Docs) + Episode Memory. Output: Strukturierte Antwort mit Thought, Reasoning, Answer, Confidence. Owner: Claude Code (intern, €0/mo).</snippet>
+      </doc>
+
+      <!-- Story Definition from Epics -->
+      <doc>
+        <path>bmad-docs/epics.md</path>
+        <title>Epic Breakdown</title>
+        <section>Story 2.3: Chain-of-Thought (CoT) Generation Framework (lines 597-632)</section>
+        <snippet>Als Claude Code möchte ich Antworten mit explizitem Reasoning generieren, sodass Transparenz und Nachvollziehbarkeit gewährleistet sind. CoT-Format: Thought (erste Intuition 1-2 Sätze), Reasoning (Begründung mit Quellen 3-5 Sätze), Answer (finale Antwort), Confidence (Score basierend auf Retrieval Quality). Prerequisites: Story 2.2. Cost-Savings: €0 vs. €92.50/mo (hätte Opus API gebraucht).</snippet>
+      </doc>
+
+      <!-- PRD - Functional Requirements -->
+      <doc>
+        <path>bmad-docs/PRD.md</path>
+        <title>Product Requirements Document</title>
+        <section>FR006: Chain-of-Thought Generation (intern in Claude Code)</section>
+        <snippet>Claude Code generiert Antworten basierend auf abgerufenem Kontext mit explizitem Reasoning (CoT: thought → reasoning → answer → confidence), ohne externe API-Calls (ersetzt Opus, €0/mo statt €92.50/mo).</snippet>
+      </doc>
+
+      <!-- Architecture Context -->
+      <doc>
+        <path>bmad-docs/architecture.md</path>
+        <title>System Architecture</title>
+        <section>High-Level Architektur - Claude Code (lines 40-56)</section>
+        <snippet>Claude Code (Sonnet 4.5 in MAX Subscription) führt Query Expansion, CoT Generation und Planning intern aus (€0/mo). CoT Generation ist Teil des internen Reasoning-Prozesses, kein separates MCP Tool. MCP Server übernimmt nur Persistence und externe API-Koordination.</snippet>
+      </doc>
+
+      <!-- Previous Story - Integration Patterns -->
+      <doc>
+        <path>bmad-docs/stories/2-2-query-expansion-logik-intern-in-claude-code.md</path>
+        <title>Story 2.2: Query Expansion Logic</title>
+        <section>Dev Notes - RRF Fusion &amp; Retrieval Results</section>
+        <snippet>Story 2.2 etabliert Query Expansion mit 4 parallel Queries (Original + 3 Varianten), RRF Fusion via mcp_server/utils/query_expansion.py, und Top-5 deduplizierte Results. Story 2.3 nutzt diese Results als Input für Confidence Calculation. Jedes Result hat 'id' (L2 Insight ID), 'score' (RRF Score 0.0-1.0), und 'content'.</snippet>
+      </doc>
+
+      <!-- Query Expansion Documentation -->
+      <doc>
+        <path>docs/query-expansion-guide.md</path>
+        <title>Query Expansion Guide</title>
+        <section>RRF Fusion Pattern</section>
+        <snippet>Reciprocal Rank Fusion (RRF) merged 4 query results into Top-5 final results, dedupliziert by L2 ID. Output format: List[Dict] mit 'id', 'score', 'content', 'source_ids'. Scores sind 0.0-1.0, sortiert descending. Diese Scores sind Input für CoT Confidence Calculation.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <!-- Query Expansion Utilities - Provides Retrieval Results -->
+      <artifact>
+        <path>mcp_server/utils/query_expansion.py</path>
+        <kind>utility module</kind>
+        <symbol>merge_rrf_scores, deduplicate_by_l2_id</symbol>
+        <lines>1-120</lines>
+        <reason>Provides RRF fusion and deduplication for query expansion results. Story 2.3 uses the output (Top-5 results with scores) as input for Confidence Score Calculation. Functions return List[Dict] with 'id', 'score', 'content' fields.</reason>
+      </artifact>
+
+      <!-- Previous Story - Implementation Reference -->
+      <artifact>
+        <path>bmad-docs/stories/2-2-query-expansion-logik-intern-in-claude-code.md</path>
+        <kind>story documentation</kind>
+        <symbol>Dev Notes, Completion Notes</symbol>
+        <lines>244-442</lines>
+        <reason>Story 2.2 establishes Query Expansion and Retrieval patterns. Contains learnings about RRF fusion, Top-5 results format, and integration with hybrid_search MCP Tool. Story 2.3 builds directly on these patterns.</reason>
+      </artifact>
+
+      <!-- Note: No MCP Server code changes needed -->
+      <!-- CoT Generation runs internally in Claude Code, not as MCP Tool -->
+      <!-- The only integration is reading Episode Memory via MCP Resource before generation -->
+    </code>
+
+    <dependencies>
+      <python>
+        <package>mcp</package>
+        <version>&gt;=1.0.0</version>
+        <reason>MCP SDK for reading Episode Memory Resource before CoT generation</reason>
+      </python>
+      <python>
+        <package>openai</package>
+        <version>&gt;=1.0.0</version>
+        <reason>OpenAI API client (for embeddings in Story 2.2, provides retrieval results used by CoT)</reason>
+      </python>
+      <python>
+        <package>anthropic</package>
+        <version>&gt;=0.25.0</version>
+        <reason>Anthropic API client (used for Haiku evaluation in Story 2.5, after CoT generation)</reason>
+      </python>
+      <python>
+        <package>numpy</package>
+        <version>&gt;=1.24.0</version>
+        <reason>Numerical operations (used in confidence score calculation if implemented in Python)</reason>
+      </python>
+
+      <!-- Development Dependencies -->
+      <python>
+        <package>pytest</package>
+        <version>&gt;=7.4.0</version>
+        <reason>Testing framework (optional unit tests for confidence calculation algorithm)</reason>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <!-- Implementation Constraints -->
+    <constraint>
+      <type>Architecture</type>
+      <rule>CoT Generation MUST run internally in Claude Code as part of the reasoning process, NOT as a separate MCP Tool or external API call. This is a core architectural decision for cost optimization (€0/mo vs. €92.50/mo).</rule>
+    </constraint>
+
+    <constraint>
+      <type>Performance</type>
+      <rule>CoT Generation latency target: ~2-3s median. This is acceptable as "Denkzeit" (thinking time) for philosophical conversations and within the <5s end-to-end pipeline budget (NFR001).</rule>
+    </constraint>
+
+    <constraint>
+      <type>Integration</type>
+      <rule>CoT Generation MUST use retrieval results from Story 2.2 (Query Expansion + RRF Fusion) as input. The Top-5 results format is: List[Dict] with 'id' (L2 Insight ID), 'score' (RRF score 0.0-1.0), 'content', 'source_ids'.</rule>
+    </constraint>
+
+    <constraint>
+      <type>Episode Memory</type>
+      <rule>Before CoT Generation, Episode Memory MUST be checked via MCP Resource (memory://episode-memory?query=...&min_similarity=0.7). Top-3 relevant episodes (Cosine Similarity >0.70) should be integrated into Reasoning if available.</rule>
+    </constraint>
+
+    <constraint>
+      <type>Output Format</type>
+      <rule>CoT output MUST be structured Markdown with 4 components: Thought (1-2 sentences), Reasoning (3-5 sentences with source references), Answer (clear, concise), Confidence (0.0-1.0 score). User sees Answer + Confidence + Sources by default, with optional expandable Thought + Reasoning.</rule>
+    </constraint>
+
+    <constraint>
+      <type>Confidence Calculation</type>
+      <rule>Confidence Score MUST be calculated based on Retrieval Quality: High (>0.8) when Top-1 score >0.85 AND multiple docs agree, Medium (0.5-0.8) when Top-1 score 0.7-0.85 OR single relevant doc, Low (<0.5) when all scores <0.7.</rule>
+    </constraint>
+
+    <constraint>
+      <type>Transparency</type>
+      <rule>Reasoning MUST include explicit source references (L2 Insight IDs) and episode memory references when applicable. This fulfills UX1 (Transparenz über Blackbox) from PRD.</rule>
+    </constraint>
+
+    <constraint>
+      <type>Cost</type>
+      <rule>CoT Generation MUST remain at €0/mo. No external API calls for generation. All LLM operations run internally in Claude Code (covered by MAX subscription).</rule>
+    </constraint>
+
+    <constraint>
+      <type>Testing</type>
+      <rule>Story 2.3 testing is primarily manual in Claude Code interface. No automated unit tests required for v3.1. Testing MUST cover 5 scenarios: High/Medium/Low confidence queries, Episode Memory integration, and output format validation.</rule>
+    </constraint>
+  </constraints>
+
+  <interfaces>
+    <!-- MCP Resources (Read-Only) -->
+    <interface>
+      <name>memory://episode-memory</name>
+      <kind>MCP Resource</kind>
+      <signature>GET memory://episode-memory?query={query_text}&min_similarity={threshold}</signature>
+      <path>mcp_server/resources/episode_memory.py</path>
+      <description>Retrieves similar past episodes (verbalized reflections) based on query similarity. Returns Top-3 episodes with Cosine Similarity >0.70. Used BEFORE CoT generation to integrate "Lessons Learned" into Reasoning.</description>
+    </interface>
+
+    <!-- Retrieval Results from Story 2.2 -->
+    <interface>
+      <name>Retrieval Results (from hybrid_search)</name>
+      <kind>Data Contract</kind>
+      <signature>List[Dict] with fields: 'id' (str), 'score' (float 0.0-1.0), 'content' (str), 'source_ids' (List[int])</signature>
+      <path>mcp_server/tools/hybrid_search.py</path>
+      <description>Output from Query Expansion + RRF Fusion (Story 2.2). Top-5 deduplicated results sorted by RRF score descending. This is the primary input for CoT Generation and Confidence Calculation.</description>
+    </interface>
+
+    <!-- CoT Output Format -->
+    <interface>
+      <name>CoT Output Structure</name>
+      <kind>Data Model</kind>
+      <signature>
+        {
+          "thought": str (1-2 sentences),
+          "reasoning": str (3-5 sentences with sources),
+          "answer": str (final answer),
+          "confidence": float (0.0-1.0),
+          "sources": List[str] (L2 Insight IDs)
+        }
+      </signature>
+      <path>Internal Claude Code structure (not persisted as JSON, rendered as Markdown)</path>
+      <description>Internal structure for CoT generation. Rendered as structured Markdown for user display. Thought + Reasoning are optional (expandable), Answer + Confidence + Sources are always visible.</description>
+    </interface>
+
+    <!-- Confidence Calculation Function (Optional Reference) -->
+    <interface>
+      <name>calculate_confidence</name>
+      <kind>Function Signature</kind>
+      <signature>calculate_confidence(retrieval_results: List[Dict]) -> float</signature>
+      <path>Could be implemented in mcp_server/utils/confidence.py (optional, not required for v3.1)</path>
+      <description>Calculates confidence score based on retrieval quality. Input: List of search results with 'score' field. Output: Confidence score 0.0-1.0. Algorithm documented in Story 2.3 Dev Notes (lines 136-177).</description>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+Story 2.3 testing is primarily manual in Claude Code interface, as CoT Generation is an internal reasoning step without separate API boundaries. No automated unit tests required for v3.1 (personal use, single developer). Testing focuses on end-to-end validation of CoT structure, confidence calculation accuracy, and episode memory integration.
+
+Optional: Reference Python implementation of confidence calculation algorithm could be tested with pytest in mcp_server/tests/test_confidence.py, but this is NOT required for Story 2.3 completion.</standards>
+
+    <locations>
+- Manual testing: Claude Code interface (primary)
+- Optional unit tests: mcp_server/tests/test_confidence.py (if confidence.py module created)
+- Documentation: docs/cot-generation-guide.md, docs/cot-evaluation.md
+    </locations>
+
+    <ideas>
+<!-- Test Case 1: High Confidence Query (AC-2.3.3, AC-2.3.4) -->
+<test id="TC-2.3.1">
+  <scenario>High Confidence Test</scenario>
+  <query>Query with clear match in L2 Insights (e.g., "Was denke ich über Autonomie?")</query>
+  <expected>
+    - Confidence >0.8 (High)
+    - Thought + Reasoning + Answer + Confidence all generated
+    - Reasoning includes explicit L2 ID references
+    - Sources list shows L2 IDs in format [L2-123, L2-456, L2-789]
+  </expected>
+  <acceptance_criteria>AC-2.3.1, AC-2.3.2, AC-2.3.3, AC-2.3.4</acceptance_criteria>
+</test>
+
+<!-- Test Case 2: Medium Confidence Query (AC-2.3.3, AC-2.3.4) -->
+<test id="TC-2.3.2">
+  <scenario>Medium Confidence Test</scenario>
+  <query>Ambiguous query with multiple possible docs (e.g., "Wie verstehe ich die Beziehung zwischen X und Y?")</query>
+  <expected>
+    - Confidence 0.5-0.8 (Medium)
+    - Reasoning shows multiple perspectives from different docs
+    - Confidence score reflects ambiguity
+  </expected>
+  <acceptance_criteria>AC-2.3.3, AC-2.3.4</acceptance_criteria>
+</test>
+
+<!-- Test Case 3: Low Confidence Query (AC-2.3.3, AC-2.3.4) -->
+<test id="TC-2.3.3">
+  <scenario>Low Confidence Test</scenario>
+  <query>Query for completely new topic with no relevant docs (e.g., "Was ist meine Meinung zu [never discussed topic]?")</query>
+  <expected>
+    - Confidence <0.5 (Low)
+    - Answer acknowledges uncertainty ("Keine relevanten vergangenen Gespräche gefunden...")
+    - CoT structure still generated (not failure, but low confidence)
+  </expected>
+  <acceptance_criteria>AC-2.3.3, AC-2.3.4</acceptance_criteria>
+</test>
+
+<!-- Test Case 4: Episode Memory Integration (AC-2.3.1, AC-2.3.2) -->
+<test id="TC-2.3.4">
+  <scenario>Episode Memory Integration Test</scenario>
+  <query>Similar to past query with stored episode (e.g., "Bewusstsein und Autonomie")</query>
+  <expected>
+    - Reasoning integrates Episode Memory ("In vergangenen Gesprächen...")
+    - If episode has "Lesson Learned", it's mentioned in Reasoning
+    - Episode references are explicit (not just implicit)
+  </expected>
+  <acceptance_criteria>AC-2.3.1, AC-2.3.2</acceptance_criteria>
+</test>
+
+<!-- Test Case 5: Output Format Validation (AC-2.3.4) -->
+<test id="TC-2.3.5">
+  <scenario>Output Format Test</scenario>
+  <query>Any query</query>
+  <expected>
+    - User sees: Answer + Confidence + Sources (default view)
+    - Thought + Reasoning are optional (expandable via Markdown details tag)
+    - L2 IDs formatted as [L2-123, L2-456]
+    - Confidence displayed with category label (e.g., "0.87 (Hoch)")
+  </expected>
+  <acceptance_criteria>AC-2.3.4</acceptance_criteria>
+</test>
+
+<!-- Performance Test (NFR001) -->
+<test id="TC-2.3.6">
+  <scenario>Latency Test</scenario>
+  <query>Any query</query>
+  <expected>
+    - CoT Generation latency ~2-3s (acceptable, within <5s pipeline budget)
+    - Total pipeline latency <5s (p95): Query Expansion ~0.5s + Hybrid Search ~1s + CoT ~2-3s + Evaluation ~0.5s
+  </expected>
+  <acceptance_criteria>AC-2.3.1 (NFR001 Performance requirement)</acceptance_criteria>
+</test>
+    </ideas>
+  </tests>
+</story-context>

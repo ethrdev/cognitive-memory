@@ -1,0 +1,1703 @@
+{
+  "macro_avg_precision_at_5": 0.024000000000000004,
+  "query_count": 100,
+  "breakdown_by_type": {
+    "short": 0.026666666666666672,
+    "medium": 0.0,
+    "long": 0.0
+  },
+  "query_counts": {
+    "short": 90,
+    "medium": 10,
+    "long": 0
+  },
+  "individual_results": [
+    {
+      "query": "Wie entsteht Sprache?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        11,
+        21,
+        15,
+        39,
+        79
+      ],
+      "expected_docs": [
+        25
+      ]
+    },
+    {
+      "query": "Was ist Emotion?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        79,
+        67,
+        8,
+        77,
+        36
+      ],
+      "expected_docs": [
+        4
+      ]
+    },
+    {
+      "query": "Wie funktioniert Denken?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        24,
+        80,
+        29,
+        82,
+        95
+      ],
+      "expected_docs": [
+        12
+      ]
+    },
+    {
+      "query": "Wie entsteht Sprache?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        5,
+        82,
+        39,
+        94,
+        83
+      ],
+      "expected_docs": [
+        9,
+        11
+      ]
+    },
+    {
+      "query": "Was ist Emotion?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        7,
+        35,
+        14,
+        6,
+        10
+      ],
+      "expected_docs": [
+        30
+      ]
+    },
+    {
+      "query": "Was ist Ged\u00e4chtnis?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        74,
+        14,
+        54,
+        15,
+        59
+      ],
+      "expected_docs": [
+        12
+      ]
+    },
+    {
+      "query": "Was bedeutet Intelligenz?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        37,
+        97,
+        58,
+        27,
+        19
+      ],
+      "expected_docs": [
+        20,
+        17
+      ]
+    },
+    {
+      "query": "Was ist Emotion?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        30,
+        51,
+        43,
+        18,
+        73
+      ],
+      "expected_docs": [
+        23,
+        10,
+        9
+      ]
+    },
+    {
+      "query": "Was ist Bewusstsein?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        85,
+        63,
+        46,
+        51,
+        71
+      ],
+      "expected_docs": [
+        4
+      ]
+    },
+    {
+      "query": "Warum tr\u00e4umen wir?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        36,
+        60,
+        84,
+        71,
+        70
+      ],
+      "expected_docs": [
+        1,
+        18,
+        24
+      ]
+    },
+    {
+      "query": "Was ist Ged\u00e4chtnis?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        89,
+        9,
+        64,
+        19,
+        20
+      ],
+      "expected_docs": [
+        12,
+        23
+      ]
+    },
+    {
+      "query": "Was bedeutet Intelligenz?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        17,
+        79,
+        26,
+        82,
+        28
+      ],
+      "expected_docs": [
+        13,
+        8,
+        29
+      ]
+    },
+    {
+      "query": "Wie lernen wir?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        64,
+        92,
+        79,
+        1,
+        35
+      ],
+      "expected_docs": [
+        2,
+        8
+      ]
+    },
+    {
+      "query": "Warum tr\u00e4umen wir?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        74,
+        1,
+        9,
+        87,
+        89
+      ],
+      "expected_docs": [
+        11,
+        3
+      ]
+    },
+    {
+      "query": "Was ist Bewusstsein?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        22,
+        68,
+        29,
+        51,
+        26
+      ],
+      "expected_docs": [
+        19
+      ]
+    },
+    {
+      "query": "Was ist Ged\u00e4chtnis?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        43,
+        74,
+        89,
+        98,
+        2
+      ],
+      "expected_docs": [
+        7,
+        16,
+        28
+      ]
+    },
+    {
+      "query": "Was ist Emotion?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        12,
+        55,
+        3,
+        10,
+        40
+      ],
+      "expected_docs": [
+        19
+      ]
+    },
+    {
+      "query": "Was ist Kreativit\u00e4t?",
+      "query_type": "short",
+      "precision_at_5": 0.2,
+      "retrieved_ids": [
+        23,
+        92,
+        37,
+        16,
+        57
+      ],
+      "expected_docs": [
+        24,
+        23
+      ]
+    },
+    {
+      "query": "Was ist Kreativit\u00e4t?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        63,
+        57,
+        39,
+        92,
+        42
+      ],
+      "expected_docs": [
+        8,
+        1
+      ]
+    },
+    {
+      "query": "Wie lernen wir?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        43,
+        15,
+        48,
+        60,
+        63
+      ],
+      "expected_docs": [
+        20,
+        9
+      ]
+    },
+    {
+      "query": "Was ist Kreativit\u00e4t?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        32,
+        78,
+        38,
+        65,
+        50
+      ],
+      "expected_docs": [
+        1,
+        19,
+        25
+      ]
+    },
+    {
+      "query": "Wie entsteht Sprache?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        77,
+        70,
+        60,
+        88,
+        81
+      ],
+      "expected_docs": [
+        28,
+        10
+      ]
+    },
+    {
+      "query": "Wie entsteht Sprache?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        86,
+        39,
+        96,
+        19,
+        70
+      ],
+      "expected_docs": [
+        6
+      ]
+    },
+    {
+      "query": "Warum tr\u00e4umen wir?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        59,
+        20,
+        79,
+        86,
+        85
+      ],
+      "expected_docs": [
+        19,
+        10
+      ]
+    },
+    {
+      "query": "Was ist Kreativit\u00e4t?",
+      "query_type": "short",
+      "precision_at_5": 0.2,
+      "retrieved_ids": [
+        43,
+        29,
+        7,
+        91,
+        24
+      ],
+      "expected_docs": [
+        7,
+        12,
+        26
+      ]
+    },
+    {
+      "query": "Was ist Emotion?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        57,
+        43,
+        56,
+        9,
+        60
+      ],
+      "expected_docs": [
+        17,
+        3
+      ]
+    },
+    {
+      "query": "Was bedeutet Intelligenz?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        71,
+        36,
+        40,
+        93,
+        91
+      ],
+      "expected_docs": [
+        12,
+        30,
+        10
+      ]
+    },
+    {
+      "query": "Wie lernen wir?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        88,
+        42,
+        11,
+        80,
+        29
+      ],
+      "expected_docs": [
+        16,
+        28,
+        6
+      ]
+    },
+    {
+      "query": "Was ist Emotion?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        32,
+        70,
+        56,
+        87,
+        73
+      ],
+      "expected_docs": [
+        21,
+        2,
+        18
+      ]
+    },
+    {
+      "query": "Was ist Emotion?",
+      "query_type": "short",
+      "precision_at_5": 0.2,
+      "retrieved_ids": [
+        99,
+        45,
+        59,
+        24,
+        10
+      ],
+      "expected_docs": [
+        24,
+        25,
+        12
+      ]
+    },
+    {
+      "query": "Wie lernen wir?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        7,
+        21,
+        50,
+        49,
+        82
+      ],
+      "expected_docs": [
+        15
+      ]
+    },
+    {
+      "query": "Was ist Emotion?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        49,
+        30,
+        77,
+        81,
+        35
+      ],
+      "expected_docs": [
+        12
+      ]
+    },
+    {
+      "query": "Warum vergessen wir?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        77,
+        29,
+        35,
+        98,
+        56
+      ],
+      "expected_docs": [
+        24,
+        7,
+        5
+      ]
+    },
+    {
+      "query": "Was ist Emotion?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        57,
+        43,
+        49,
+        27,
+        18
+      ],
+      "expected_docs": [
+        9
+      ]
+    },
+    {
+      "query": "Was ist Bewusstsein?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        39,
+        29,
+        81,
+        53,
+        80
+      ],
+      "expected_docs": [
+        8,
+        11
+      ]
+    },
+    {
+      "query": "Wie entsteht Sprache?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        75,
+        84,
+        5,
+        13,
+        19
+      ],
+      "expected_docs": [
+        21,
+        14
+      ]
+    },
+    {
+      "query": "Wie entsteht Sprache?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        4,
+        38,
+        87,
+        44,
+        41
+      ],
+      "expected_docs": [
+        8
+      ]
+    },
+    {
+      "query": "Warum tr\u00e4umen wir?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        60,
+        52,
+        26,
+        29,
+        12
+      ],
+      "expected_docs": [
+        20,
+        18
+      ]
+    },
+    {
+      "query": "Was ist Kreativit\u00e4t?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        82,
+        16,
+        53,
+        51,
+        85
+      ],
+      "expected_docs": [
+        20,
+        5,
+        2
+      ]
+    },
+    {
+      "query": "Was ist Bewusstsein?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        60,
+        89,
+        49,
+        68,
+        70
+      ],
+      "expected_docs": [
+        26
+      ]
+    },
+    {
+      "query": "Wie entwickelt sich abstraktes Denken im Kindesalter?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        9,
+        74,
+        26,
+        53,
+        68
+      ],
+      "expected_docs": [
+        3,
+        30,
+        19,
+        22
+      ]
+    },
+    {
+      "query": "Wie entwickelt sich abstraktes Denken im Kindesalter?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        58,
+        67,
+        98,
+        42,
+        35
+      ],
+      "expected_docs": [
+        3,
+        29
+      ]
+    },
+    {
+      "query": "Wie entwickelt sich abstraktes Denken im Kindesalter?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        18,
+        47,
+        40,
+        32,
+        29
+      ],
+      "expected_docs": [
+        15,
+        9,
+        13,
+        21
+      ]
+    },
+    {
+      "query": "Welche kognitiven Prozesse sind beim Spracherwerb beteiligt?",
+      "query_type": "short",
+      "precision_at_5": 0.2,
+      "retrieved_ids": [
+        1,
+        23,
+        43,
+        93,
+        54
+      ],
+      "expected_docs": [
+        15,
+        1,
+        11
+      ]
+    },
+    {
+      "query": "Wie funktioniert semantisches vs. episodisches Ged\u00e4chtnis?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        9,
+        29,
+        58,
+        35,
+        91
+      ],
+      "expected_docs": [
+        5,
+        30,
+        3,
+        11
+      ]
+    },
+    {
+      "query": "Wie h\u00e4ngen Bewusstsein und Selbstwahrnehmung zusammen?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        11,
+        59,
+        39,
+        19,
+        84
+      ],
+      "expected_docs": [
+        23,
+        24,
+        8,
+        22
+      ]
+    },
+    {
+      "query": "Welche Rolle spielt das Ged\u00e4chtnis beim Lernen?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        86,
+        65,
+        43,
+        64,
+        68
+      ],
+      "expected_docs": [
+        11,
+        15,
+        13,
+        20
+      ]
+    },
+    {
+      "query": "Wie funktioniert semantisches vs. episodisches Ged\u00e4chtnis?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        36,
+        3,
+        91,
+        51,
+        43
+      ],
+      "expected_docs": [
+        5,
+        12,
+        1
+      ]
+    },
+    {
+      "query": "Warum haben Emotionen Einfluss auf Entscheidungen?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        78,
+        33,
+        97,
+        2,
+        1
+      ],
+      "expected_docs": [
+        17,
+        10,
+        5
+      ]
+    },
+    {
+      "query": "Warum sind Tr\u00e4ume oft so bizarr und unlogisch?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        49,
+        87,
+        93,
+        86,
+        79
+      ],
+      "expected_docs": [
+        30,
+        8,
+        3
+      ]
+    },
+    {
+      "query": "Welche kognitiven Prozesse sind beim Spracherwerb beteiligt?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        95,
+        32,
+        61,
+        56,
+        46
+      ],
+      "expected_docs": [
+        4,
+        16,
+        29,
+        14
+      ]
+    },
+    {
+      "query": "Wie h\u00e4ngen Bewusstsein und Selbstwahrnehmung zusammen?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        54,
+        19,
+        57,
+        83,
+        6
+      ],
+      "expected_docs": [
+        25,
+        27
+      ]
+    },
+    {
+      "query": "Warum haben Emotionen Einfluss auf Entscheidungen?",
+      "query_type": "short",
+      "precision_at_5": 0.2,
+      "retrieved_ids": [
+        8,
+        53,
+        30,
+        83,
+        81
+      ],
+      "expected_docs": [
+        8,
+        6,
+        22
+      ]
+    },
+    {
+      "query": "Welche neuronalen Mechanismen liegen der Aufmerksamkeit zugrunde?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        61,
+        3,
+        2,
+        5,
+        52
+      ],
+      "expected_docs": [
+        11,
+        28
+      ]
+    },
+    {
+      "query": "Wie funktioniert semantisches vs. episodisches Ged\u00e4chtnis?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        50,
+        35,
+        57,
+        39,
+        20
+      ],
+      "expected_docs": [
+        11,
+        13,
+        6
+      ]
+    },
+    {
+      "query": "Wie funktioniert semantisches vs. episodisches Ged\u00e4chtnis?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        35,
+        21,
+        86,
+        55,
+        44
+      ],
+      "expected_docs": [
+        23,
+        11,
+        17,
+        22
+      ]
+    },
+    {
+      "query": "Wie beeinflusst Kreativit\u00e4t die Probleml\u00f6sungsf\u00e4higkeit?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        31,
+        55,
+        98,
+        36,
+        27
+      ],
+      "expected_docs": [
+        23,
+        26
+      ]
+    },
+    {
+      "query": "Wie h\u00e4ngen Bewusstsein und Selbstwahrnehmung zusammen?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        62,
+        1,
+        48,
+        73,
+        10
+      ],
+      "expected_docs": [
+        17,
+        19
+      ]
+    },
+    {
+      "query": "Wie entwickelt sich abstraktes Denken im Kindesalter?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        60,
+        84,
+        55,
+        61,
+        12
+      ],
+      "expected_docs": [
+        4,
+        14,
+        20
+      ]
+    },
+    {
+      "query": "Wie beeinflusst Kreativit\u00e4t die Probleml\u00f6sungsf\u00e4higkeit?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        19,
+        25,
+        69,
+        54,
+        65
+      ],
+      "expected_docs": [
+        3,
+        4
+      ]
+    },
+    {
+      "query": "Warum haben Emotionen Einfluss auf Entscheidungen?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        14,
+        16,
+        58,
+        86,
+        45
+      ],
+      "expected_docs": [
+        24,
+        8,
+        11
+      ]
+    },
+    {
+      "query": "Welche kognitiven Prozesse sind beim Spracherwerb beteiligt?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        95,
+        11,
+        61,
+        100,
+        13
+      ],
+      "expected_docs": [
+        20,
+        4
+      ]
+    },
+    {
+      "query": "Wie funktioniert semantisches vs. episodisches Ged\u00e4chtnis?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        79,
+        74,
+        29,
+        83,
+        55
+      ],
+      "expected_docs": [
+        10,
+        2,
+        17,
+        11
+      ]
+    },
+    {
+      "query": "Welche kognitiven Prozesse sind beim Spracherwerb beteiligt?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        52,
+        4,
+        99,
+        60,
+        72
+      ],
+      "expected_docs": [
+        12,
+        16
+      ]
+    },
+    {
+      "query": "Wie funktioniert semantisches vs. episodisches Ged\u00e4chtnis?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        13,
+        48,
+        65,
+        93,
+        47
+      ],
+      "expected_docs": [
+        24,
+        6,
+        25
+      ]
+    },
+    {
+      "query": "Wie unterscheidet sich k\u00fcnstliche von nat\u00fcrlicher Intelligenz?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        90,
+        87,
+        46,
+        45,
+        57
+      ],
+      "expected_docs": [
+        2,
+        17,
+        11
+      ]
+    },
+    {
+      "query": "Wie beeinflusst Kreativit\u00e4t die Probleml\u00f6sungsf\u00e4higkeit?",
+      "query_type": "short",
+      "precision_at_5": 0.2,
+      "retrieved_ids": [
+        39,
+        23,
+        92,
+        22,
+        90
+      ],
+      "expected_docs": [
+        29,
+        10,
+        12,
+        23
+      ]
+    },
+    {
+      "query": "Wie h\u00e4ngen Bewusstsein und Selbstwahrnehmung zusammen?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        8,
+        1,
+        16,
+        65,
+        64
+      ],
+      "expected_docs": [
+        20,
+        6,
+        29,
+        9
+      ]
+    },
+    {
+      "query": "Wie entwickelt sich abstraktes Denken im Kindesalter?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        32,
+        31,
+        52,
+        85,
+        65
+      ],
+      "expected_docs": [
+        3,
+        22,
+        14
+      ]
+    },
+    {
+      "query": "Warum sind Tr\u00e4ume oft so bizarr und unlogisch?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        91,
+        4,
+        97,
+        41,
+        75
+      ],
+      "expected_docs": [
+        27,
+        18,
+        30,
+        13
+      ]
+    },
+    {
+      "query": "Welche neuronalen Mechanismen liegen der Aufmerksamkeit zugrunde?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        22,
+        81,
+        51,
+        46,
+        10
+      ],
+      "expected_docs": [
+        19,
+        17
+      ]
+    },
+    {
+      "query": "Wie unterscheidet sich k\u00fcnstliche von nat\u00fcrlicher Intelligenz?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        8,
+        100,
+        17,
+        40,
+        42
+      ],
+      "expected_docs": [
+        16,
+        21,
+        3,
+        5
+      ]
+    },
+    {
+      "query": "Welche Rolle spielt das Ged\u00e4chtnis beim Lernen?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        33,
+        9,
+        35,
+        49,
+        7
+      ],
+      "expected_docs": [
+        19,
+        15,
+        11
+      ]
+    },
+    {
+      "query": "Warum sind Tr\u00e4ume oft so bizarr und unlogisch?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        33,
+        92,
+        3,
+        75,
+        66
+      ],
+      "expected_docs": [
+        10,
+        11,
+        29,
+        28
+      ]
+    },
+    {
+      "query": "Wie h\u00e4ngen Bewusstsein und Selbstwahrnehmung zusammen?",
+      "query_type": "short",
+      "precision_at_5": 0.2,
+      "retrieved_ids": [
+        80,
+        21,
+        46,
+        73,
+        44
+      ],
+      "expected_docs": [
+        4,
+        21,
+        14,
+        18
+      ]
+    },
+    {
+      "query": "Wie funktioniert semantisches vs. episodisches Ged\u00e4chtnis?",
+      "query_type": "short",
+      "precision_at_5": 0.2,
+      "retrieved_ids": [
+        98,
+        10,
+        5,
+        17,
+        72
+      ],
+      "expected_docs": [
+        23,
+        13,
+        17
+      ]
+    },
+    {
+      "query": "Welche neuronalen Mechanismen liegen der Aufmerksamkeit zugrunde?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        74,
+        65,
+        73,
+        86,
+        47
+      ],
+      "expected_docs": [
+        27,
+        2,
+        12
+      ]
+    },
+    {
+      "query": "Welche kognitiven Prozesse sind beim Spracherwerb beteiligt?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        30,
+        98,
+        17,
+        68,
+        44
+      ],
+      "expected_docs": [
+        4,
+        23,
+        14
+      ]
+    },
+    {
+      "query": "Warum sind Tr\u00e4ume oft so bizarr und unlogisch?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        26,
+        22,
+        74,
+        88,
+        96
+      ],
+      "expected_docs": [
+        4,
+        15,
+        30,
+        14
+      ]
+    },
+    {
+      "query": "Wie beeinflusst Kreativit\u00e4t die Probleml\u00f6sungsf\u00e4higkeit?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        62,
+        80,
+        35,
+        66,
+        65
+      ],
+      "expected_docs": [
+        2,
+        9,
+        3
+      ]
+    },
+    {
+      "query": "Wie unterscheiden sich verschiedene Ged\u00e4chtnistheorien in ihrer Erkl\u00e4rung von Vergessen?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        93,
+        72,
+        4,
+        89,
+        8
+      ],
+      "expected_docs": [
+        29,
+        1,
+        5,
+        15
+      ]
+    },
+    {
+      "query": "Wie kann man das Hard Problem of Consciousness philosophisch und neurowissenschaftlich angehen?",
+      "query_type": "medium",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        92,
+        87,
+        64,
+        79,
+        97
+      ],
+      "expected_docs": [
+        20,
+        21,
+        4
+      ]
+    },
+    {
+      "query": "Welche evolution\u00e4ren Vorteile bietet Bewusstsein und warum hat es sich entwickelt?",
+      "query_type": "medium",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        70,
+        40,
+        61,
+        43,
+        5
+      ],
+      "expected_docs": [
+        17,
+        21,
+        10,
+        26,
+        30
+      ]
+    },
+    {
+      "query": "Wie unterscheiden sich verschiedene Ged\u00e4chtnistheorien in ihrer Erkl\u00e4rung von Vergessen?",
+      "query_type": "short",
+      "precision_at_5": 0.4,
+      "retrieved_ids": [
+        60,
+        14,
+        4,
+        29,
+        19
+      ],
+      "expected_docs": [
+        26,
+        14,
+        29,
+        13
+      ]
+    },
+    {
+      "query": "Wie kann man das Hard Problem of Consciousness philosophisch und neurowissenschaftlich angehen?",
+      "query_type": "medium",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        97,
+        70,
+        80,
+        35,
+        54
+      ],
+      "expected_docs": [
+        11,
+        15,
+        5,
+        17,
+        28
+      ]
+    },
+    {
+      "query": "Welche Rolle spielen Emotionen in der rationalen Entscheidungsfindung nach Damasio?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        71,
+        65,
+        76,
+        22,
+        57
+      ],
+      "expected_docs": [
+        18,
+        1,
+        6
+      ]
+    },
+    {
+      "query": "Welche Rolle spielen Emotionen in der rationalen Entscheidungsfindung nach Damasio?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        32,
+        95,
+        30,
+        55,
+        88
+      ],
+      "expected_docs": [
+        3,
+        12,
+        16
+      ]
+    },
+    {
+      "query": "Welche evolution\u00e4ren Vorteile bietet Bewusstsein und warum hat es sich entwickelt?",
+      "query_type": "medium",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        100,
+        91,
+        97,
+        95,
+        40
+      ],
+      "expected_docs": [
+        4,
+        23,
+        13,
+        16,
+        10
+      ]
+    },
+    {
+      "query": "Warum ist der Turing-Test als Ma\u00df f\u00fcr maschinelle Intelligenz umstritten?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        18,
+        24,
+        29,
+        9,
+        38
+      ],
+      "expected_docs": [
+        4,
+        22,
+        7,
+        15
+      ]
+    },
+    {
+      "query": "Warum ist der Turing-Test als Ma\u00df f\u00fcr maschinelle Intelligenz umstritten?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        72,
+        75,
+        45,
+        5,
+        81
+      ],
+      "expected_docs": [
+        15,
+        18,
+        11
+      ]
+    },
+    {
+      "query": "Welche evolution\u00e4ren Vorteile bietet Bewusstsein und warum hat es sich entwickelt?",
+      "query_type": "medium",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        22,
+        36,
+        60,
+        23,
+        43
+      ],
+      "expected_docs": [
+        8,
+        19,
+        5
+      ]
+    },
+    {
+      "query": "Wie kann man das Hard Problem of Consciousness philosophisch und neurowissenschaftlich angehen?",
+      "query_type": "medium",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        78,
+        96,
+        32,
+        85,
+        5
+      ],
+      "expected_docs": [
+        1,
+        17,
+        8
+      ]
+    },
+    {
+      "query": "Welche evolution\u00e4ren Vorteile bietet Bewusstsein und warum hat es sich entwickelt?",
+      "query_type": "medium",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        66,
+        5,
+        47,
+        77,
+        45
+      ],
+      "expected_docs": [
+        30,
+        1,
+        27
+      ]
+    },
+    {
+      "query": "Wie unterscheiden sich verschiedene Ged\u00e4chtnistheorien in ihrer Erkl\u00e4rung von Vergessen?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        41,
+        95,
+        98,
+        33,
+        57
+      ],
+      "expected_docs": [
+        29,
+        17,
+        18,
+        15,
+        26
+      ]
+    },
+    {
+      "query": "Welche Rolle spielen Emotionen in der rationalen Entscheidungsfindung nach Damasio?",
+      "query_type": "short",
+      "precision_at_5": 0.2,
+      "retrieved_ids": [
+        34,
+        72,
+        29,
+        84,
+        52
+      ],
+      "expected_docs": [
+        11,
+        1,
+        30,
+        25,
+        29
+      ]
+    },
+    {
+      "query": "Welche evolution\u00e4ren Vorteile bietet Bewusstsein und warum hat es sich entwickelt?",
+      "query_type": "medium",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        61,
+        8,
+        59,
+        84,
+        38
+      ],
+      "expected_docs": [
+        24,
+        20,
+        14,
+        18,
+        10
+      ]
+    },
+    {
+      "query": "Wie unterscheiden sich verschiedene Ged\u00e4chtnistheorien in ihrer Erkl\u00e4rung von Vergessen?",
+      "query_type": "short",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        13,
+        55,
+        87,
+        84,
+        83
+      ],
+      "expected_docs": [
+        15,
+        4,
+        25
+      ]
+    },
+    {
+      "query": "Welche evolution\u00e4ren Vorteile bietet Bewusstsein und warum hat es sich entwickelt?",
+      "query_type": "medium",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        43,
+        10,
+        45,
+        13,
+        70
+      ],
+      "expected_docs": [
+        7,
+        25,
+        19,
+        22
+      ]
+    },
+    {
+      "query": "Warum ist der Turing-Test als Ma\u00df f\u00fcr maschinelle Intelligenz umstritten?",
+      "query_type": "short",
+      "precision_at_5": 0.2,
+      "retrieved_ids": [
+        15,
+        61,
+        3,
+        33,
+        46
+      ],
+      "expected_docs": [
+        15,
+        12,
+        5
+      ]
+    },
+    {
+      "query": "Wie kann man das Hard Problem of Consciousness philosophisch und neurowissenschaftlich angehen?",
+      "query_type": "medium",
+      "precision_at_5": 0.0,
+      "retrieved_ids": [
+        85,
+        17,
+        48,
+        32,
+        37
+      ],
+      "expected_docs": [
+        9,
+        15,
+        19,
+        6
+      ]
+    }
+  ],
+  "timestamp": "2025-11-16T22:49:01.027206",
+  "weights_used": {
+    "semantic": 0.7,
+    "keyword": 0.3
+  },
+  "mock_mode": true
+}
