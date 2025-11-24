@@ -93,6 +93,16 @@ bmad-docs/
 .gemini/
 .opencode/
 
+# MCP configuration (user-specific, use .mcp.json.template)
+.mcp.json
+.mcp-alt.json
+
+# Debug and development scripts (keep local only)
+debug_*.py
+start-mcp-server.sh
+test_neon_connection.py
+config.yaml.backup.*
+
 # Internal/development documentation (keep local only)
 docs/README.md
 docs/HOW-TO-ACTIVATE-IO.md
