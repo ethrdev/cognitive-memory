@@ -2,7 +2,7 @@
 """
 MCP Server Main Entry Point
 
-Cognitive Memory System v3.1.0-Hybrid
+Cognitive Memory System v1.0.0
 MCP Server with PostgreSQL + pgvector backend
 
 This module provides the main entry point for the MCP Server using stdio transport.
@@ -161,7 +161,7 @@ async def main() -> None:
 
     try:
 
-        logger.info("Starting Cognitive Memory MCP Server v3.1.0-Hybrid")
+        logger.info("Starting Cognitive Memory MCP Server v1.0.0")
 
         # Initialize MCP server
         server = Server("cognitive-memory")
@@ -207,7 +207,7 @@ async def main() -> None:
         # Create initialization options
         init_options = InitializationOptions(
             server_name="cognitive-memory",
-            server_version="3.1.0-Hybrid",
+            server_version="1.0.0",
             capabilities=ServerCapabilities(tools={}, resources={}, prompts={}),
         )
 

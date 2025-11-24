@@ -1,13 +1,12 @@
 #!/bin/bash
-# Story 3.11: 7-Day Stability Test - Pre-Test Validation & Initialization
-# Author: BMad Dev-Story Workflow
-# Date: 2025-11-20
+# 7-Day Stability Test - Pre-Test Validation & Initialization
+# Cognitive Memory v1.0.0
 
 set -e  # Exit on error
 
 echo "═══════════════════════════════════════════════════════════════"
 echo "  7-Day Stability Test - Pre-Test Validation"
-echo "  Story 3.11: Production Readiness Validation"
+echo "  Production Readiness Validation"
 echo "═══════════════════════════════════════════════════════════════"
 echo ""
 
@@ -25,7 +24,8 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "CHECK 1: Epic 3 Stories Completion Status"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-SPRINT_STATUS="/home/ethr/01-projects/ai-experiments/i-o/bmad-docs/sprint-status.yaml"
+# Sprint status check disabled - planning files not included in public release
+SPRINT_STATUS=""
 
 if [ ! -f "$SPRINT_STATUS" ]; then
     echo -e "${RED}✗ FAIL: sprint-status.yaml not found${NC}"
