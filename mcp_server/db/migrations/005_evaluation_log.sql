@@ -1,5 +1,5 @@
 -- Migration 005: Evaluation Log Table
--- Story 2.5: Self-Evaluation mit Haiku API
+-- : Self-Evaluation mit Haiku API
 -- Date: 2025-11-16
 --
 -- Purpose:
@@ -43,7 +43,7 @@ CREATE INDEX idx_evaluation_log_reward ON evaluation_log(reward_score);
 CREATE INDEX idx_evaluation_log_cost ON evaluation_log(created_at, cost_eur);
 
 -- Comments for documentation
-COMMENT ON TABLE evaluation_log IS 'Detailed evaluation results for every answer evaluation (Story 2.5)';
+COMMENT ON TABLE evaluation_log IS 'Detailed evaluation results for every answer evaluation ()';
 COMMENT ON COLUMN evaluation_log.query IS 'User query that triggered the evaluation';
 COMMENT ON COLUMN evaluation_log.context IS 'Retrieved L2 Insights (Top-5 from Hybrid Search)';
 COMMENT ON COLUMN evaluation_log.answer IS 'Generated answer that was evaluated';

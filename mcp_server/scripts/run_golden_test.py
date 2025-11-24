@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Golden Test Cron Runner - Story 3.2
+Golden Test Cron Runner - 
 
 Daily execution script for Golden Test Set via direct Python import.
 Bypasses MCP protocol overhead for efficient cron job execution.

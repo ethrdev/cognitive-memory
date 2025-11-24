@@ -1,6 +1,6 @@
 #!/bin/bash
 # Environment Setup Verification Script
-# Story 3.7: Production Configuration & Environment Setup
+# 
 #
 # Purpose: Verify environment separation is configured correctly
 # Usage: ./scripts/verify_environment_setup.sh [development|production|all]
@@ -20,7 +20,7 @@ CONFIG_DIR="$PROJECT_ROOT/config"
 
 echo -e "${BLUE}==============================================================================${NC}"
 echo -e "${BLUE}Environment Setup Verification${NC}"
-echo -e "${BLUE}Story 3.7: Production Configuration & Environment Setup${NC}"
+echo -e "${BLUE}
 echo -e "${BLUE}==============================================================================${NC}"
 echo ""
 

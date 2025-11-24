@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 L2 Insights Git Export Script for Cognitive Memory System
-Story 3.6: PostgreSQL Backup Strategy Implementation
+: PostgreSQL Backup Strategy Implementation
 
 Exports L2 insights (content + metadata, excluding embeddings) to JSON format
 for Git-based fallback recovery. Embeddings can be regenerated via OpenAI API.

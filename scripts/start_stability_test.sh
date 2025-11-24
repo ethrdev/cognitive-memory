@@ -19,9 +19,9 @@ NC='\033[0m' # No Color
 # Validation results
 VALIDATION_PASSED=true
 
-# Check 1: Verify all Epic 3 Stories (3.1-3.10) marked as "done"
+# Check 1: Verify all Stories (3.1-3.10) marked as "done"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "CHECK 1: Epic 3 Stories Completion Status"
+echo "CHECK 1: Stories Completion Status"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # Sprint status check disabled - planning files not included in public release
@@ -39,12 +39,12 @@ else
         STATUS=$(grep "$STORY_KEY" "$SPRINT_STATUS" | grep -oP ':\s*\K\w+' || echo "not_found")
 
         if [ "$STATUS" != "done" ]; then
-            INCOMPLETE_STORIES+=("Story 3.${i}: $STATUS")
+            INCOMPLETE_STORIES+=(")
         fi
     done
 
     if [ ${#INCOMPLETE_STORIES[@]} -eq 0 ]; then
-        echo -e "${GREEN}✓ PASS: All Epic 3 Stories (3.1-3.10) marked as 'done'${NC}"
+        echo -e "${GREEN}✓ PASS: All Stories (3.1-3.10) marked as 'done'${NC}"
     else
         echo -e "${RED}✗ FAIL: Following stories NOT done:${NC}"
         for story in "${INCOMPLETE_STORIES[@]}"; do

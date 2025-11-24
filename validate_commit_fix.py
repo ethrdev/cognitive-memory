@@ -111,7 +111,7 @@ def validate_imports():
 
 
 def main():
-    print("🚨 CRITICAL BUGFIX VALIDATION - Story 1.8")
+    print("🚨 CRITICAL BUGFIX VALIDATION - ")
     print("=" * 50)
     print("Issue: Missing conn.commit() in add_episode() function")
     print("Impact: ALL episodes would be lost despite successful INSERT operations")

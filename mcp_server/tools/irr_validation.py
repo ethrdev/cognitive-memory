@@ -1,5 +1,5 @@
 """
-IRR Validation MCP Tool for Story 1.12
+IRR Validation MCP Tool for 
 
 MCP tool that provides IRR validation functionality using Cohen's Kappa
 for dual judge scores across all ground truth queries.

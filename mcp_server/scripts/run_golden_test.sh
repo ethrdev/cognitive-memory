@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Golden Test Cron Wrapper - Story 3.2
+# Golden Test Cron Wrapper - 
 #
 # Shell wrapper for daily Golden Test execution via cron.
 # Calls Python script with proper environment setup.

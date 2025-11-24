@@ -46,7 +46,7 @@ def validate_simple_functions(filepath):
 
 def main():
     """Run simple validation."""
-    print("🧪 Story 1.4 Simple Function Validation")
+    print("🧪  Simple Function Validation")
     print("=" * 50)
 
     tools_file = "mcp_server/tools/__init__.py"

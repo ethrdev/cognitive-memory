@@ -2,7 +2,7 @@
 Unit Tests for Query Expansion Utilities
 
 Tests for deduplication and RRF fusion functions used in query expansion.
-Part of Epic 2 (Story 2.2) - RAG Pipeline & Hybrid Calibration.
+Part of () - RAG Pipeline & Hybrid Calibration.
 
 Note: These tests verify the utility functions only. The actual query expansion
 (generating 3 semantic variants) happens internally during Claude Code's reasoning

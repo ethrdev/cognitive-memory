@@ -1,5 +1,5 @@
 """
-Comprehensive Tests for Story 1.12: IRR Validation & Contingency Plan
+Comprehensive Tests for : IRR Validation & Contingency Plan
 
 This test suite covers all components of the IRR validation system:
 - Global Kappa calculation (macro and micro averaging)

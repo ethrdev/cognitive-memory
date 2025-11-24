@@ -1,7 +1,7 @@
 """
 Configuration Management for Cognitive Memory System
 
-Story 3.7: Production Configuration & Environment Setup
+: Production Configuration & Environment Setup
 Handles environment-specific configuration loading with validation and error handling.
 
 Environment Loading Order:

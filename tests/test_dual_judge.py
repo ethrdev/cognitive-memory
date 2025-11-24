@@ -1,5 +1,5 @@
 """
-Comprehensive tests for Dual Judge Implementation (Story 1.11).
+Comprehensive tests for Dual Judge Implementation ().
 
 Tests GPT-4o + Haiku independent evaluation and Cohen's Kappa calculation.
 Uses mock clients for API testing and real database for integration testing.

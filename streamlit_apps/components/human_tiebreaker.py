@@ -1,5 +1,5 @@
 """
-Human Tiebreaker UI for Story 1.12
+Human Tiebreaker UI for 
 
 Streamlit application for manual review of high-disagreement queries
 when IRR validation shows Cohen's Kappa < 0.70.

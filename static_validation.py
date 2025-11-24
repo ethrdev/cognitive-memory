@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Static Code Validation for Story 1.4
+Static Code Validation for 
 Validates the implementation without requiring external dependencies
 """
 
@@ -221,7 +221,7 @@ def validate_error_handling(filepath):
 
 def main():
     """Run all static validation tests."""
-    print("🧪 Story 1.4 Static Code Validation")
+    print("🧪  Static Code Validation")
     print("=" * 60)
 
     tools_file = "mcp_server/tools/__init__.py"

@@ -387,7 +387,7 @@ class TestDatabaseIntegration:
             # It may not work perfectly due to 'english' FTS config
             assert "error" not in result
             logger.info(
-                "German content test completed - demonstrates language config issue for Epic 2"
+                "German content test completed - demonstrates language config issue for hybrid search"
             )
 
         finally:

@@ -213,7 +213,7 @@ async def measure_evaluation(
     start = time.perf_counter()
 
     try:
-        # Use evaluate_answer_with_fallback to include Story 3.4 fallback logic
+        # Use evaluate_answer_with_fallback to include  fallback logic
         result = await evaluate_answer_with_fallback(
             client,
             query,
@@ -553,7 +553,7 @@ End-to-End Query Response Time: **{validation['p95_total']:.3f}s** (p95)
 2. **Embedding:** OpenAI text-embedding-3-small API
 3. **Hybrid Search:** pgvector semantic + PostgreSQL full-text with RRF fusion
 4. **CoT Generation:** Answer generation (placeholder - not yet measured)
-5. **Evaluation:** Haiku API with fallback logic (Story 3.4)
+5. **Evaluation:** Haiku API with fallback logic ()
 
 ---
 
@@ -631,7 +631,7 @@ NFR001 threshold exceeded. Recommended optimizations:
 
 - **Check Haiku API Latency:** Profile API vs. network latency
 - **Consider Batch Evaluation:** Parallel queries (watch for rate limits)
-- **Review Retry-Logic Overhead:** Story 3.3 retry impact
+- **Review Retry-Logic Overhead:**  retry impact
 
 """
     else:
@@ -653,7 +653,7 @@ These values establish the performance baseline for future regression tests:
 
 **Baseline Date:** {datetime.now().strftime("%Y-%m-%d")}
 
-Monitor these metrics in Story 3.11 (7-Day Stability Testing) to detect performance degradation.
+Monitor these metrics in  (7-Day Stability Testing) to detect performance degradation.
 
 ---
 
@@ -663,13 +663,13 @@ Monitor these metrics in Story 3.11 (7-Day Stability Testing) to detect performa
 
 1. **Query Expansion:** Not yet measured (requires Claude Code integration)
 2. **CoT Generation:** Not yet measured (requires Claude Code integration)
-3. **Fallback Logic:** Haiku API evaluation includes Story 3.4 fallback overhead
+3. **Fallback Logic:** Haiku API evaluation includes  fallback overhead
 
 ### Next Steps
 
 1. Manual review: Verify all acceptance criteria met
 2. Re-run after optimizations (if needed)
-3. Integrate measurements into Story 3.11 regression tests
+3. Integrate measurements into  regression tests
 
 ---
 
@@ -709,7 +709,7 @@ async def main():
 
     except FileNotFoundError:
         logger.error(f"Golden Test Set not found: {GOLDEN_TEST_SET_PATH}")
-        logger.error("Run Story 3.1 to create Golden Test Set first")
+        logger.error("Run  to create Golden Test Set first")
         return
     except Exception as e:
         logger.error(f"Failed to load Golden Test Set: {e}")

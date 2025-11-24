@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Manual Integration Test for Story 2.4: Haiku API Setup
+Manual Integration Test for : Haiku API Setup
 
 Tests:
 1. API Client initialization (valid/invalid keys)
@@ -305,7 +305,7 @@ async def run_all_tests():
     print(f"\nTotal: {passed}/{total} tests passed")
 
     if passed == total:
-        print("\n✅ ALL TESTS PASSED - Story 2.4 infrastructure ready!")
+        print("\n✅ ALL TESTS PASSED -  infrastructure ready!")
         return 0
     else:
         print(f"\n⚠️  {total - passed} test(s) failed - review output above")

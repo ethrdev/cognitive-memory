@@ -42,7 +42,7 @@ async def log_evaluation(
         token_count: Total tokens used (input + output)
         cost_eur: Estimated cost in EUR
         api_name: API name for cost tracking (default: "haiku_eval")
-                  Use "haiku_reflexion" for reflexion calls (Story 2.6)
+                  Use "haiku_reflexion" for reflexion calls ()
 
     Example:
         >>> await log_evaluation(

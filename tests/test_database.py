@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Database Connection and Schema Test for Cognitive Memory System
-Story 1.2 - PostgreSQL + pgvector Setup
+ - PostgreSQL + pgvector Setup
 
 This script validates:
 1. PostgreSQL connection with .env credentials
@@ -267,7 +267,7 @@ def main() -> None:
 
         print("=" * 50)
         print("🎉 Alle PostgreSQL + pgvector Tests erfolgreich!")
-        print("✅ Story 1.2 Acceptance Criteria 4 vollständig validiert")
+        print("✅  Acceptance Criteria 4 vollständig validiert")
 
     finally:
         conn.close()

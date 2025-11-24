@@ -1,5 +1,5 @@
 -- Migration 003: Create validation_results table for IRR validation
--- Story 1.12: IRR Validation & Contingency Plan (Enhancement E1)
+-- : IRR Validation & Contingency Plan (Enhancement E1)
 
 -- Create validation_results table
 CREATE TABLE IF NOT EXISTS validation_results (
