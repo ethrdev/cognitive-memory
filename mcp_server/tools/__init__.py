@@ -65,12 +65,8 @@ def rrf_fusion(
     for rank, result in enumerate(semantic_results, start=1):
         doc_id = result["id"]
         score = weights["semantic"] / (k + rank)
-        merged_scores[doc_id] = {
-            "id": doc_id,
-            "content": result["content"],
-            "source_ids": result["source_ids"],
-            "score": score,
-        }
+        merged_scores[doc_id] = result.copy()
+        merged_scores[doc_id]["score"] = score
 
     # Keyword Search Scores (aggregate if doc already in merged_scores)
     for rank, result in enumerate(keyword_results, start=1):
@@ -82,12 +78,8 @@ def rrf_fusion(
             merged_scores[doc_id]["score"] += score
         else:
             # New doc from keyword search
-            merged_scores[doc_id] = {
-                "id": doc_id,
-                "content": result["content"],
-                "source_ids": result["source_ids"],
-                "score": score,
-            }
+            merged_scores[doc_id] = result.copy()
+            merged_scores[doc_id]["score"] = score
 
     # Sort by final RRF score (descending)
     sorted_results = sorted(
@@ -97,8 +89,36 @@ def rrf_fusion(
     return sorted_results
 
 
+def _build_filter_clause(filter_params: dict | None) -> tuple[str, list]:
+    """
+    Build SQL WHERE clause from filter parameters.
+    Supports top-level columns (io_category, is_identity, source_file)
+    and metadata JSONB fields.
+    """
+    if not filter_params:
+        return "", []
+
+    clauses = []
+    values = []
+
+    for key, value in filter_params.items():
+        # Check if key is a top-level column
+        if key in ["io_category", "is_identity", "source_file"]:
+            clauses.append(f"{key} = %s")
+            values.append(value)
+        # Otherwise assume it's in metadata JSONB
+        else:
+            clauses.append("metadata->>%s = %s")
+            values.extend([key, str(value)])
+
+    if not clauses:
+        return "", []
+
+    return " AND " + " AND ".join(clauses), values
+
+
 async def semantic_search(
-    query_embedding: list[float], top_k: int, conn: Any
+    query_embedding: list[float], top_k: int, conn: Any, filter_params: dict | None = None
 ) -> list[dict]:
     """
     Semantic search using pgvector cosine distance.
@@ -116,18 +136,24 @@ async def semantic_search(
 
     cursor = conn.cursor()
 
+    # Build filter clause
+    filter_clause, filter_values = _build_filter_clause(filter_params)
+
     # Cosine distance: <=> operator
     # Lower distance = higher similarity
-    cursor.execute(
-        """
-        SELECT id, content, source_ids,
+    query = f"""
+        SELECT id, content, source_ids, metadata, io_category, is_identity, source_file,
                embedding <=> %s::vector AS distance
         FROM l2_insights
+        WHERE 1=1 {filter_clause}
         ORDER BY distance
         LIMIT %s;
-        """,
-        (query_embedding, top_k),
-    )
+        """
+    
+    # Combine parameters: embedding, filter_values, top_k
+    params = [query_embedding] + filter_values + [top_k]
+    
+    cursor.execute(query, params)
 
     results = cursor.fetchall()
 
@@ -137,6 +163,10 @@ async def semantic_search(
             "id": row["id"],
             "content": row["content"],
             "source_ids": row["source_ids"],
+            "metadata": row["metadata"],
+            "io_category": row["io_category"],
+            "is_identity": row["is_identity"],
+            "source_file": row["source_file"],
             "distance": row["distance"],
             "rank": idx + 1,
         }
@@ -144,7 +174,9 @@ async def semantic_search(
     ]
 
 
-async def keyword_search(query_text: str, top_k: int, conn: Any) -> list[dict]:
+async def keyword_search(
+    query_text: str, top_k: int, conn: Any, filter_params: dict | None = None
+) -> list[dict]:
     """
     Keyword search using PostgreSQL Full-Text Search.
 
@@ -158,22 +190,28 @@ async def keyword_search(query_text: str, top_k: int, conn: Any) -> list[dict]:
     """
     cursor = conn.cursor()
 
+    # Build filter clause
+    filter_clause, filter_values = _build_filter_clause(filter_params)
+
     # ts_rank: Relevance score (higher = better match)
     # plainto_tsquery: Converts plain text to tsquery (handles spaces, punctuation)
-    cursor.execute(
-        """
-        SELECT id, content, source_ids,
+    query = f"""
+        SELECT id, content, source_ids, metadata, io_category, is_identity, source_file,
                ts_rank(
                    to_tsvector('english', content),
                    plainto_tsquery('english', %s)
                ) AS rank
         FROM l2_insights
         WHERE to_tsvector('english', content) @@ plainto_tsquery('english', %s)
+        {filter_clause}
         ORDER BY rank DESC
         LIMIT %s;
-        """,
-        (query_text, query_text, top_k),
-    )
+        """
+        
+    # Combine parameters: query_text, query_text, filter_values, top_k
+    params = [query_text, query_text] + filter_values + [top_k]
+    
+    cursor.execute(query, params)
 
     results = cursor.fetchall()
 
@@ -183,6 +221,10 @@ async def keyword_search(query_text: str, top_k: int, conn: Any) -> list[dict]:
             "id": row["id"],
             "content": row["content"],
             "source_ids": row["source_ids"],
+            "metadata": row["metadata"],
+            "io_category": row["io_category"],
+            "is_identity": row["is_identity"],
+            "source_file": row["source_file"],
             "rank": row["rank"],
             "rank_position": idx + 1,
         }
@@ -657,6 +699,7 @@ async def handle_hybrid_search(arguments: dict[str, Any]) -> dict[str, Any]:
         query_text = arguments.get("query_text")
         top_k = arguments.get("top_k", 5)
         weights = arguments.get("weights", {"semantic": 0.7, "keyword": 0.3})
+        filter_params = arguments.get("filter")
 
         # Parameter validation - query_text is required
         if not query_text or not isinstance(query_text, str):
@@ -712,8 +755,8 @@ async def handle_hybrid_search(arguments: dict[str, Any]) -> dict[str, Any]:
         # Execute searches in parallel
         with get_connection() as conn:
             # Run semantic and keyword searches
-            semantic_results = await semantic_search(query_embedding, top_k, conn)
-            keyword_results = await keyword_search(query_text, top_k, conn)
+            semantic_results = await semantic_search(query_embedding, top_k, conn, filter_params)
+            keyword_results = await keyword_search(query_text, top_k, conn, filter_params)
 
         # Apply RRF fusion
         fused_results = rrf_fusion(semantic_results, keyword_results, weights, k=60)
