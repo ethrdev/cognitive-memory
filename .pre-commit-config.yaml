@@ -62,8 +62,23 @@ repos:
     hooks:
       - id: bandit
         description: Check for common security issues
-        args: [-f, json, -o, bandit-report.json]
+        args: [-c, pyproject.toml, -r, .]
         exclude: ^tests/
+
+  # Secret detection - prevents accidental credential commits
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        description: Detect secrets in code before commit
+        args: ['--baseline', '.secrets.baseline']
+        exclude: |
+          (?x)^(
+            \.env\.template|
+            config/\.env\.template|
+            poetry\.lock|
+            .*\.json
+          )$
 
   # Dependency vulnerability scanning disabled due to pyproject.toml + requirements.txt conflict
   # Use: safety check manually when needed
