@@ -107,7 +107,26 @@ python -m mcp_server
 
 ### Claude Code Integration
 
-Add to `~/.config/claude-code/mcp-settings.json`:
+1. Copy the MCP configuration template:
+
+```bash
+cp .mcp.json.template .mcp.json
+```
+
+2. Edit `.mcp.json` and replace `${PROJECT_ROOT}` with your actual path:
+
+```json
+{
+  "mcpServers": {
+    "cognitive-memory": {
+      "type": "stdio",
+      "command": "/your/path/to/cognitive-memory/start_mcp_server.sh"
+    }
+  }
+}
+```
+
+3. Alternatively, add to `~/.config/claude-code/mcp-settings.json`:
 
 ```json
 {
