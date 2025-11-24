@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-Story 3.11: 7-Day Stability Test - Automated Report Generator
-Author: BMad Dev-Story Workflow
-Date: 2025-11-20
+7-Day Stability Test - Automated Report Generator
+Cognitive Memory v1.0.0
 
 Generates comprehensive Markdown stability report from metrics JSON.
 """
@@ -68,7 +67,7 @@ def generate_report(metrics: dict) -> str:
     # Generate report
     report = f"""# 7-Day Stability Test Report
 
-**Story:** 3.11 - 7-Day Stability Testing & Validation
+**Test:** 7-Day Stability Validation
 **Status:** {format_status_badge(overall_status)}
 **Test Period:** {start_time} bis {end_time}
 **Total Duration:** {elapsed_hours} Stunden (Target: 168 Stunden)
@@ -78,7 +77,7 @@ def generate_report(metrics: dict) -> str:
 
 ## 1. Executive Summary
 
-Dieser Report dokumentiert die Ergebnisse des 7-tägigen Stability Tests für das Cognitive Memory System v3.1.0-Hybrid. Der Test validiert die Production-Readiness gemäß NFR004 (System Reliability >99% Uptime).
+Dieser Report dokumentiert die Ergebnisse des 7-tägigen Stability Tests für das Cognitive Memory System v1.0.0. Der Test validiert die Production-Readiness gemäß NFR004 (System Reliability >99% Uptime).
 
 **Test Status:** {format_status_badge(overall_status)}
 
@@ -302,7 +301,7 @@ Dieser Report dokumentiert die Ergebnisse des 7-tägigen Stability Tests für da
     # Success recommendations
     if overall_status == "PASS":
         recommendations.append(
-            "**Production Deployment:** System ist production-ready - Proceed to Story 3.12 (Production Handoff Documentation)"
+            "**Production Deployment:** System ist production-ready - Proceed to next phase (Production Handoff Documentation)"
         )
 
     if not recommendations:
@@ -325,7 +324,7 @@ Dieser Report dokumentiert die Ergebnisse des 7-tägigen Stability Tests für da
     if overall_status == "PASS":
         report += f"""**7-Day Stability Test: ERFOLGREICH BESTANDEN ✅**
 
-Das Cognitive Memory System v3.1.0-Hybrid hat den 7-tägigen Stability Test erfolgreich bestanden:
+Das Cognitive Memory System v1.0.0 hat den 7-tägigen Stability Test erfolgreich bestanden:
 - ✅ Uptime: {uptime['percentage']}% (Target: >99%)
 - ✅ Success Rate: {success_rate['percentage']}% (Target: >99%)
 - ✅ Latency p95: {latency['p95']}s (Target: <5s)
@@ -334,7 +333,7 @@ Das Cognitive Memory System v3.1.0-Hybrid hat den 7-tägigen Stability Test erfo
 **NFR004 (System Reliability) validiert:** Production-Readiness bestätigt.
 
 **Next Steps:**
-1. Proceed to Story 3.12 (Production Handoff & Documentation)
+1. Proceed to next phase (Production Handoff & Documentation)
 2. Deploy System in Production Environment
 3. Continue daily monitoring (Health Checks, Budget Alerts, Drift Detection)
 """
@@ -352,7 +351,7 @@ Core Metrics sind erfüllt, aber minor Issues wurden identifiziert:
 **Next Steps:**
 1. Address identified issues (siehe Section 5)
 2. Re-calibrate in 2 weeks mit extended dataset
-3. Continue to Story 3.12 mit monitoring plan
+3. Continue to next phase mit monitoring plan
 """
     else:
         report += f"""**7-Day Stability Test: NICHT BESTANDEN ❌**
@@ -418,8 +417,8 @@ def main():
     print("Next Steps:")
     print(f"  1. Review report: {output_file}")
     print("  2. Add report to Git: git add docs/7-day-stability-report.md")
-    print("  3. Update Story 3.11 status based on results")
-    print("  4. Proceed to Story 3.12 (Production Handoff) if test passed")
+    print("  3. Update 3.11 status based on results")
+    print("  4. Proceed to next phase (Production Handoff) if test passed")
     print()
 
 

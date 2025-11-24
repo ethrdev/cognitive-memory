@@ -170,7 +170,6 @@ cognitive-memory/
 ├── scripts/              # Automation scripts
 ├── streamlit_apps/       # Ground truth labeling UI
 ├── systemd/              # Service configuration
-└── bmad-docs/            # Project planning (epics, stories)
 ```
 
 ## Performance Metrics

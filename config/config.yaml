@@ -21,7 +21,7 @@
 base:
   app:
     name: "Cognitive Memory System"
-    version: "3.1.0"
+    version: "1.0.0"
     description: "Hybrid Memory System with PostgreSQL + pgvector"
 
   memory:

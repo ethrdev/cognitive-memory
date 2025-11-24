@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "cognitive-memory-system"
-version = "3.1.0"
-description = "Cognitive Memory System v3.1.0-Hybrid - MCP Server with PostgreSQL + pgvector"
+version = "1.0.0"
+description = "Cognitive Memory System v1.0.0 - MCP Server with PostgreSQL + pgvector"
 authors = ["ethr <ethr@example.com>"]
 readme = "README.md"
 packages = [{include = "mcp_server"}]
