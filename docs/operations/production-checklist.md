@@ -296,14 +296,14 @@ journalctl -u cognitive-memory-mcp -f
   ```bash
   # Add to crontab:
   # Daily backup at 2 AM
-  0 2 * * * ENVIRONMENT=production /home/user/i-o/scripts/backup_postgres.sh
+  0 2 * * * ENVIRONMENT=production /home/user/cognitive-memory/scripts/backup_postgres.sh
   ```
 
 - [ ] **L2 Insights Git Export Cron Job:**
   ```bash
   # Add to crontab:
   # Daily export at 3 AM (after DB backup)
-  0 3 * * * ENVIRONMENT=production /home/user/i-o/scripts/export_l2_insights.py
+  0 3 * * * ENVIRONMENT=production /home/user/cognitive-memory/scripts/export_l2_insights.py
   ```
 
 - [ ] **Backup Verification:**
@@ -468,7 +468,7 @@ FATAL: Configuration error: Missing required environment variables in .env.produ
 
 **Symptom:**
 ```
-FileNotFoundError: Environment file not found: /home/user/i-o/config/.env.production
+FileNotFoundError: Environment file not found: /home/user/cognitive-memory/.env.production
 ```
 
 **Solution:**

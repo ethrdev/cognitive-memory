@@ -117,7 +117,7 @@ staged_dual_judge:
 
 Automatisch via Cron Job (1st of month, midnight):
 ```bash
-0 0 1 * * /path/to/i-o/scripts/validate_spot_checks.sh >> /var/log/mcp-server/spot-check-validation.log 2>&1
+0 0 1 * * /path/to/cognitive-memory/scripts/validate_spot_checks.sh >> /var/log/mcp-server/spot-check-validation.log 2>&1
 ```
 
 Oder manuell:
@@ -445,7 +445,7 @@ CREATE TABLE ground_truth (
 crontab -e
 
 # Add monthly validation (1st of month, midnight)
-0 0 1 * * /home/user/i-o/scripts/validate_spot_checks.sh >> /var/log/mcp-server/spot-check-validation.log 2>&1
+0 0 1 * * /home/user/cognitive-memory/scripts/validate_spot_checks.sh >> /var/log/mcp-server/spot-check-validation.log 2>&1
 ```
 
 **Logging:**

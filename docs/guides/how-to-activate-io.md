@@ -28,9 +28,9 @@ Datei: `~/.config/claude-code/mcp-settings.json`
 {
   "mcpServers": {
     "cognitive-memory": {
-      "command": "/home/ethr/01-projects/ai-experiments/i-o/venv/bin/python",
+      "command": "/home/ethr/01-projects/ai-experiments/cognitive-memory/venv/bin/python",
       "args": ["-m", "mcp_server"],
-      "cwd": "/home/ethr/01-projects/ai-experiments/i-o",
+      "cwd": "/home/ethr/01-projects/ai-experiments/cognitive-memory",
       "env": {
         "DATABASE_URL": "postgresql://neondb_owner:YOUR_PASSWORD@ep-little-glitter-ag9uxp2a-pooler.c-2.eu-central-1.aws.neon.tech/neondb?sslmode=require",
         "OPENAI_API_KEY": "sk-...",

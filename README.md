@@ -202,6 +202,24 @@ The start script automatically loads environment variables from `.env.developmen
 | [API Reference](docs/reference/api-reference.md) | Complete MCP tools and resources reference |
 | [Troubleshooting](docs/troubleshooting.md) | Common issues and solutions |
 | [Backup & Recovery](docs/operations/backup-recovery.md) | Disaster recovery procedures |
+| [Ecosystem Architecture](docs/ecosystem/architecture.md) | Position in the 4-layer ecosystem |
+
+### Documentation Structure
+
+- **`docs/`** - Operational docs (installation, guides, troubleshooting)
+- **`bmad-docs/`** - Project planning docs (PRD, architecture, epics)
+
+## Ecosystem Position
+
+cognitive-memory is **Layer 2 (Storage Layer)** in a 4-layer ecosystem:
+
+```
+Layer 4: Applications     - tethr, agentic-business
+Layer 3: Ethical Framework - i-o-system (consent, memory governance)
+Layer 2: Storage Layer    - cognitive-memory ← This project
+```
+
+The [i-o-system](https://github.com/ethrdev/i-o-system) uses cognitive-memory as its storage backend via an adapter pattern.
 
 ## Project Structure
 
@@ -212,7 +230,8 @@ cognitive-memory/
 │   ├── resources/        # 5 MCP resource implementations
 │   ├── db/               # Database layer and migrations
 │   └── external/         # OpenAI and Anthropic API clients
-├── docs/                 # Documentation
+├── docs/                 # Operational documentation
+├── bmad-docs/            # Project planning (PRD, architecture)
 ├── tests/                # Test suite
 ├── scripts/              # Automation scripts
 ├── streamlit_apps/       # Ground truth labeling UI

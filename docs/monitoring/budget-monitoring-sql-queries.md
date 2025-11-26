@@ -427,8 +427,8 @@ To use different budget values, replace `10.0` and `8.0` in queries with actual 
 
 ## Related Documentation
 
-- **PRD**: `/home/user/i-o/bmad-docs/PRD.md` - NFR003 Budget requirements
-- **Story 3.10**: `/home/user/i-o/bmad-docs/stories/3-10-budget-monitoring-cost-optimization-dashboard.md`
-- **Migration 004**: `/home/user/i-o/mcp_server/db/migrations/004_api_tracking_tables.sql`
-- **Migration 010**: `/home/user/i-o/mcp_server/db/migrations/010_api_cost_log_index.sql`
-- **Python API**: `/home/user/i-o/mcp_server/budget/` - Budget monitoring modules
+- **PRD**: `bmad-docs/PRD.md` - NFR003 Budget requirements
+- **Story 3.10**: `bmad-docs/stories/3-10-budget-monitoring-cost-optimization-dashboard.md`
+- **Migration 004**: `mcp_server/db/migrations/004_api_tracking_tables.sql`
+- **Migration 010**: `mcp_server/db/migrations/010_api_cost_log_index.sql`
+- **Python API**: `mcp_server/budget/` - Budget monitoring modules

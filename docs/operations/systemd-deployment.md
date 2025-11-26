@@ -121,7 +121,7 @@ Wants=postgresql.service
 Type=notify
 User=ethr
 WorkingDirectory=/home/user/i-o
-ExecStart=/home/user/i-o/venv/bin/python /home/user/i-o/mcp_server/__main__.py
+ExecStart=/home/user/cognitive-memory/venv/bin/python /home/user/cognitive-memory/mcp_server/__main__.py
 Restart=always
 RestartSec=10
 Environment="ENVIRONMENT=production"
@@ -274,7 +274,7 @@ journalctl -u cognitive-memory-mcp | grep -i "heartbeat\|notify"
 # Logs auf Environment Loading prüfen
 journalctl -u cognitive-memory-mcp | grep -i environment
 
-# Expected: "Production environment loaded from /home/user/i-o/config/.env.production"
+# Expected: "Production environment loaded from /home/user/cognitive-memory/.env.production"
 # If "Development environment loaded": Environment variable nicht gesetzt
 ```
 
