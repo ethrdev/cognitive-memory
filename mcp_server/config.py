@@ -360,3 +360,87 @@ def calculate_api_cost(api_name: str, input_tokens: int, output_tokens: int = 0)
             f"Unknown API name for cost calculation: {api_name}\n"
             "Supported APIs: openai_embeddings, gpt4o, haiku"
         )
+
+
+# =============================================================================
+# Story 4.6: Hybrid Search Configuration
+# =============================================================================
+
+
+def get_hybrid_search_weights() -> dict[str, float]:
+    """
+    Get hybrid search weights from configuration.
+
+    Story 4.6: Three-source hybrid search weights (semantic, keyword, graph).
+
+    Returns:
+        Dictionary with weights for semantic, keyword, and graph search.
+        Defaults to {"semantic": 0.6, "keyword": 0.2, "graph": 0.2} if not configured.
+
+    Example:
+        >>> weights = get_hybrid_search_weights()
+        >>> weights == {"semantic": 0.6, "keyword": 0.2, "graph": 0.2}
+        True
+    """
+    config = get_config()
+    memory_config = config.get("memory", {})
+    weights = memory_config.get("hybrid_search_weights", {})
+
+    return {
+        "semantic": float(weights.get("semantic", 0.6)),
+        "keyword": float(weights.get("keyword", 0.2)),
+        "graph": float(weights.get("graph", 0.2)),
+    }
+
+
+def get_query_routing_config() -> dict[str, Any]:
+    """
+    Get query routing configuration from config.yaml.
+
+    Story 4.6: Query routing for relational vs. standard queries.
+
+    Returns:
+        Dictionary with relational_keywords and relational_weights.
+        Defaults to hardcoded values if not configured.
+
+    Example:
+        >>> routing = get_query_routing_config()
+        >>> "relational_keywords" in routing
+        True
+        >>> "relational_weights" in routing
+        True
+    """
+    config = get_config()
+    memory_config = config.get("memory", {})
+    query_routing = memory_config.get("query_routing", {})
+
+    # Default relational keywords if not configured
+    default_keywords = {
+        "de": [
+            "nutzt", "verwendet", "verbunden", "abhängig", "Projekt", "Technologie",
+            "gehört zu", "hat", "benutzt", "verknüpft", "zusammenhängt", "basiert auf"
+        ],
+        "en": [
+            "uses", "connected", "dependent", "project", "technology", "belongs to",
+            "has", "relates to", "linked", "associated", "based on", "depends on"
+        ],
+    }
+
+    # Default relational weights if not configured
+    default_relational_weights = {
+        "semantic": 0.4,
+        "keyword": 0.2,
+        "graph": 0.4,
+    }
+
+    keywords = query_routing.get("relational_keywords", default_keywords)
+    relational_weights = query_routing.get("relational_weights", default_relational_weights)
+
+    return {
+        "relational_keywords": keywords,
+        "relational_weights": {
+            "semantic": float(relational_weights.get("semantic", 0.4)),
+            "keyword": float(relational_weights.get("keyword", 0.2)),
+            "graph": float(relational_weights.get("graph", 0.4)),
+        },
+    }

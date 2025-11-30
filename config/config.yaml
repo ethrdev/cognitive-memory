@@ -25,9 +25,55 @@ base:
     description: "Hybrid Memory System with PostgreSQL + pgvector"
 
   memory:
-    # Hybrid Search Configuration
+    # Hybrid Search Configuration (Story 4.6: Extended with Graph)
+    # Legacy weights (2-source) - kept for backwards compatibility
     semantic_weight: 0.7  # Weight for semantic similarity (0.0-1.0)
     keyword_weight: 0.3   # Weight for keyword similarity (0.0-1.0)
+
+    # Story 4.6: Three-source hybrid search weights
+    # Default weights for standard (non-relational) queries
+    hybrid_search_weights:
+      semantic: 0.6  # Semantic similarity weight
+      keyword: 0.2   # Keyword search weight
+      graph: 0.2     # Graph-based search weight
+
+    # Story 4.6: Query Routing Configuration
+    # Detects relational queries and adjusts weights automatically
+    query_routing:
+      # Keywords that indicate relational queries (German + English)
+      relational_keywords:
+        de:
+          - "nutzt"
+          - "verwendet"
+          - "verbunden"
+          - "abhängig"
+          - "Projekt"
+          - "Technologie"
+          - "gehört zu"
+          - "hat"
+          - "benutzt"
+          - "verknüpft"
+          - "zusammenhängt"
+          - "basiert auf"
+        en:
+          - "uses"
+          - "connected"
+          - "dependent"
+          - "project"
+          - "technology"
+          - "belongs to"
+          - "has"
+          - "relates to"
+          - "linked"
+          - "associated"
+          - "based on"
+          - "depends on"
+
+      # Weights for relational queries (boosted graph weight)
+      relational_weights:
+        semantic: 0.4
+        keyword: 0.2
+        graph: 0.4
 
     # Storage Configuration
     working_memory_max_items: 50
