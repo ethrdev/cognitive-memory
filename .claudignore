@@ -1,0 +1,220 @@
+# Claude Code Ignore File
+# This file tells Claude Code which files and directories to ignore when scanning
+
+# ============================================================================
+# Lock Files - Token-Fresser, enthalten tausende irrelevante Zeilen
+# ============================================================================
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+poetry.lock
+Pipfile.lock
+requirements.lock
+*.lock
+
+# ============================================================================
+# Build/Dist Ordner - Generierte Dateien, nicht für Logik relevant
+# ============================================================================
+dist/
+build/
+out/
+target/
+*.egg-info/
+.eggs/
+wheels/
+*.whl
+
+# ============================================================================
+# Node Modules und Dependencies
+# ============================================================================
+node_modules/
+.npm/
+.yarn/
+.pnp/
+.pnp.js
+
+# ============================================================================
+# Python Build Artefakte
+# ============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+develop-eggs/
+downloads/
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ============================================================================
+# Virtual Environments
+# ============================================================================
+venv/
+env/
+ENV/
+.venv/
+.env/
+.conda/
+
+# ============================================================================
+# Daten-Dateien - Große Datensätze
+# ============================================================================
+*.csv
+*.tsv
+*.xlsx
+*.xls
+*.parquet
+*.feather
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+*.db
+*.sqlite
+*.sqlite3
+
+# Große JSON-Dateien (falls Datensätze)
+# Kleine Config-JSONs werden nicht ignoriert
+data/
+datasets/
+*.data.json
+*.dataset.json
+*.large.json
+
+# ============================================================================
+# Logs - Können sehr groß werden
+# ============================================================================
+*.log
+logs/
+*.log.*
+log/
+*.out
+
+# ============================================================================
+# Cache und temporäre Dateien
+# ============================================================================
+.cache/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.coverage.*
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+dmypy.json
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# ============================================================================
+# IDE und Editor Dateien
+# ============================================================================
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.code-workspace
+
+# ============================================================================
+# OS-spezifische Dateien
+# ============================================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ============================================================================
+# Backup und temporäre Backups
+# ============================================================================
+*.backup
+*.bak
+*.old
+*.orig
+backups/
+*.backup.*
+
+# ============================================================================
+# Memory und sensitive Daten
+# ============================================================================
+memory/
+backups/
+i-o/
+i-o-consciousness-projekt/
+ethr/
+
+# ============================================================================
+# Build Outputs und generierte Dokumentation
+# ============================================================================
+site/
+_site/
+.jekyll-cache/
+.jekyll-metadata
+.sass-cache/
+
+# ============================================================================
+# Package Manager Caches
+# ============================================================================
+.pip/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ============================================================================
+# Testing und Coverage
+# ============================================================================
+.tox/
+.nox/
+htmlcov/
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+
+# ============================================================================
+# Security Reports
+# ============================================================================
+bandit-report.json
+*.security-report.*
+
+# ============================================================================
+# Große Binärdateien
+# ============================================================================
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+*.dmg
+*.iso
+
+# ============================================================================
+# Streaming und Media (falls vorhanden)
+# ============================================================================
+*.mp4
+*.avi
+*.mov
+*.mp3
+*.wav
+*.flac
+
