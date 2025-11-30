@@ -70,6 +70,8 @@ chmod 600 .env.development
 # Edit .env.development with your API keys
 ```
 
+**Note**: The Library API is included in the same package as the MCP server - no additional installation required for direct Python integration.
+
 ### Database Setup (Neon Cloud)
 
 This project uses [Neon Cloud](https://neon.tech) for serverless PostgreSQL with pgvector.
@@ -170,6 +172,68 @@ cp .mcp.json.template .mcp.json
 ```
 
 The start script automatically loads environment variables from `.env.development`.
+
+## Library API
+
+The Cognitive Memory Library provides direct Python API access to all memory operations without MCP protocol overhead. **No additional installation required** - the library is included in the same package as the MCP server.
+
+### Quick Start
+
+```python
+from cognitive_memory import MemoryStore
+
+# Environment-based initialization
+with MemoryStore.from_env() as store:
+    # Hybrid search
+    results = store.search("künstliche intelligenz", top_k=5)
+
+    # Store insight with metadata
+    result = store.store_insight(
+        "Kognitive Architekturen benötigen modulare Designprinzipien",
+        source_ids=[1, 2, 3],
+        metadata={"category": "architecture"}
+    )
+
+    # Working memory operations
+    store.working.add("User prefers German explanations", importance=0.8)
+
+    # Graph operations
+    store.graph.add_node("Concept", "Machine Learning")
+    store.graph.add_edge("AI", "Machine Learning", "INCLUDES", weight=0.9)
+```
+
+### Key Features
+
+- **Direct Database Access**: ~25% faster than MCP tools (no protocol overhead)
+- **Type Safety**: Full type hints with static analysis support
+- **Connection Management**: Built-in connection pooling and context manager support
+- **Exception Handling**: Structured exception hierarchy for robust error handling
+- **Ecosystem Integration**: Designed for integration in i-o-system and other Python projects
+
+### When to Use Library API vs MCP Tools
+
+| Use Case | Recommended Approach |
+|----------|----------------------|
+| **Claude Code Integration** | MCP Tools |
+| **Python Applications** | Library API |
+| **Unit Testing** | Library API (better mocking) |
+| **Performance-Critical** | Library API |
+| **Cross-Language** | MCP Tools |
+| **Rapid Prototyping** | MCP Tools |
+
+### Installation
+
+The Library API is included in the main package. Just import:
+
+```python
+from cognitive_memory import MemoryStore
+```
+
+For detailed API documentation, see: [Library API Reference](docs/api/library.md)
+
+### Migration from MCP Tools
+
+For guidance on migrating from MCP tools to the Library API, see: [Migration Guide](docs/migration-guide.md)
 
 ## MCP Tools
 
