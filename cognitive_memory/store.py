@@ -369,6 +369,9 @@ class MemoryStore:
         if not isinstance(source_ids, list):
             raise ValidationError("source_ids must be a list of integers")
 
+        if metadata is not None and not isinstance(metadata, dict):
+            raise ValidationError("metadata must be a dictionary or None")
+
         # Validate all source_ids are integers
         try:
             source_ids = [int(id) for id in source_ids]
@@ -796,9 +799,122 @@ class WorkingMemory:
             except Exception as e:
                 raise RuntimeError(f"Failed to list working memory items: {e}") from e
 
+    def get(self, item_id: int) -> WorkingMemoryItem | None:
+        """
+        Get a specific working memory item by ID with LRU touch.
+
+        Args:
+            item_id: ID of the working memory item to retrieve
+
+        Returns:
+            WorkingMemoryItem if found, None if not found
+
+        Raises:
+            ConnectionError: If not connected to database
+            ValidationError: If item_id is not a positive integer
+        """
+        # Input validation
+        if not isinstance(item_id, int) or item_id <= 0:
+            raise ValidationError("Item ID must be a positive integer")
+
+        # Check connection
+        if not self._is_connected:
+            raise ConnectionError("WorkingMemory is not connected")
+
+        # Use the shared connection manager
+        with self._connection_manager.get_connection() as conn:
+            try:
+                cursor = conn.cursor()
+
+                # Get the item by ID
+                cursor.execute(
+                    """
+                    SELECT id, content, importance, last_accessed, created_at
+                    FROM working_memory
+                    WHERE id = %s;
+                    """,
+                    (item_id,),
+                )
+
+                result = cursor.fetchone()
+
+                if not result:
+                    return None
+
+                # Update last_accessed (LRU touch)
+                cursor.execute(
+                    """
+                    UPDATE working_memory
+                    SET last_accessed = NOW()
+                    WHERE id = %s;
+                    """,
+                    (item_id,),
+                )
+
+                conn.commit()
+
+                from cognitive_memory.types import WorkingMemoryItem
+                item = WorkingMemoryItem(
+                    id=int(result["id"]),
+                    content=str(result["content"]),
+                    importance=float(result["importance"]),
+                    last_accessed=result["last_accessed"],
+                    created_at=result["created_at"],
+                )
+
+                _logger.info(f"Retrieved and updated working memory item: {item_id}")
+                return item
+
+            except Exception as e:
+                conn.rollback()
+                raise RuntimeError(f"Failed to get working memory item: {e}") from e
+
     def clear(self) -> int:
-        """Clear all working memory items."""
-        raise NotImplementedError("Implemented in Story 5.5")
+        """
+        Clear all working memory items with stale memory archiving.
+
+        Returns:
+            Number of items cleared
+
+        Raises:
+            ConnectionError: If not connected to database
+        """
+        # Check connection
+        if not self._is_connected:
+            raise ConnectionError("WorkingMemory is not connected")
+
+        # Use the shared connection manager
+        with self._connection_manager.get_connection() as conn:
+            try:
+                cursor = conn.cursor()
+
+                # Archive critical items (importance > 0.8) to stale memory
+                cursor.execute(
+                    """
+                    INSERT INTO stale_memory (content, importance, archive_reason, created_at)
+                    SELECT content, importance, %s, created_at
+                    FROM working_memory
+                    WHERE importance > 0.8;
+                    """,
+                    ("CLEAR_ALL",),
+                )
+
+                # Count all items before deleting
+                cursor.execute("SELECT COUNT(*) as count FROM working_memory;")
+                result = cursor.fetchone()
+                cleared_count = int(result["count"])
+
+                # Delete all items
+                cursor.execute("DELETE FROM working_memory;")
+
+                conn.commit()
+
+                _logger.info(f"Cleared {cleared_count} items from working memory")
+                return cleared_count
+
+            except Exception as e:
+                conn.rollback()
+                raise RuntimeError(f"Failed to clear working memory: {e}") from e
 
 
 class EpisodeMemory:

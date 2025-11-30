@@ -12,7 +12,8 @@ Cognitive Memory is a multi-layer memory architecture that provides Claude Code 
 
 ### Key Features
 
-- **Hybrid Search**: Combines semantic similarity (80%) with keyword matching (20%) using RRF fusion
+- **Hybrid Search**: Combines semantic similarity (60%), keyword matching (20%), and graph relationships (20%) using RRF fusion
+- **GraphRAG Integration**: Graph-based entity and relationship storage for structured knowledge discovery
 - **Multi-Layer Memory**: L0 Raw Memory, Working Memory, L2 Insights, Episode Memory
 - **Verbal Reinforcement Learning**: Learns from mistakes through Haiku API-powered reflexion
 - **Dual-Judge Evaluation**: GPT-4o + Haiku for methodologically valid ground truth (Cohen's Kappa >0.70)
@@ -174,14 +175,21 @@ The start script automatically loads environment variables from `.env.developmen
 
 | Tool | Description |
 |------|-------------|
-| `ping` | Health check for connectivity testing |
+| **Memory Tools** ||
 | `store_raw_dialogue` | Store complete dialogue transcripts (L0) |
 | `compress_to_l2_insight` | Compress dialogues to semantic insights with embeddings |
-| `hybrid_search` | Semantic + keyword search with RRF fusion |
+| `hybrid_search` | Semantic + keyword + graph search with RRF fusion |
 | `update_working_memory` | Manage session context with LRU eviction |
 | `store_episode` | Store verbal reflexions from Haiku evaluation |
+| **Evaluation Tools** ||
 | `store_dual_judge_scores` | IRR validation with GPT-4o + Haiku |
 | `get_golden_test_results` | Daily model drift detection |
+| `ping` | Health check for connectivity testing |
+| **Graph Tools** ||
+| `graph_add_node` | Create or find graph nodes with optional vector linking |
+| `graph_add_edge` | Create relationships between entities with auto-upsert |
+| `graph_query_neighbors` | Find neighbor nodes with depth-limited traversal |
+| `graph_find_path` | Find shortest path between entities using BFS |
 
 ## MCP Resources
 
@@ -298,6 +306,7 @@ psql "$DATABASE_URL" -f mcp_server/db/migrations/012_add_graph_tables.sql
 | [Installation Guide](docs/guides/installation-guide.md) | Detailed setup instructions |
 | [Operations Manual](docs/operations/operations-manual.md) | Daily operations and maintenance |
 | [API Reference](docs/reference/api-reference.md) | Complete MCP tools and resources reference |
+| [GraphRAG Guide](docs/guides/graphrag-guide.md) | Graph-based entity and relationship management |
 | [Troubleshooting](docs/troubleshooting.md) | Common issues and solutions |
 | [Backup & Recovery](docs/operations/backup-recovery.md) | Disaster recovery procedures |
 
@@ -306,7 +315,7 @@ psql "$DATABASE_URL" -f mcp_server/db/migrations/012_add_graph_tables.sql
 ```
 cognitive-memory/
 ├── mcp_server/           # MCP Server implementation
-│   ├── tools/            # 8 MCP tool implementations
+│   ├── tools/            # 11 MCP tool implementations
 │   ├── resources/        # 5 MCP resource implementations
 │   ├── db/               # Database layer and migrations
 │   └── external/         # OpenAI and Anthropic API clients

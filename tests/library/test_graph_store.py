@@ -94,7 +94,7 @@ class TestGraphStore:
 
         result = self.graph_store.add_node("Python", "Technology")
 
-        assert result == int("existing-uuid")
+        assert result == "existing-uuid"
         mock_db_add_node.assert_called_once()
 
     def test_add_node_validation_empty_name(self):
@@ -136,7 +136,7 @@ class TestGraphStore:
 
         result = self.graph_store.add_edge("Python", "Django", "USES", 0.8)
 
-        assert result == int("edge-uuid-123")
+        assert result == "edge-uuid-123"
         mock_db_add_edge.assert_called_once_with(
             source_name="Python",
             target_name="Django",
@@ -151,7 +151,7 @@ class TestGraphStore:
 
         result = self.graph_store.add_edge("Python", "FastAPI", "USES")
 
-        assert result == int("edge-uuid-456")
+        assert result == "edge-uuid-456"
         mock_db_add_edge.assert_called_once_with(
             source_name="Python",
             target_name="FastAPI",
@@ -388,12 +388,12 @@ class TestGraphStore:
     # Test get_neighbors() legacy method
     # =========================================================================
 
-    @patch('cognitive_memory.store.db_query_neighbors')
     @patch('cognitive_memory.store.get_node_by_name')
-    def test_get_neighbors_legacy_method_calls_query_neighbors(self, mock_query, mock_get_node):
+    @patch('cognitive_memory.store.db_query_neighbors')
+    def test_get_neighbors_legacy_method_calls_query_neighbors(self, mock_db_query, mock_get_node):
         """Test that legacy get_neighbors method calls query_neighbors."""
         mock_get_node.return_value = {"id": "node-uuid-123"}
-        mock_query.return_value = [{"node_id": "neighbor-1", "name": "Django"}]
+        mock_db_query.return_value = [{"node_id": "neighbor-1", "name": "Django"}]
 
         # Call legacy method
         result = self.graph_store.get_neighbors("Python", depth=2, relation_type="USES")
@@ -401,7 +401,7 @@ class TestGraphStore:
         # Verify it works the same as query_neighbors
         assert len(result) == 1
         assert result[0]["name"] == "Django"
-        mock_query.assert_called_once_with(
+        mock_db_query.assert_called_once_with(
             node_id="node-uuid-123",
             relation_type="USES",
             max_depth=2
@@ -443,8 +443,8 @@ class TestGraphStore:
         edge_id = self.graph_store.add_edge("Python", "Django", "USES", 0.9)
 
         # Verify
-        assert node_id == int("python-uuid")
-        assert edge_id == int("edge-uuid")
+        assert node_id == "python-uuid"
+        assert edge_id == "edge-uuid"
         mock_add_node.assert_called_once()
         mock_add_edge.assert_called_once()
 
@@ -472,8 +472,8 @@ class TestGraphStore:
         neighbors = self.graph_store.query_neighbors("Python", depth=1)
 
         # Verify workflow
-        assert python_id == int("python-uuid")
-        assert django_id == int("django-uuid")
-        assert edge_id == int("edge-uuid")
+        assert python_id == "python-uuid"
+        assert django_id == "django-uuid"
+        assert edge_id == "edge-uuid"
         assert len(neighbors) == 1
         assert neighbors[0]["name"] == "Django"

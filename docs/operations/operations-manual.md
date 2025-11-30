@@ -289,6 +289,214 @@ ORDER BY fidelity_score ASC
 LIMIT 10;
 ```
 
+## Graph Operations
+
+### Wie erstelle ich Graph-Nodes?
+
+Erstelle strukturierte Entitäten im Graphen für verschiedene Anwendungsfälle.
+
+**Schritt-für-Schritt Anleitung:**
+
+1. **Wähle das passende Label** basierend auf dem Entitätstyp
+2. **Definiere einen eindeutigen Namen** für die Entität
+3. **Füge Metadaten hinzu** als flexible Key-Value-Paare
+4. **Verknüpfe optional mit Vektor-Einbettungen** für Hybrid Search
+
+**Beispiel: Project und Technology Nodes erstellen**
+```python
+# Projekt erstellen
+await mcp_server.call_tool("graph_add_node", {
+    "label": "Project",
+    "name": "Cognitive Memory System",
+    "properties": {
+        "status": "active",
+        "priority": "high",
+        "start_date": "2025-01-15",
+        "team_size": 3
+    }
+})
+
+# Technologie erstellen
+await mcp_server.call_tool("graph_add_node", {
+    "label": "Technology",
+    "name": "PostgreSQL",
+    "properties": {
+        "type": "database",
+        "version": "15+",
+        "category": "storage"
+    }
+})
+
+# Mit Vektor-Einbettung verknüpfen
+await mcp_server.call_tool("graph_add_node", {
+    "label": "Solution",
+    "name": "Vector Storage",
+    "vector_id": 456,  # Link zu l2_insights.id
+    "properties": {
+        "approach": "pgvector",
+        "dimensions": 1536
+    }
+})
+```
+
+**Empfohlene Labels:**
+- `Project`: Softwareprojekte, Features, Epics
+- `Technology`: Frameworks, Datenbanken, APIs, Tools
+- `Client`: Kunden, Nutzergruppen, Stakeholder
+- `Error`: Fehler, Bugs, Probleme
+- `Solution`: Lösungen, Architekturentscheidungen
+
+### Wie baue ich Beziehungen auf?
+
+Verbinde Nodes mit standardisierten Relationen für konsistente Abfragen.
+
+**Beispiel: Projekt USES Technologie**
+```python
+# Direkte Beziehung erstellen
+await mcp_server.call_tool("graph_add_edge", {
+    "source_name": "Cognitive Memory System",
+    "target_name": "PostgreSQL",
+    "relation": "USES",
+    "source_label": "Project",      # Optional wenn Node existiert
+    "target_label": "Technology",   # Optional wenn Node existiert
+    "weight": 0.9,
+    "properties": {
+        "critical": true,
+        "usage": "primary_database",
+        "version": "15+"
+    }
+})
+
+# Auto-Upsert Beispiel: Neue Nodes werden automatisch erstellt
+await mcp_server.call_tool("graph_add_edge", {
+    "source_name": "New Project",
+    "target_name": "Redis",
+    "relation": "USES",
+    "source_label": "Project",
+    "target_label": "Technology"
+})
+# Ergebnis: New Project und Redis Nodes werden automatisch erstellt
+```
+
+**Standardisierte Relations-Typen:**
+- `USES`: Projekt → Technologie (Abhängigkeiten)
+- `SOLVES`: Lösung → Problem (Problemlösung)
+- `CREATED_BY`: Entität → Agent/User (Attribuierung)
+- `RELATED_TO`: Allgemeine Beziehung zwischen Entitäten
+- `DEPENDS_ON`: Abhängigkeiten zwischen Komponenten
+
+**Auto-Upsert Verhalten:**
+- Source/Target Nodes werden automatisch erstellt wenn nicht vorhanden
+- Bestehende Edges werden aktualisiert (Gewicht, Properties)
+- Idempotente Operationen vermeiden Duplikate
+
+### Wie query ich den Graph?
+
+Wähle das richtige Tool basierend auf deinem Anwendungsfall.
+
+**graph_query_neighbors** für strukturierte Abfragen:
+```python
+# Direkte Nachbarn finden
+await mcp_server.call_tool("graph_query_neighbors", {
+    "node_name": "Cognitive Memory System",
+    "depth": 1
+})
+
+# Gefilterte Abfrage: Nur USES-Beziehungen
+await mcp_server.call_tool("graph_query_neighbors", {
+    "node_name": "Cognitive Memory System",
+    "relation_type": "USES",
+    "depth": 1
+})
+
+# Multi-Hop Traversal: Technologie-Kette
+await mcp_server.call_tool("graph_query_neighbors", {
+    "node_name": "High Volume Requirement",
+    "depth": 3
+})
+```
+
+**graph_find_path** für Verbindungs-Discovery:
+```python
+# Kürzesten Pfad finden
+await mcp_server.call_tool("graph_find_path", {
+    "start_node": "High Volume Requirement",
+    "end_node": "PostgreSQL",
+    "max_depth": 5
+})
+
+# Ergebnis-Beispiel:
+# {
+#   "path_found": true,
+#   "path_length": 3,
+#   "path": [
+#     {"name": "High Volume Requirement", "relation_to_next": "SOLVES_BY"},
+#     {"name": "Vector Storage", "relation_to_next": "USES"},
+#     {"name": "PostgreSQL", "relation_to_next": null}
+#   ]
+# }
+```
+
+**Wann welches Tool verwenden:**
+- **query_neighbors**:
+  - "Zeige mir alle Technologien die Projekt X nutzt"
+  - "Finde alle Projekte mit ähnlichen Anforderungen"
+  - "Welche Lösungen wurden für ähnliche Probleme entwickelt?"
+- **find_path**:
+  - "Gibt es eine Verbindung zwischen Anforderung A und Technologie B?"
+  - "Wie hängt dieses Problem mit bestehenden Lösungen zusammen?"
+  - "Finde die Brücke zwischen Requirement und Implementation"
+
+### Performance-Empfehlungen
+
+**Depth-Limits für optimale Performance:**
+- **Depth 1**: <50ms typisch, <100ms maximal
+- **Depth 2-3**: <100ms typisch, <200ms maximal
+- **Depth 4-5**: Sparsam verwenden, Index-Optimierung erforderlich
+
+**Best Practices:**
+1. **Depth begrenzen**: Standard depth=1 für schnelle Abfragen
+2. **Relations filtern**: Nutze `relation_type` für gezielte Abfragen
+3. **Index-Nutzung**: Nodes haben automatische Indexe auf `name` und `label`
+4. **Batch-Operationen**: Erstelle mehrere Nodes/Edges in einer Transaktion
+
+**Performance Monitoring:**
+```sql
+-- Graph-Statistiken
+SELECT
+    'nodes' as table_type,
+    COUNT(*) as count,
+    pg_size_pretty(pg_total_relation_size('nodes')) as size
+UNION ALL
+SELECT
+    'edges' as table_type,
+    COUNT(*) as count,
+    pg_size_pretty(pg_total_relation_size('edges')) as size;
+
+-- Langsame Graph-Abfragen identifizieren
+SELECT query, mean_time, calls
+FROM pg_stat_statements
+WHERE query LIKE '%graph_%'
+ORDER BY mean_time DESC
+LIMIT 10;
+```
+
+**Index-Optimierung:**
+```sql
+-- Wichtige Indexe automatisch vorhanden:
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_nodes_name ON nodes(name);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_nodes_label ON nodes(label);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_edges_source ON edges(source_node_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_edges_target ON edges(target_node_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_edges_relation ON edges(relation);
+```
+
+**Typische Response-Ziele:**
+- **graph_query_neighbors (depth=1)**: 50-100ms
+- **graph_query_neighbors (depth=3)**: 100-200ms
+- **graph_find_path (5 hops)**: 200-400ms
+- **Hybrid Search mit Graph**: <1s (inkl. Vektor-Suche)
+
 ## Database Performance
 
 ### Table Statistics
