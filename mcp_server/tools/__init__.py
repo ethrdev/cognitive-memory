@@ -2,8 +2,9 @@
 MCP Server Tools Registration Module
 
 Provides tool registration and implementation for the Cognitive Memory System.
-Includes 7 tools: store_raw_dialogue, compress_to_l2_insight, hybrid_search,
-update_working_memory, store_episode, store_dual_judge_scores, and ping.
+Includes 10 tools: store_raw_dialogue, compress_to_l2_insight, hybrid_search,
+update_working_memory, store_episode, store_dual_judge_scores, ping,
+graph_add_node, graph_add_edge, and graph_query_neighbors.
 """
 
 from __future__ import annotations
@@ -30,6 +31,9 @@ from psycopg2.extras import DictRow
 from mcp_server.db.connection import get_connection
 from mcp_server.tools.dual_judge import DualJudgeEvaluator
 from mcp_server.tools.get_golden_test_results import handle_get_golden_test_results
+from mcp_server.tools.graph_add_node import handle_graph_add_node
+from mcp_server.tools.graph_add_edge import handle_graph_add_edge
+from mcp_server.tools.graph_query_neighbors import handle_graph_query_neighbors
 
 
 def rrf_fusion(
@@ -1572,6 +1576,97 @@ def register_tools(server: Server) -> list[Tool]:
             description="Simple ping tool for testing connectivity",
             inputSchema={"type": "object", "properties": {}, "required": []},
         ),
+        Tool(
+            name="graph_add_node",
+            description="Create or find a graph node with idempotent operation. Supports flexible metadata and optional vector linking to L2 insights.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "label": {
+                        "type": "string",
+                        "description": "Node type/category (e.g., 'Project', 'Technology', 'Client', 'Error', 'Solution')",
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Unique name identifier for the node",
+                    },
+                    "properties": {
+                        "type": "object",
+                        "description": "Flexible metadata as key-value pairs",
+                    },
+                    "vector_id": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Optional foreign key to l2_insights.id for vector embedding linkage",
+                    },
+                },
+                "required": ["label", "name"],
+            },
+        ),
+        Tool(
+            name="graph_add_edge",
+            description="Create or update a relationship edge between graph nodes with auto-upsert of nodes. Supports standardized relations and optional weight scoring.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "source_name": {
+                        "type": "string",
+                        "description": "Name of source node (will be created if not exists)",
+                    },
+                    "target_name": {
+                        "type": "string",
+                        "description": "Name of target node (will be created if not exists)",
+                    },
+                    "relation": {
+                        "type": "string",
+                        "description": "Relationship type (e.g., 'USES', 'SOLVES', 'CREATED_BY', 'RELATED_TO', 'DEPENDS_ON')",
+                    },
+                    "source_label": {
+                        "type": "string",
+                        "description": "Label for source node if auto-created (default: 'Entity')",
+                    },
+                    "target_label": {
+                        "type": "string",
+                        "description": "Label for target node if auto-created (default: 'Entity')",
+                    },
+                    "weight": {
+                        "type": "number",
+                        "minimum": 0.0,
+                        "maximum": 1.0,
+                        "description": "Edge weight for relevance scoring (0.0-1.0, default: 1.0)",
+                    },
+                    "properties": {
+                        "type": "object",
+                        "description": "Flexible metadata as key-value pairs",
+                    },
+                },
+                "required": ["source_name", "target_name", "relation"],
+            },
+        ),
+        Tool(
+            name="graph_query_neighbors",
+            description="Find neighbor nodes of a given node with single-hop and multi-hop traversal. Supports filtering by relation type, depth-limited traversal, and cycle detection.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "node_name": {
+                        "type": "string",
+                        "description": "Name of the starting node to find neighbors for",
+                    },
+                    "relation_type": {
+                        "type": "string",
+                        "description": "Optional filter for specific relation types (e.g., 'USES', 'SOLVES', 'RELATED_TO')",
+                    },
+                    "depth": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 5,
+                        "description": "Maximum traversal depth (1-5, default: 1)",
+                    },
+                },
+                "required": ["node_name"],
+            },
+        ),
     ]
 
     # Tool handler mapping
@@ -1584,6 +1679,9 @@ def register_tools(server: Server) -> list[Tool]:
         "store_dual_judge_scores": handle_store_dual_judge_scores,
         "get_golden_test_results": handle_get_golden_test_results,
         "ping": handle_ping,
+        "graph_add_node": handle_graph_add_node,
+        "graph_add_edge": handle_graph_add_edge,
+        "graph_query_neighbors": handle_graph_query_neighbors,
     }
 
     # Register tool call handler (define once, outside the loop)

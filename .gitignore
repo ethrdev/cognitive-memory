@@ -3,6 +3,15 @@
 .env.production
 .env
 
+# Lock Files - Token-Fresser, enthalten tausende irrelevante Zeilen
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+poetry.lock
+Pipfile.lock
+requirements.lock
+*.lock
+
 # PostgreSQL credentials
 *.db
 *.sqlite
@@ -69,6 +78,22 @@ Thumbs.db
 # Logs
 *.log
 logs/
+*.log.*
+log/
+*.out
+
+# Daten-Dateien - Große Datensätze (falls vorhanden)
+*.csv
+*.tsv
+*.xlsx
+*.xls
+*.parquet
+*.feather
+data/
+datasets/
+*.data.json
+*.dataset.json
+*.large.json
 
 # Security scanning reports
 bandit-report.json
@@ -83,6 +108,10 @@ ethr/
 # Temporary files
 *.tmp
 *.temp
+*.backup
+*.bak
+*.old
+*.orig
 
 # Project planning (keep local only)
 bmad/
