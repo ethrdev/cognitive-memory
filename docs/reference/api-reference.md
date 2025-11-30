@@ -203,7 +203,7 @@ result = await mcp_server.call_tool("store_raw_dialogue", {
 - `query_text` (string, required): Search query
 - `query_embedding` (array[float], optional): 1536-dimensional embedding
 - `top_k` (integer, optional, default: 5): Number of results
-- `weights` (object, optional, default: {"semantic": 0.7, "keyword": 0.3}): Fusion weights
+- `weights` (object, optional): Fusion weights (see Weight Handling below)
 
 **Returns:**
 ```json
@@ -219,16 +219,27 @@ result = await mcp_server.call_tool("store_raw_dialogue", {
   "query_embedding_dimension": 1536,
   "semantic_results_count": 15,
   "keyword_results_count": 8,
+  "graph_results_count": 5,
   "final_results_count": 5,
-  "weights": {"semantic": 0.7, "keyword": 0.3},
+  "query_type": "standard",
+  "applied_weights": {"semantic": 0.6, "keyword": 0.2, "graph": 0.2},
   "status": "success"
 }
 ```
 
+**Weight Handling (v2025-11-30):**
+- **No weights provided:** Automatic query routing determines optimal weights
+  - Standard queries: `{"semantic": 0.6, "keyword": 0.2, "graph": 0.2}`
+  - Relational queries: `{"semantic": 0.4, "keyword": 0.2, "graph": 0.4}`
+- **2-source format (legacy):** `{"semantic": 0.7, "keyword": 0.3}` is scaled proportionally to add 0.2 graph weight
+  - Example: `{"semantic": 0.5, "keyword": 0.5}` → `{"semantic": 0.4, "keyword": 0.4, "graph": 0.2}`
+- **3-source format:** `{"semantic": 0.6, "keyword": 0.2, "graph": 0.2}` used directly
+- **Invalid sums:** Weights are normalized to sum to 1.0 (no errors returned)
+
 **RRF Fusion:**
 - Reciprocal Rank Fusion with k=60 constant
 - Automatic embedding generation from query_text
-- Parallel semantic and keyword search execution
+- Parallel semantic, keyword, and graph search execution
 
 ---
 
@@ -520,7 +531,7 @@ result = await mcp_server.call_tool("store_raw_dialogue", {
       },
       "name": {
         "type": "string",
-        "description": "Unique name identifier for the node"
+        "description": "Unique name identifier for the node (globally unique)"
       },
       "properties": {
         "type": "object",
@@ -538,8 +549,8 @@ result = await mcp_server.call_tool("store_raw_dialogue", {
 ```
 
 **Parameters:**
-- `label` (string, required): Node type or category
-- `name` (string, required): Unique name identifier for the node
+- `label` (string, required): Node type or category (mutable - updated on conflict)
+- `name` (string, required): Globally unique name identifier for the node
 - `properties` (object, optional, default: {}): Flexible metadata as key-value pairs
 - `vector_id` (int, optional): Foreign key to l2_insights.id for vector embedding linkage
 
@@ -554,6 +565,11 @@ result = await mcp_server.call_tool("store_raw_dialogue", {
   "status": "success"
 }
 ```
+
+**Idempotent Behavior (v2025-11-30):**
+- Nodes are globally unique by `name` only (not by `label` + `name`)
+- If a node with the same `name` exists, its `label` and `properties` are updated
+- This ensures `graph_add_edge` always finds existing nodes regardless of label
 
 **Use Cases:**
 - **Entity Creation:** Create structured entities (projects, technologies, clients)
@@ -654,10 +670,16 @@ result = await mcp_server.call_tool("graph_add_node", {
 }
 ```
 
-**Auto-Upsert Behavior:**
-- Source or target nodes are automatically created if they don't exist
+**Auto-Upsert Behavior (v2025-11-30):**
+- Nodes are looked up by `name` only (globally unique)
+- If a node with the same `name` exists, it is reused regardless of `source_label`/`target_label`
+- The label parameter only applies when creating new nodes
 - Existing edges are updated with new weight/properties
 - Idempotent operations prevent duplicate creation
+
+**Important:** Since nodes are globally unique by `name`, ensure unique naming:
+- Use "Apple-Company" vs "Apple-Fruit" for homonyms
+- The `source_label`/`target_label` parameters are only used when creating new nodes
 
 **Example Usage:**
 ```python

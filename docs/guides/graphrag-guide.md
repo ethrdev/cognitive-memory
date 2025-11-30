@@ -193,11 +193,13 @@ await mcp_server.call_tool("graph_add_node", {
 - **CamelCase**: `Project`, `Technology`, `Client`
 - **Konsistent**: Verwende die gleiche Schreibweise
 - **Beschreibend**: Label sollte den Typ klar beschreiben
+- **Mutierbar**: Labels werden bei Konflikt aktualisiert (v2025-11-30)
 
 **Node Names:**
 - **Descriptive**: "Cognitive Memory System" statt "CMS"
-- **Unique**: Keine Duplikate innerhalb des gleichen Labels
+- **Global Unique**: Namen sind systemweit eindeutig (nicht nur pro Label)
 - **Stable**: Namen ändern sich selten
+- **Homonym-Handling**: Verwende "Apple-Company" vs "Apple-Fruit" für gleichnamige Entitäten
 
 **Properties:**
 - **Snake Case**: `start_date`, `team_size`
@@ -782,3 +784,9 @@ A: Nutze die `graph_add_node` und `graph_add_edge` Tools in Batch-Operationen. S
 
 **Q: Wie sicher ist die Graph-Daten?**
 A: Graph-Daten sind in PostgreSQL gespeichert und profitieren von den gleichen Sicherungsmechanismen wie alle anderen Daten.
+
+**Q: Was passiert wenn ich einen Node mit gleichem Namen aber anderem Label erstelle?**
+A: Seit v2025-11-30 sind Nodes global nach `name` eindeutig. Der existierende Node wird gefunden und sein Label wird aktualisiert. Es werden keine Duplikate erstellt.
+
+**Q: Warum werden meine hybrid_search Weights nicht exakt übernommen?**
+A: Das 2-Source-Format (semantic/keyword) wird automatisch auf das 3-Source-Format (semantic/keyword/graph) skaliert. Beispiel: `{0.5, 0.5}` → `{0.4, 0.4, 0.2}`. Verwende das 3-Source-Format für volle Kontrolle.

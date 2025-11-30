@@ -339,10 +339,69 @@ systemctl status cognitive-memory-mcp
 
 ---
 
+## 8. Graph Duplicate Nodes (RESOLVED v2025-11-30)
+
+### Symptom (Historical)
+- `graph_add_edge` created duplicate nodes with same name but different labels
+- `graph_query_neighbors` returned empty results for nodes created via `graph_add_node`
+
+### Resolution
+This bug was fixed in commit `9f6634e`. The UNIQUE constraint is now on `name` only (not `label` + `name`).
+
+**Migration required:**
+```sql
+DROP INDEX IF EXISTS idx_nodes_unique;
+CREATE UNIQUE INDEX idx_nodes_unique ON nodes(name);
+```
+
+**Cleanup duplicate nodes:**
+```sql
+-- Check for duplicates
+SELECT name, COUNT(*) FROM nodes GROUP BY name HAVING COUNT(*) > 1;
+
+-- Remove duplicates (keep oldest)
+DELETE FROM nodes a USING nodes b
+WHERE a.name = b.name AND a.created_at > b.created_at;
+```
+
+---
+
+## 9. SSL Connection Closed Unexpectedly (Known Issue)
+
+### Symptoms
+- First MCP call after idle period (>30s) fails with:
+  ```
+  SSL connection has been closed unexpectedly
+  ```
+- Retry immediately succeeds
+
+### Workaround
+Simply retry the operation. The second call succeeds.
+
+### Future Fix
+Connection pooling with keep-alive is planned. See `TECH-DEBT-SSL-CONNECTION.md`.
+
+---
+
+## 10. hybrid_search Ignores Custom Weights (RESOLVED v2025-11-30)
+
+### Symptom (Historical)
+- Custom weights like `{"semantic": 0.5, "keyword": 0.5}` were ignored
+- Response showed default weights `{"semantic": 0.6, "keyword": 0.2, "graph": 0.2}`
+
+### Resolution
+Fixed in commit `9f6634e`. Legacy 2-source weights are now proportionally scaled:
+- Input: `{"semantic": 0.5, "keyword": 0.5}`
+- Output: `{"semantic": 0.4, "keyword": 0.4, "graph": 0.2}`
+
+For full control, use 3-source format: `{"semantic": 0.6, "keyword": 0.2, "graph": 0.2}`
+
+---
+
 ## Getting Help
 
 If issues persist:
 
 1. Check logs: `journalctl -u cognitive-memory-mcp -f` (local) or Python stderr (Neon)
-2. Review documentation: [Operations Manual](operations-manual.md)
+2. Review documentation: [Operations Manual](operations/operations-manual.md)
 3. Open an issue: https://github.com/ethrdev/cognitive-memory/issues

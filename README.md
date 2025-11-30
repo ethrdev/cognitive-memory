@@ -297,6 +297,7 @@ CREATE TABLE edges (
 ### Key Features
 
 - **UUID Primary Keys**: Distributed system compatibility and graph traversal performance
+- **Global Node Uniqueness**: Nodes are unique by `name` only - labels are mutable attributes (updated on conflict)
 - **Idempotent Operations**: UNIQUE constraints prevent duplicate entities and relationships
 - **Flexible Metadata**: JSONB properties with GIN indexes for complex queries
 - **Optional Vector Integration**: Link entities to L2 insights via `vector_id` foreign key
@@ -307,9 +308,8 @@ CREATE TABLE edges (
 
 | Index | Purpose | Type |
 |-------|---------|------|
-| `idx_nodes_unique` | Prevent duplicate entities | B-tree |
+| `idx_nodes_unique` | Prevent duplicate entities (by name only) | B-tree UNIQUE |
 | `idx_nodes_label` | Filter by entity type | B-tree |
-| `idx_nodes_name` | Fast entity lookup | B-tree |
 | `idx_edges_unique` | Prevent duplicate relationships | B-tree |
 | `idx_edges_source_id` | Outbound traversals | B-tree |
 | `idx_edges_target_id` | Inbound traversals | B-tree |
