@@ -392,3 +392,56 @@ class TestGraphAddEdgeTool:
                 weight=1.0,
                 properties="{}"
             )
+
+    @pytest.mark.asyncio
+    async def test_bug2_regression_same_name_different_label_reuses_node(self):
+        """
+        Regression test for Bug #2: graph_add_edge creates duplicate nodes.
+
+        Scenario:
+        1. User creates node: graph_add_node(name="Alpha", label="Test")
+        2. User creates edge: graph_add_edge(source_name="Alpha", source_label="Entity")
+        3. Expected: Edge should use existing "Alpha" node (same ID)
+        4. Bug behavior: Edge created NEW node with different ID
+
+        Root cause: UNIQUE constraint was on (label, name), not just (name).
+        Fix: UNIQUE only on (name) - nodes are globally unique by name.
+        """
+        with patch('mcp_server.tools.graph_add_edge.get_or_create_node') as mock_get_node, \
+             patch('mcp_server.tools.graph_add_edge.add_edge') as mock_add_edge:
+
+            # Simulate the fix: get_or_create_node returns SAME node_id
+            # regardless of label, because UNIQUE is now on (name) only
+            same_node_id = "9a95840b-2e6b-4e68-b6f1-4573d67a6323"
+
+            mock_get_node.side_effect = [
+                # Source node: "Alpha" already exists, should return SAME ID
+                {"node_id": same_node_id, "created": False},
+                # Target node: new node
+                {"node_id": "new-target-id", "created": True}
+            ]
+
+            mock_add_edge.return_value = {
+                "edge_id": "edge-id",
+                "created": True,
+                "source_id": same_node_id,
+                "target_id": "new-target-id",
+                "relation": "CONNECTS_TO",
+                "weight": 1.0
+            }
+
+            # Simulate Bug #2 scenario: different label than original node
+            arguments = {
+                "source_name": "Alpha",  # Same name as existing node
+                "source_label": "Entity",  # Different label than "Test"
+                "target_name": "Beta",
+                "relation": "CONNECTS_TO"
+            }
+
+            result = await handle_graph_add_edge(arguments)
+
+            assert result["status"] == "success"
+            # Critical: source_id should be the EXISTING node, not a new one
+            assert result["source_id"] == same_node_id
+            # Node should NOT be marked as newly created
+            assert "source_node_created" not in result or result.get("source_node_created") is False

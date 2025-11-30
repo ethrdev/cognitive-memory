@@ -1025,6 +1025,7 @@ async def handle_hybrid_search(arguments: dict[str, Any]) -> dict[str, Any]:
         query_type = "relational" if is_relational else "standard"
 
         # Story 4.6: Backwards-compatible weight handling
+        # Bug #1 fix: User-provided weights should always be respected
         if weights is None:
             # No weights provided → use query routing to determine weights
             applied_weights = get_adjusted_weights(is_relational)
@@ -1032,23 +1033,25 @@ async def handle_hybrid_search(arguments: dict[str, Any]) -> dict[str, Any]:
             # Weights provided - check for backwards compatibility (old 2-source format)
             if "graph" not in weights:
                 # Old format: {"semantic": 0.7, "keyword": 0.3}
-                # Convert to new format with default graph weight
+                # Bug #1 fix: Convert old format to new format, preserving user intent
+                # Scale down semantic/keyword proportionally to add 0.2 graph weight
                 semantic_weight = weights.get("semantic", 0.7)
                 keyword_weight = weights.get("keyword", 0.3)
 
-                # For backwards compatibility, normalize to make room for graph
-                # Old: 70/30 → New: 60/20/20 (proportional reduction)
+                # Normalize to make room for default graph weight (0.2)
+                # Preserve the ratio between semantic and keyword weights
                 total_old = semantic_weight + keyword_weight
-                if abs(total_old - 1.0) <= 1e-9:
-                    # Perfect old weights → apply 60/20/20 default
-                    applied_weights = get_adjusted_weights(is_relational)
-                else:
-                    # Non-standard old weights → normalize and add graph
+                if total_old > 0:
+                    # Scale down to 0.8 total, add 0.2 for graph
+                    scale_factor = 0.8 / total_old
                     applied_weights = {
-                        "semantic": semantic_weight * 0.8,  # Reduce by 20%
-                        "keyword": keyword_weight * 0.8,    # Reduce by 20%
-                        "graph": 0.2,                       # Add graph weight
+                        "semantic": semantic_weight * scale_factor,
+                        "keyword": keyword_weight * scale_factor,
+                        "graph": 0.2,
                     }
+                else:
+                    # Edge case: both weights are 0 → use defaults
+                    applied_weights = get_adjusted_weights(is_relational)
             else:
                 # New format: {"semantic": 0.6, "keyword": 0.2, "graph": 0.2}
                 applied_weights = {

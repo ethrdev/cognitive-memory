@@ -50,12 +50,18 @@ def add_node(
             cursor = conn.cursor()
 
             # Attempt to insert new node with idempotent conflict resolution
+            # UNIQUE constraint is on (name) only - nodes are globally unique by name
+            # On conflict: update label and properties to latest values
             cursor.execute(
                 """
                 INSERT INTO nodes (label, name, properties, vector_id)
                 VALUES (%s, %s, %s::jsonb, %s)
-                ON CONFLICT (label, name) DO NOTHING
-                RETURNING id, label, name, created_at;
+                ON CONFLICT (name) DO UPDATE SET
+                    label = EXCLUDED.label,
+                    properties = EXCLUDED.properties,
+                    vector_id = COALESCE(EXCLUDED.vector_id, nodes.vector_id)
+                RETURNING id, label, name, created_at,
+                    (xmax = 0) AS was_inserted;
                 """,
                 (label, name, properties, vector_id),
             )
@@ -63,29 +69,32 @@ def add_node(
             result = cursor.fetchone()
 
             if result:
-                # New node was created
                 node_id = str(result["id"])
                 created_label = result["label"]
                 created_name = result["name"]
-                created = True
+                # xmax = 0 means row was inserted, not updated
+                created = result["was_inserted"]
 
-                logger.debug(f"Created new node: id={node_id}, label={created_label}, name={created_name}")
+                if created:
+                    logger.debug(f"Created new node: id={node_id}, label={created_label}, name={created_name}")
+                else:
+                    logger.debug(f"Updated existing node: id={node_id}, label={created_label}, name={created_name}")
 
             else:
-                # Node already exists, fetch the existing one
+                # Fallback: fetch existing node (should not happen with RETURNING)
                 cursor.execute(
                     """
                     SELECT id, label, name, created_at
                     FROM nodes
-                    WHERE label = %s AND name = %s
+                    WHERE name = %s
                     LIMIT 1;
                     """,
-                    (label, name),
+                    (name,),
                 )
 
                 existing_result = cursor.fetchone()
                 if not existing_result:
-                    raise RuntimeError(f"Failed to find existing node after conflict: label={label}, name={name}")
+                    raise RuntimeError(f"Failed to find existing node after conflict: name={name}")
 
                 node_id = str(existing_result["id"])
                 created_label = existing_result["label"]

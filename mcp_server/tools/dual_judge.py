@@ -556,29 +556,37 @@ class DualJudgeEvaluator:
             kappa: Cohen's Kappa score (None for single judge mode)
             is_spot_check: True if this was a spot check, False otherwise
         """
+        import json
+
         try:
             with get_connection() as conn:
                 cursor = conn.cursor()
 
                 # Build metadata JSONB with spot_check flag
-                metadata = {"spot_check": is_spot_check}
+                # Bug #3 fix: Serialize dict to JSON string for psycopg2
+                metadata_json = json.dumps({"spot_check": is_spot_check})
+
+                # Serialize list scores to JSON arrays for PostgreSQL JSONB columns
+                # Bug #3 fix: psycopg2 can't adapt Python dict/list directly to JSONB
+                judge1_json = json.dumps(judge1_scores) if judge1_scores else None
+                judge2_json = json.dumps(judge2_scores) if judge2_scores else None
 
                 # Update with judge scores and metadata
                 cursor.execute(
                     """
                     UPDATE ground_truth
-                    SET judge1_score = %s,
-                        judge2_score = %s,
+                    SET judge1_score = %s::jsonb,
+                        judge2_score = %s::jsonb,
                         judge1_model = 'gpt-4o',
                         judge2_model = CASE
                             WHEN %s IS NOT NULL THEN 'claude-3-5-haiku-20241022'
                             ELSE NULL
                         END,
                         kappa = %s,
-                        metadata = metadata || %s::jsonb
+                        metadata = COALESCE(metadata, '{}'::jsonb) || %s::jsonb
                     WHERE id = %s;
                     """,
-                    (judge1_scores, judge2_scores, judge2_scores, kappa, metadata, query_id),
+                    (judge1_json, judge2_json, judge2_json, kappa, metadata_json, query_id),
                 )
 
                 conn.commit()
