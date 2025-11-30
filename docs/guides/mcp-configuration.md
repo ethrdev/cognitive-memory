@@ -103,15 +103,25 @@ After restarting Claude Code, the MCP server should appear in the available serv
 
 ### 2. Verify Tools and Resources
 
-- **8 Tools** should be available:
-  - `ping` - Health check
+- **11 Tools** should be available:
+
+  **Memory Tools:**
   - `store_raw_dialogue` - L0 storage
   - `compress_to_l2_insight` - L2 storage with embeddings
-  - `hybrid_search` - Semantic + keyword search
+  - `hybrid_search` - Semantic + keyword + graph search
   - `update_working_memory` - Working memory management
   - `store_episode` - Episode storage
+
+  **Evaluation Tools:**
   - `store_dual_judge_scores` - Dual judge evaluation
   - `get_golden_test_results` - Golden test results
+  - `ping` - Health check
+
+  **Graph Tools:**
+  - `graph_add_node` - Create graph nodes
+  - `graph_add_edge` - Create graph relationships
+  - `graph_query_neighbors` - Query node neighbors
+  - `graph_find_path` - Find paths between nodes
 
 - **5 Resources** should be available:
   - `memory://l2-insights` - Query L2 insights
@@ -157,7 +167,7 @@ Execute the `ping` tool to verify basic MCP connectivity:
 **Cause**: MCP server started but failed to register tools, usually due to database issues
 **Solution**:
 
-1. Check MCP server logs should show: "Registered 8 tools" and "Registered 5 resources"
+1. Check MCP server logs should show: "Registered 11 tools" and "Registered 5 resources"
 2. Verify database connection is working
 3. Test server startup manually: `poetry run python -m mcp_server`
 4. Ensure all dependencies are installed: `poetry install`

@@ -42,7 +42,10 @@ class InsightResult:
 
     Attributes:
         id: Unique identifier of the stored insight
-        embedding_status: Status of embedding generation ("success", "failed", "retried")
+        embedding_status: Status of embedding generation
+            ("success": embedding generated successfully,
+             "failed": embedding generation failed permanently,
+             "retried": embedding succeeded after rate limit retry)
         fidelity_score: Semantic fidelity score (0.0-1.0)
         created_at: Timestamp of creation
     """

@@ -162,7 +162,7 @@ class TestEpisodeMemorySearch:
 
     @patch("mcp_server.tools.get_embedding_with_retry", new_callable=AsyncMock)
     @patch("cognitive_memory.store.ConnectionManager")
-    @patch("pgvector.psycopg2.register_vector")
+    @patch("cognitive_memory.store.register_vector")
     @patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"})
     def test_search_success(self, mock_register_vector, mock_conn_manager, mock_embedding):
         """Test successful similarity search."""
@@ -265,7 +265,7 @@ class TestEpisodeMemorySearch:
 
     @patch("mcp_server.tools.get_embedding_with_retry", new_callable=AsyncMock)
     @patch("cognitive_memory.store.ConnectionManager")
-    @patch("pgvector.psycopg2.register_vector")
+    @patch("cognitive_memory.store.register_vector")
     @patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"})
     def test_search_empty_results(self, mock_register_vector, mock_conn_manager, mock_embedding):
         """Test search with no similar episodes found."""
@@ -381,7 +381,7 @@ class TestEpisodeMemoryIntegration:
     @patch("mcp_server.tools.add_episode", new_callable=AsyncMock)
     @patch("mcp_server.tools.get_embedding_with_retry", new_callable=AsyncMock)
     @patch("cognitive_memory.store.ConnectionManager")
-    @patch("pgvector.psycopg2.register_vector")
+    @patch("cognitive_memory.store.register_vector")
     @patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"})
     def test_store_search_list_workflow(self, mock_register_vector, mock_conn_manager, mock_embedding, mock_add_episode):
         """Test integration workflow: store → search → list."""
