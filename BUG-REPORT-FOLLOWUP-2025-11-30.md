@@ -2,22 +2,44 @@
 
 **Date:** 2025-11-30
 **Context:** Während der Verifikation der Bug-Fixes vom gleichen Tag
+**Status:** ✅ **ALL BUGS FIXED** (2025-11-30)
 **Severity:** LOW - Kern-Funktionalität funktioniert, Edge-Cases betroffen
 
 ---
 
 ## Summary
 
-Bei der Verifikation der drei ursprünglichen Bug-Fixes wurden **zwei neue Issues** entdeckt. Beide sind kleinere Probleme, die spezifische Features betreffen.
+Bei der Verifikation der drei ursprünglichen Bug-Fixes wurden **drei Issues** entdeckt und behoben:
+- **Bug #4:** graph_find_path UUID Parsing Error → ✅ FIXED
+- **Bug #5:** store_dual_judge_scores Missing Metadata + Type Mismatch → ✅ FIXED
+- **Bug #6:** f-string Format Error in dual_judge (Bonus) → ✅ FIXED
 
 ---
 
-## BUG #4: `graph_find_path` UUID Parsing Error
+## BUG #4: `graph_find_path` UUID Parsing Error ✅ FIXED
 
 ### Severity: LOW
+### Status: ✅ FIXED in commit 610aa8c
 
 ### Description
 Die Funktion `graph_find_path` schlägt mit einem UUID Parsing Error fehl. Der Code versucht anscheinend ein Dict oder einen ungültigen String als UUID zu parsen.
+
+### Fix Applied
+**File:** `mcp_server/db/graph.py:580-595`
+
+PostgreSQL returns UUID arrays as string representation `"{uuid1,uuid2}"` which psycopg2 may not automatically convert to Python lists. Added string-to-list parsing:
+
+```python
+# Bug #4 Fix: Handle UUID arrays that may be returned as strings
+if isinstance(node_path, str):
+    node_path = [
+        uuid_str.strip()
+        for uuid_str in node_path.strip("{}").split(",")
+        if uuid_str.strip()
+    ]
+```
+
+**Tests:** 30/30 graph tests pass
 
 ### Steps to Reproduce
 ```python
@@ -74,12 +96,30 @@ cursor.execute("WHERE name = %s", (node_name,))  # Lookup by name
 
 ---
 
-## BUG #5: `store_dual_judge_scores` Missing Metadata Column
+## BUG #5: `store_dual_judge_scores` Missing Metadata + Type Mismatch ✅ FIXED
 
 ### Severity: LOW
+### Status: ✅ FIXED in commit 610aa8c
 
 ### Description
-Nach dem Fix für den Dict-Adapter schlägt `store_dual_judge_scores` mit einem fehlenden Column-Error fehl. Die Spalte `metadata` existiert nicht in der relevanten Tabelle.
+Nach dem Fix für den Dict-Adapter schlägt `store_dual_judge_scores` mit einem fehlenden Column-Error fehl. Die Spalte `metadata` existiert nicht in der relevanten Tabelle. Zusätzlich wurde ein Type Mismatch entdeckt: `judge1_score`/`judge2_score` sind `FLOAT[]` Arrays, nicht JSONB.
+
+### Fix Applied
+**1. Migration:** `mcp_server/db/migrations/014_add_ground_truth_metadata.sql`
+```sql
+ALTER TABLE ground_truth ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}';
+```
+
+**2. Type Fix:** `mcp_server/tools/dual_judge.py:579-580`
+```python
+# BEFORE (wrong):
+SET judge1_score = %s::jsonb,
+    judge2_score = %s::jsonb,
+
+# AFTER (correct):
+SET judge1_score = %s::double precision[],
+    judge2_score = %s::double precision[],
+```
 
 ### Steps to Reproduce
 ```python
@@ -183,7 +223,7 @@ assert len(result["judge1_scores"]) > 0
 
 ## Current System Status
 
-Nach den ursprünglichen Fixes + diese zwei neuen Issues:
+Nach allen Bug-Fixes (2025-11-30):
 
 | Feature | Status |
 |---------|--------|
@@ -191,23 +231,50 @@ Nach den ursprünglichen Fixes + diese zwei neuen Issues:
 | store_raw_dialogue | ✅ |
 | update_working_memory | ✅ |
 | compress_to_l2_insight | ✅ |
-| hybrid_search | ✅ (mit custom weights) |
+| hybrid_search | ✅ |
 | graph_add_node | ✅ |
-| graph_add_edge | ✅ (mit node dedup) |
+| graph_add_edge | ✅ |
 | graph_query_neighbors | ✅ |
-| graph_find_path | ❌ Bug #4 |
+| graph_find_path | ✅ Fixed! |
 | store_episode | ✅ |
 | get_golden_test_results | ✅ |
-| store_dual_judge_scores | ❌ Bug #5 |
+| store_dual_judge_scores | ✅ Fixed! |
 
-**Overall: 10/12 Tools funktional (83%)**
+**Overall: 12/12 Tools funktional (100%)** 🎉
 
 ---
 
-## Appendix: Related Files
+## BUG #6: f-string Format Error in dual_judge ✅ FIXED (Bonus)
 
-Basierend auf dem ursprünglichen Bug-Fix-Report könnten folgende Dateien relevant sein:
+### Severity: LOW
+### Status: ✅ FIXED in commit 610aa8c
 
-- `src/tools/graph.py` - für Bug #4
-- `src/tools/evaluation.py` - für Bug #5
-- `migrations/` - für Bug #5 Schema-Fix
+### Description
+Während der Behebung von Bug #5 wurde ein zusätzlicher Fehler entdeckt: Ein ungültiger f-string Format Specifier in der Logging-Ausgabe.
+
+### Error
+```
+Invalid format specifier '.3f if kappa is not None else 'N/A'' for object of type 'float'
+```
+
+### Fix Applied
+**File:** `mcp_server/tools/dual_judge.py:507-511`
+
+```python
+# BEFORE (wrong - can't have conditional in format specifier):
+f"kappa={kappa:.3f if kappa is not None else 'N/A'}"
+
+# AFTER (correct):
+kappa_str = f"{kappa:.3f}" if kappa is not None else "N/A"
+f"kappa={kappa_str}"
+```
+
+---
+
+## Appendix: Modified Files
+
+| File | Bug | Change |
+|------|-----|--------|
+| `mcp_server/db/graph.py` | #4 | UUID array string parsing |
+| `mcp_server/tools/dual_judge.py` | #5, #6 | Type fix + f-string fix |
+| `mcp_server/db/migrations/014_add_ground_truth_metadata.sql` | #5 | New migration |
