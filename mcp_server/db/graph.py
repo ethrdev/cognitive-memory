@@ -459,3 +459,184 @@ def query_neighbors(node_id: str, relation_type: str | None = None, max_depth: i
     except Exception as e:
         logger.error(f"Failed to query neighbors: node_id={node_id}, relation_type={relation_type}, max_depth={max_depth}, error={e}")
         raise
+
+
+def find_path(start_node_name: str, end_node_name: str, max_depth: int = 5) -> dict[str, Any]:
+    """
+    Find the shortest path between two nodes using BFS-based pathfinding.
+
+    Uses PostgreSQL WITH RECURSIVE CTE for BFS traversal with bidirectional
+    edge traversal, cycle detection, and performance protection.
+
+    Args:
+        start_node_name: Name of the starting node
+        end_node_name: Name of the target node
+        max_depth: Maximum traversal depth (1-10, default 5)
+
+    Returns:
+        Dict with:
+        - path_found (bool): true if at least one path found
+        - path_length (int): number of hops (0 if no path)
+        - paths (list): array of path objects with nodes, edges, and total_weight
+        or empty result if no path found
+    """
+    logger = logging.getLogger(__name__)
+
+    # Start performance timing
+    import time
+    start_time = time.time()
+
+    try:
+        with get_connection() as conn:
+            from psycopg2.extras import DictCursor
+            cursor = conn.cursor(cursor_factory=DictCursor)
+
+            # Set query timeout for performance protection
+            cursor.execute("SET LOCAL statement_timeout = '1000ms'")
+
+            # Get node IDs for start and end nodes
+            start_node = get_node_by_name(start_node_name)
+            end_node = get_node_by_name(end_node_name)
+
+            if not start_node or not end_node:
+                return {"path_found": False, "path_length": 0, "paths": []}
+
+            start_node_id = start_node["id"]
+            end_node_id = end_node["id"]
+
+            # Use recursive CTE for BFS pathfinding with bidirectional traversal
+            cursor.execute(
+                """
+                WITH RECURSIVE paths AS (
+                    -- Base case: Direct neighbors (depth=1)
+                    SELECT
+                        ARRAY[e.source_id, e.target_id] AS node_path,
+                        ARRAY[e.id] AS edge_path,
+                        1 AS path_length,
+                        e.weight AS total_weight
+                    FROM edges e
+                    WHERE (e.source_id = %s::uuid AND e.target_id = %s::uuid)
+                       OR (e.source_id = %s::uuid AND e.target_id = %s::uuid)
+
+                    UNION ALL
+
+                    -- Recursive case: Extend paths by one hop
+                    SELECT
+                        p.node_path || CASE
+                            WHEN e.source_id = p.node_path[array_length(p.node_path, 1)]
+                            THEN e.target_id
+                            ELSE e.source_id
+                        END AS node_path,
+                        p.edge_path || e.id AS edge_path,
+                        p.path_length + 1 AS path_length,
+                        p.total_weight + e.weight AS total_weight
+                    FROM paths p
+                    JOIN edges e ON (
+                        e.source_id = p.node_path[array_length(p.node_path, 1)]
+                        OR e.target_id = p.node_path[array_length(p.node_path, 1)]
+                    )
+                    WHERE p.path_length < %s
+                        AND NOT (
+                            CASE
+                                WHEN e.source_id = p.node_path[array_length(p.node_path, 1)]
+                                THEN e.target_id
+                                ELSE e.source_id
+                            END = ANY(p.node_path)
+                        )  -- Cycle detection
+                )
+                SELECT node_path, edge_path, path_length, total_weight
+                FROM paths
+                WHERE node_path[array_length(node_path, 1)] = %s::uuid
+                ORDER BY path_length ASC, total_weight DESC
+                LIMIT 10;
+                """,
+                (start_node_id, end_node_id, end_node_id, start_node_id, max_depth, end_node_id),
+            )
+
+            results = cursor.fetchall()
+
+            if not results:
+                # Calculate execution time for performance monitoring
+                execution_time = (time.time() - start_time) * 1000  # Convert to milliseconds
+                logger.debug(f"find_path completed in {execution_time:.2f}ms (no paths found)")
+                return {"path_found": False, "path_length": 0, "paths": []}
+
+            # Process and format paths
+            paths = []
+            for row in results:
+                node_path = row["node_path"]  # Array of node UUIDs
+                edge_path = row["edge_path"]  # Array of edge UUIDs
+                total_weight = float(row["total_weight"])
+
+                # Fetch detailed node information for each node in the path
+                nodes = []
+                for node_id in node_path:
+                    cursor.execute(
+                        """
+                        SELECT id, label, name, properties, vector_id, created_at
+                        FROM nodes
+                        WHERE id = %s::uuid;
+                        """,
+                        (str(node_id),),
+                    )
+                    node_result = cursor.fetchone()
+                    if node_result:
+                        nodes.append({
+                            "node_id": str(node_result["id"]),
+                            "label": node_result["label"],
+                            "name": node_result["name"],
+                            "properties": node_result["properties"],
+                        })
+
+                # Fetch detailed edge information for each edge in the path
+                edges = []
+                for edge_id in edge_path:
+                    cursor.execute(
+                        """
+                        SELECT id, source_id, target_id, relation, weight, properties
+                        FROM edges
+                        WHERE id = %s::uuid;
+                        """,
+                        (str(edge_id),),
+                    )
+                    edge_result = cursor.fetchone()
+                    if edge_result:
+                        edges.append({
+                            "edge_id": str(edge_result["id"]),
+                            "relation": edge_result["relation"],
+                            "weight": float(edge_result["weight"]),
+                        })
+
+                paths.append({
+                    "nodes": nodes,
+                    "edges": edges,
+                    "total_weight": total_weight,
+                })
+
+            logger.debug(f"Found {len(paths)} paths from '{start_node_name}' to '{end_node_name}' with max_depth={max_depth}")
+
+            # Calculate execution time for performance monitoring
+            execution_time = (time.time() - start_time) * 1000  # Convert to milliseconds
+
+            # Log timing information for performance monitoring
+            if execution_time < 100:
+                logger.debug(f"find_path completed in {execution_time:.2f}ms (fast)")
+            elif execution_time < 500:
+                logger.info(f"find_path completed in {execution_time:.2f}ms (acceptable)")
+            else:
+                logger.warning(f"find_path completed in {execution_time:.2f}ms (slow)")
+
+            return {
+                "path_found": True,
+                "path_length": results[0]["path_length"] if results else 0,  # Shortest path length
+                "paths": paths,
+            }
+
+    except Exception as e:
+        logger.error(f"Failed to find path: start_node={start_node_name}, end_node={end_node_name}, max_depth={max_depth}, error={e}")
+
+        # Check if it's a timeout error
+        if "timeout" in str(e).lower() or "statement timeout" in str(e).lower():
+            return {"error_type": "timeout", "path_found": False, "path_length": 0, "paths": []}
+
+        raise

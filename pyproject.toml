@@ -4,7 +4,10 @@ version = "1.0.0"
 description = "Cognitive Memory System v1.0.0 - MCP Server with PostgreSQL + pgvector"
 authors = ["ethr <ethr@example.com>"]
 readme = "README.md"
-packages = [{include = "mcp_server"}]
+packages = [
+    {include = "mcp_server"},
+    {include = "cognitive_memory"},
+]
 
 [tool.poetry.dependencies]
 python = "^3.11"
@@ -132,8 +135,10 @@ python_functions = ["test_*"]
 markers = [
     "asyncio: marks tests as async",
 ]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 
 [tool.bandit]
 exclude_dirs = ["tests", "venv", ".venv", "scripts/migration"]
 skips = ["B101", "B311"]  # B101: assert, B311: random (not crypto)
-targets = ["mcp_server"]
+targets = ["mcp_server", "cognitive_memory"]

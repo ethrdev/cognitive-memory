@@ -2,11 +2,11 @@
 
 Complete API documentation for MCP Tools and Resources.
 
-The Cognitive Memory System provides MCP (Model Context Protocol) integration with 8 Tools and 5 Resources for comprehensive memory management.
+The Cognitive Memory System provides MCP (Model Context Protocol) integration with 11 Tools and 5 Resources for comprehensive memory management including GraphRAG capabilities.
 
 ## Table of Contents
 
-1. [MCP Tools (8 available)](#mcp-tools)
+1. [MCP Tools (11 available)](#mcp-tools)
    - [store_raw_dialogue](#store_raw_dialogue)
    - [compress_to_l2_insight](#compress_to_l2_insight)
    - [hybrid_search](#hybrid_search)
@@ -15,6 +15,11 @@ The Cognitive Memory System provides MCP (Model Context Protocol) integration wi
    - [store_dual_judge_scores](#store_dual_judge_scores)
    - [get_golden_test_results](#get_golden_test_results)
    - [ping](#ping)
+   - [Graph Tools](#graph-tools)
+     - [graph_add_node](#graph_add_node)
+     - [graph_add_edge](#graph_add_edge)
+     - [graph_query_neighbors](#graph_query_neighbors)
+     - [graph_find_path](#graph_find_path)
 2. [MCP Resources (5 available)](#mcp-resources)
    - [memory://l2-insights](#memoryl2-insights)
    - [memory://working-memory](#memoryworking-memory)
@@ -492,6 +497,380 @@ result = await mcp_server.call_tool("store_raw_dialogue", {
 ```
 
 **Usage:** Basic MCP server connectivity test
+
+---
+
+## Graph Tools
+
+### graph_add_node
+
+**Purpose:** Create or find a graph node with idempotent operation. Supports flexible metadata and optional vector linking to L2 insights.
+
+**Signature:**
+```json
+{
+  "name": "graph_add_node",
+  "description": "Create or find a graph node with idempotent operation. Supports flexible metadata and optional vector linking to L2 insights.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "label": {
+        "type": "string",
+        "description": "Node type/category (e.g., 'Project', 'Technology', 'Client', 'Error', 'Solution')"
+      },
+      "name": {
+        "type": "string",
+        "description": "Unique name identifier for the node"
+      },
+      "properties": {
+        "type": "object",
+        "description": "Flexible metadata as key-value pairs"
+      },
+      "vector_id": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Optional foreign key to l2_insights.id for vector embedding linkage"
+      }
+    },
+    "required": ["label", "name"]
+  }
+}
+```
+
+**Parameters:**
+- `label` (string, required): Node type or category
+- `name` (string, required): Unique name identifier for the node
+- `properties` (object, optional, default: {}): Flexible metadata as key-value pairs
+- `vector_id` (int, optional): Foreign key to l2_insights.id for vector embedding linkage
+
+**Returns:**
+```json
+{
+  "node_id": 123,
+  "label": "Project",
+  "name": "Cognitive Memory System",
+  "created": false,
+  "vector_id": 456,
+  "status": "success"
+}
+```
+
+**Use Cases:**
+- **Entity Creation:** Create structured entities (projects, technologies, clients)
+- **Vector Linking:** Connect graph nodes to L2 insight embeddings for hybrid search
+- **Metadata Storage:** Store flexible properties with each node
+
+**Example Usage:**
+```python
+result = await mcp_server.call_tool("graph_add_node", {
+    "label": "Project",
+    "name": "Cognitive Memory System",
+    "properties": {
+        "status": "active",
+        "priority": "high",
+        "start_date": "2025-01-15"
+    },
+    "vector_id": 456
+})
+```
+
+---
+
+### graph_add_edge
+
+**Purpose:** Create or update a relationship edge between graph nodes with auto-upsert of nodes. Supports standardized relations and optional weight scoring.
+
+**Signature:**
+```json
+{
+  "name": "graph_add_edge",
+  "description": "Create or update a relationship edge between graph nodes with auto-upsert of nodes. Supports standardized relations and optional weight scoring.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "source_name": {
+        "type": "string",
+        "description": "Name of source node (will be created if not exists)"
+      },
+      "target_name": {
+        "type": "string",
+        "description": "Name of target node (will be created if not exists)"
+      },
+      "relation": {
+        "type": "string",
+        "description": "Relationship type (e.g., 'USES', 'SOLVES', 'CREATED_BY', 'RELATED_TO', 'DEPENDS_ON')"
+      },
+      "source_label": {
+        "type": "string",
+        "description": "Label for source node if auto-created (default: 'Entity')"
+      },
+      "target_label": {
+        "type": "string",
+        "description": "Label for target node if auto-created (default: 'Entity')"
+      },
+      "weight": {
+        "type": "number",
+        "minimum": 0.0,
+        "maximum": 1.0,
+        "description": "Edge weight for relevance scoring (0.0-1.0, default: 1.0)"
+      },
+      "properties": {
+        "type": "object",
+        "description": "Flexible metadata as key-value pairs"
+      }
+    },
+    "required": ["source_name", "target_name", "relation"]
+  }
+}
+```
+
+**Parameters:**
+- `source_name` (string, required): Name of source node
+- `target_name` (string, required): Name of target node
+- `relation` (string, required): Relationship type
+- `source_label` (string, optional): Label for source node if auto-created (default: 'Entity')
+- `target_label` (string, optional): Label for target node if auto-created (default: 'Entity')
+- `weight` (float, optional, default: 1.0): Edge weight for relevance scoring (0.0-1.0)
+- `properties` (object, optional): Flexible metadata as key-value pairs
+
+**Standardized Relation Types:**
+- `USES`: Project → Technology (usage dependencies)
+- `SOLVES`: Solution → Problem (problem-solution mapping)
+- `CREATED_BY`: Entity → Agent/User (attribution)
+- `RELATED_TO`: General relationship between entities
+- `DEPENDS_ON`: Dependency relationships
+
+**Returns:**
+```json
+{
+  "edge_id": 789,
+  "source_node_id": 123,
+  "target_node_id": 124,
+  "relation": "USES",
+  "weight": 0.8,
+  "source_created": true,
+  "target_created": false,
+  "status": "success"
+}
+```
+
+**Auto-Upsert Behavior:**
+- Source or target nodes are automatically created if they don't exist
+- Existing edges are updated with new weight/properties
+- Idempotent operations prevent duplicate creation
+
+**Example Usage:**
+```python
+result = await mcp_server.call_tool("graph_add_edge", {
+    "source_name": "Cognitive Memory System",
+    "target_name": "PostgreSQL",
+    "relation": "USES",
+    "source_label": "Project",
+    "target_label": "Technology",
+    "weight": 0.9,
+    "properties": {
+        "critical": true,
+        "version": "15+"
+    }
+})
+```
+
+---
+
+### graph_query_neighbors
+
+**Purpose:** Find neighbor nodes of a given node with single-hop and multi-hop traversal. Supports filtering by relation type, depth-limited traversal, and cycle detection.
+
+**Signature:**
+```json
+{
+  "name": "graph_query_neighbors",
+  "description": "Find neighbor nodes of a given node with single-hop and multi-hop traversal. Supports filtering by relation type, depth-limited traversal, and cycle detection.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "node_name": {
+        "type": "string",
+        "description": "Name of the starting node to find neighbors for"
+      },
+      "relation_type": {
+        "type": "string",
+        "description": "Optional filter for specific relation types (e.g., 'USES', 'SOLVES', 'RELATED_TO')"
+      },
+      "depth": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 5,
+        "description": "Maximum traversal depth (1-5, default: 1)"
+      }
+    },
+    "required": ["node_name"]
+  }
+}
+```
+
+**Parameters:**
+- `node_name` (string, required): Name of the starting node
+- `relation_type` (string, optional): Filter for specific relation types
+- `depth` (int, optional, default: 1): Maximum traversal depth (1-5)
+
+**Returns:**
+```json
+{
+  "neighbors": [
+    {
+      "node_id": 124,
+      "label": "Technology",
+      "name": "PostgreSQL",
+      "properties": {
+        "type": "database",
+        "version": "15+"
+      },
+      "relation": "USES",
+      "distance": 1,
+      "weight": 0.9
+    },
+    {
+      "node_id": 125,
+      "label": "Technology",
+      "name": "Python",
+      "properties": {
+        "type": "language",
+        "version": "3.11+"
+      },
+      "relation": "USES",
+      "distance": 1,
+      "weight": 0.8
+    }
+  ],
+  "start_node": "Cognitive Memory System",
+  "depth": 1,
+  "total_neighbors": 2,
+  "status": "success"
+}
+```
+
+**Performance Characteristics:**
+- **Depth 1:** <50ms typical, <100ms max acceptable
+- **Depth 2-3:** <100ms typical, <200ms max acceptable
+- **Depth 4-5:** Use sparingly, may require index optimization
+
+**WITH RECURSIVE CTE:**
+Uses PostgreSQL's recursive Common Table Expression for efficient graph traversal with built-in cycle detection.
+
+**Example Usage:**
+```python
+# Direct neighbors only
+result = await mcp_server.call_tool("graph_query_neighbors", {
+    "node_name": "Cognitive Memory System",
+    "depth": 1
+})
+
+# Multi-hop traversal with filter
+result = await mcp_server.call_tool("graph_query_neighbors", {
+    "node_name": "Cognitive Memory System",
+    "relation_type": "USES",
+    "depth": 3
+})
+```
+
+---
+
+### graph_find_path
+
+**Purpose:** Find the shortest path between two nodes using BFS-based pathfinding with bidirectional traversal, cycle detection, and performance protection.
+
+**Signature:**
+```json
+{
+  "name": "graph_find_path",
+  "description": "Find the shortest path between two nodes using BFS-based pathfinding with bidirectional traversal, cycle detection, and performance protection.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "start_node": {
+        "type": "string",
+        "description": "Name of the starting node for pathfinding"
+      },
+      "end_node": {
+        "type": "string",
+        "description": "Name of the target node to find path to"
+      },
+      "max_depth": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 10,
+        "default": 5,
+        "description": "Maximum traversal depth (1-10, default: 5)"
+      }
+    },
+    "required": ["start_node", "end_node"]
+  }
+}
+```
+
+**Parameters:**
+- `start_node` (string, required): Name of the starting node
+- `end_node` (string, required): Name of the target node
+- `max_depth` (int, optional, default: 5): Maximum traversal depth (1-10)
+
+**Returns:**
+```json
+{
+  "path_found": true,
+  "path_length": 3,
+  "path": [
+    {
+      "node_id": 123,
+      "label": "Project",
+      "name": "Cognitive Memory System",
+      "relation_to_next": "USES"
+    },
+    {
+      "node_id": 124,
+      "label": "Technology",
+      "name": "PostgreSQL",
+      "relation_to_next": "SOLVES"
+    },
+    {
+      "node_id": 125,
+      "label": "Solution",
+      "name": "Vector Storage",
+      "relation_to_next": null
+    }
+  ],
+  "start_node": "Cognitive Memory System",
+  "end_node": "Vector Storage",
+  "search_depth": 3,
+  "status": "success"
+}
+```
+
+**Algorithm Details:**
+- **BFS-based:** Breadth-First Search guarantees shortest path
+- **Bidirectional:** Searches from both ends simultaneously for efficiency
+- **Cycle Detection:** Prevents infinite loops in cyclic graphs
+- **Performance Protection:** 10-second timeout, max 10 paths returned
+
+**Performance Targets:**
+- **5 Hops:** <200ms typical, <400ms max acceptable
+- **Complex paths:** Timeout protection prevents system overload
+
+**Example Usage:**
+```python
+# Find connection between project and solution
+result = await mcp_server.call_tool("graph_find_path", {
+    "start_node": "High Volume Requirement",
+    "end_node": "PostgreSQL",
+    "max_depth": 5
+})
+
+# Check if two entities are related
+if result["path_found"]:
+    print(f"Path found with {result['path_length']} hops")
+    for step in result["path"]:
+        print(f"  {step['name']} -> {step.get('relation_to_next', 'END')}")
+```
 
 ---
 

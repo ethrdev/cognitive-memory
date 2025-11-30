@@ -36,7 +36,7 @@ jobs:
         run: pip install bandit[toml]
 
       - name: Run Bandit
-        run: bandit -r mcp_server/ -f json -o bandit-results.json || true
+        run: bandit -r cognitive_memory/ -f json -o bandit-results.json || true
 
       - name: Upload Bandit results
         uses: actions/upload-artifact@v4
