@@ -193,6 +193,104 @@ The start script automatically loads environment variables from `.env.developmen
 | `memory://l0-raw?session_id={id}` | Raw dialogue transcripts |
 | `memory://stale-memory` | Archived memory items |
 
+## Graph Schema (GraphRAG Integration)
+
+The system includes a graph database layer for storing entities and relationships, enabling GraphRAG (Graph Retrieval-Augmented Generation) capabilities. This extends the hybrid search to combine semantic, keyword, and graph-based retrieval.
+
+### Schema Overview
+
+```sql
+-- Nodes table: Stores entities (people, concepts, documents, etc.)
+CREATE TABLE nodes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    label VARCHAR(255) NOT NULL,           -- Entity type ('Person', 'Concept', 'Document')
+    name VARCHAR(255) NOT NULL,            -- Unique entity name
+    properties JSONB DEFAULT '{}',        -- Flexible metadata
+    vector_id INTEGER,                     -- Optional FK to l2_insights.id
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Edges table: Stores relationships between entities
+CREATE TABLE edges (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    source_id UUID NOT NULL,               -- From node
+    target_id UUID NOT NULL,               -- To node
+    relation VARCHAR(255) NOT NULL,        -- Relationship type ('knows', 'contains', 'cites')
+    weight FLOAT DEFAULT 1.0,             -- Relationship strength (0.0-1.0)
+    properties JSONB DEFAULT '{}',        -- Flexible metadata
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### Key Features
+
+- **UUID Primary Keys**: Distributed system compatibility and graph traversal performance
+- **Idempotent Operations**: UNIQUE constraints prevent duplicate entities and relationships
+- **Flexible Metadata**: JSONB properties with GIN indexes for complex queries
+- **Optional Vector Integration**: Link entities to L2 insights via `vector_id` foreign key
+- **CASCADE Deletes**: Automatic cleanup of relationships when entities are removed
+- **Performance Optimized**: Comprehensive indexing for fast graph traversals
+
+### Indexes and Performance
+
+| Index | Purpose | Type |
+|-------|---------|------|
+| `idx_nodes_unique` | Prevent duplicate entities | B-tree |
+| `idx_nodes_label` | Filter by entity type | B-tree |
+| `idx_nodes_name` | Fast entity lookup | B-tree |
+| `idx_edges_unique` | Prevent duplicate relationships | B-tree |
+| `idx_edges_source_id` | Outbound traversals | B-tree |
+| `idx_edges_target_id` | Inbound traversals | B-tree |
+| `idx_edges_relation` | Filter by relationship type | B-tree |
+| `idx_nodes_properties` | JSONB metadata queries | GIN |
+| `idx_edges_properties` | JSONB metadata queries | GIN |
+
+### Usage Examples
+
+```sql
+-- Create entities
+INSERT INTO nodes (label, name, properties) VALUES
+  ('Person', 'Alice', '{"role": "developer", "team": "AI"}'),
+  ('Concept', 'Machine Learning', '{"domain": "AI", "complexity": "advanced"}'),
+  ('Document', 'Research Paper', '{"type": "academic", "year": 2024}');
+
+-- Create relationships
+INSERT INTO edges (source_id, target_id, relation, weight) VALUES
+  ((SELECT id FROM nodes WHERE name = 'Alice'),
+   (SELECT id FROM nodes WHERE name = 'Machine Learning'),
+   'knows', 0.9),
+  ((SELECT id FROM nodes WHERE name = 'Machine Learning'),
+   (SELECT id FROM nodes WHERE name = 'Research Paper'),
+   'applies_to', 0.8);
+
+-- Query Alice's connections
+SELECT n.name, e.relation, e.weight
+FROM edges e
+JOIN nodes n ON e.target_id = n.id
+JOIN nodes alice ON e.source_id = alice.id
+WHERE alice.name = 'Alice';
+
+-- JSONB property queries
+SELECT name FROM nodes WHERE properties @> '{"role": "developer"}';
+```
+
+### Integration with Cognitive Memory
+
+The graph schema extends the existing cognitive memory system:
+
+- **Entity Extraction**: Automatically extract and store entities from conversations
+- **Relationship Mapping**: Track relationships between concepts, people, and documents
+- **Graph-Enhanced Search**: Combine with hybrid search for contextual retrieval
+- **Knowledge Evolution**: Track how relationships change over time
+
+### Migration
+
+Apply the graph schema with migration `012_add_graph_tables.sql`:
+
+```bash
+psql "$DATABASE_URL" -f mcp_server/db/migrations/012_add_graph_tables.sql
+```
+
 ## Documentation
 
 | Document | Description |
