@@ -504,9 +504,11 @@ class DualJudgeEvaluator:
                 query_id, judge1_scores, judge2_scores, kappa, is_spot_check
             )
 
+            # Bug fix: f-string format specifier can't have conditional logic
+            kappa_str = f"{kappa:.3f}" if kappa is not None else "N/A"
             logger.info(
                 f"Dual judge evaluation completed: {len(docs)} docs, "
-                f"kappa={kappa:.3f if kappa is not None else 'N/A'}, latency={latency:.2f}s"
+                f"kappa={kappa_str}, latency={latency:.2f}s"
             )
 
             return {
@@ -566,17 +568,16 @@ class DualJudgeEvaluator:
                 # Bug #3 fix: Serialize dict to JSON string for psycopg2
                 metadata_json = json.dumps({"spot_check": is_spot_check})
 
-                # Serialize list scores to JSON arrays for PostgreSQL JSONB columns
-                # Bug #3 fix: psycopg2 can't adapt Python dict/list directly to JSONB
-                judge1_json = json.dumps(judge1_scores) if judge1_scores else None
-                judge2_json = json.dumps(judge2_scores) if judge2_scores else None
+                # Bug #5 fix: judge1_score/judge2_score are FLOAT[] arrays, not JSONB
+                # psycopg2 can adapt Python lists directly to PostgreSQL arrays
+                # No JSON serialization needed - pass lists directly
 
                 # Update with judge scores and metadata
                 cursor.execute(
                     """
                     UPDATE ground_truth
-                    SET judge1_score = %s::jsonb,
-                        judge2_score = %s::jsonb,
+                    SET judge1_score = %s::double precision[],
+                        judge2_score = %s::double precision[],
                         judge1_model = 'gpt-4o',
                         judge2_model = CASE
                             WHEN %s IS NOT NULL THEN 'claude-3-5-haiku-20241022'
@@ -586,7 +587,7 @@ class DualJudgeEvaluator:
                         metadata = COALESCE(metadata, '{}'::jsonb) || %s::jsonb
                     WHERE id = %s;
                     """,
-                    (judge1_json, judge2_json, judge2_json, kappa, metadata_json, query_id),
+                    (judge1_scores, judge2_scores, judge2_scores, kappa, metadata_json, query_id),
                 )
 
                 conn.commit()

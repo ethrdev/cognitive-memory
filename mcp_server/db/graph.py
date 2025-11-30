@@ -577,6 +577,23 @@ def find_path(start_node_name: str, end_node_name: str, max_depth: int = 5) -> d
                 edge_path = row["edge_path"]  # Array of edge UUIDs
                 total_weight = float(row["total_weight"])
 
+                # Bug #4 Fix: Handle UUID arrays that may be returned as strings
+                # PostgreSQL returns arrays as "{uuid1,uuid2,...}" which psycopg2
+                # may not automatically convert to Python lists
+                if isinstance(node_path, str):
+                    # Parse string representation: "{uuid1,uuid2}" -> ["uuid1", "uuid2"]
+                    node_path = [
+                        uuid_str.strip()
+                        for uuid_str in node_path.strip("{}").split(",")
+                        if uuid_str.strip()
+                    ]
+                if isinstance(edge_path, str):
+                    edge_path = [
+                        uuid_str.strip()
+                        for uuid_str in edge_path.strip("{}").split(",")
+                        if uuid_str.strip()
+                    ]
+
                 # Fetch detailed node information for each node in the path
                 nodes = []
                 for node_id in node_path:
