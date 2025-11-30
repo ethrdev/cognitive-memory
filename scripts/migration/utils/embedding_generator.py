@@ -2,6 +2,7 @@
 
 import os
 import time
+from collections.abc import Callable
 
 from openai import OpenAI
 
@@ -59,7 +60,7 @@ def generate_embeddings_batch(
     model: str = "text-embedding-3-small",
     dimensions: int = 1536,
     batch_size: int = 100,
-    checkpoint_callback: callable | None = None,
+    checkpoint_callback: Callable[[int, int], None] | None = None,
 ) -> list[list[float]]:
     """Generate embeddings for multiple texts in batches.
 

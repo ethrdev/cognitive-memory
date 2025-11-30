@@ -26,5 +26,8 @@ fi
 export ENVIRONMENT=development
 export LOG_LEVEL=INFO
 
+# Add project root to PYTHONPATH so mcp_server module can be found
+export PYTHONPATH="$SCRIPT_DIR:${PYTHONPATH:-}"
+
 # Start the MCP server
 exec "$SCRIPT_DIR/venv/bin/python" -m mcp_server
