@@ -83,7 +83,8 @@ def rrf_fusion(
         keyword_weight = keyword_weight / total_weight
         graph_weight = graph_weight / total_weight
 
-    merged_scores: dict[int, dict] = {}
+    # Bug Fix 2025-12-06: Allow both int and str IDs (episodes use "episode_49" format)
+    merged_scores: dict[int | str, dict] = {}
 
     # Semantic Search Scores
     for rank, result in enumerate(semantic_results, start=1):
@@ -212,15 +213,24 @@ async def semantic_search(
 
 
 async def keyword_search(
-    query_text: str, top_k: int, conn: Any, filter_params: dict | None = None
+    query_text: str, top_k: int, conn: Any, filter_params: dict | None = None,
+    language: str = "simple"
 ) -> list[dict]:
     """
     Keyword search using PostgreSQL Full-Text Search.
+
+    Bug Fix 2025-12-06: Changed default language from 'english' to 'simple'
+    for better multi-language support. 'simple' doesn't apply stemming but
+    does basic tokenization, which works better for German compound words
+    like "Identitätsmaterial" or "Task-Completion-Modus".
 
     Args:
         query_text: Query string (e.g., "consciousness autonomy")
         top_k: Number of results to return
         conn: PostgreSQL connection
+        filter_params: Optional filter parameters
+        language: FTS language config ('simple', 'english', 'german', etc.)
+                  Default: 'simple' for multi-language support
 
     Returns:
         List of dicts with id, content, source_ids, rank, rank_position
@@ -232,22 +242,23 @@ async def keyword_search(
 
     # ts_rank: Relevance score (higher = better match)
     # plainto_tsquery: Converts plain text to tsquery (handles spaces, punctuation)
+    # Using parameterized language config for multi-language support
     query = f"""
         SELECT id, content, source_ids, metadata, io_category, is_identity, source_file,
                ts_rank(
-                   to_tsvector('english', content),
-                   plainto_tsquery('english', %s)
+                   to_tsvector('{language}', content),
+                   plainto_tsquery('{language}', %s)
                ) AS rank
         FROM l2_insights
-        WHERE to_tsvector('english', content) @@ plainto_tsquery('english', %s)
+        WHERE to_tsvector('{language}', content) @@ plainto_tsquery('{language}', %s)
         {filter_clause}
         ORDER BY rank DESC
         LIMIT %s;
         """
-        
+
     # Combine parameters: query_text, query_text, filter_values, top_k
     params = [query_text, query_text] + filter_values + [top_k]
-    
+
     cursor.execute(query, params)
 
     results = cursor.fetchall()
@@ -262,6 +273,121 @@ async def keyword_search(
             "io_category": row["io_category"],
             "is_identity": row["is_identity"],
             "source_file": row["source_file"],
+            "rank": row["rank"],
+            "rank_position": idx + 1,
+        }
+        for idx, row in enumerate(results)
+    ]
+
+
+# ============================================================================
+# Episode Memory Search Functions (Bug Fix 2025-12-06)
+# ============================================================================
+
+
+async def episode_semantic_search(
+    query_embedding: list[float], top_k: int, conn: Any
+) -> list[dict]:
+    """
+    Semantic search in episode_memory using pgvector cosine distance.
+
+    Bug Fix 2025-12-06: Added to include episode memories in hybrid search.
+    Episodes contain valuable lessons (query + reward + reflection) that
+    should be searchable.
+
+    Args:
+        query_embedding: 1536-dim vector from OpenAI
+        top_k: Number of results to return
+        conn: PostgreSQL connection
+
+    Returns:
+        List of dicts with id, query, reflection, reward, distance, rank
+    """
+    # Register pgvector type (required once per connection)
+    register_vector(conn)
+
+    cursor = conn.cursor()
+
+    # Cosine distance: <=> operator
+    # Lower distance = higher similarity
+    query = """
+        SELECT id, query, reflection, reward, created_at,
+               embedding <=> %s::vector AS distance
+        FROM episode_memory
+        ORDER BY distance
+        LIMIT %s;
+        """
+
+    cursor.execute(query, [query_embedding, top_k])
+    results = cursor.fetchall()
+
+    # Format results for RRF fusion (needs 'id' and 'content' keys)
+    return [
+        {
+            "id": f"episode_{row['id']}",  # Prefix to distinguish from l2_insights
+            "content": f"Episode: {row['query']} → Reflection: {row['reflection']}",
+            "source_type": "episode_memory",
+            "episode_id": row["id"],
+            "query": row["query"],
+            "reflection": row["reflection"],
+            "reward": row["reward"],
+            "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+            "distance": row["distance"],
+            "rank": idx + 1,
+        }
+        for idx, row in enumerate(results)
+    ]
+
+
+async def episode_keyword_search(
+    query_text: str, top_k: int, conn: Any, language: str = "simple"
+) -> list[dict]:
+    """
+    Keyword search in episode_memory using PostgreSQL Full-Text Search.
+
+    Bug Fix 2025-12-06: Added to include episode memories in hybrid search.
+    Uses 'simple' language by default for multi-language support.
+
+    Args:
+        query_text: Query string
+        top_k: Number of results to return
+        conn: PostgreSQL connection
+        language: FTS language config (default: 'simple' for multi-language)
+
+    Returns:
+        List of dicts with id, query, reflection, reward, rank
+    """
+    cursor = conn.cursor()
+
+    # Search in both query and reflection fields
+    # Using 'simple' language for better multi-language support
+    query = f"""
+        SELECT id, query, reflection, reward, created_at,
+               ts_rank(
+                   to_tsvector('{language}', query || ' ' || reflection),
+                   plainto_tsquery('{language}', %s)
+               ) AS rank
+        FROM episode_memory
+        WHERE to_tsvector('{language}', query || ' ' || reflection)
+              @@ plainto_tsquery('{language}', %s)
+        ORDER BY rank DESC
+        LIMIT %s;
+        """
+
+    cursor.execute(query, [query_text, query_text, top_k])
+    results = cursor.fetchall()
+
+    # Format results for RRF fusion
+    return [
+        {
+            "id": f"episode_{row['id']}",  # Prefix to distinguish from l2_insights
+            "content": f"Episode: {row['query']} → Reflection: {row['reflection']}",
+            "source_type": "episode_memory",
+            "episode_id": row["id"],
+            "query": row["query"],
+            "reflection": row["reflection"],
+            "reward": row["reward"],
+            "created_at": row["created_at"].isoformat() if row["created_at"] else None,
             "rank": row["rank"],
             "rank_position": idx + 1,
         }
@@ -933,35 +1059,60 @@ async def handle_compress_to_l2_insight(arguments: dict[str, Any]) -> dict[str, 
 
 def generate_query_embedding(query_text: str) -> list[float]:
     """
-    Generate embedding for query text using OpenAI or mock embeddings.
+    Generate embedding for query text using OpenAI API.
+
+    Bug Fix 2025-12-06: Replaced mock embeddings with real OpenAI API calls.
+    Mock embeddings caused semantic search failures because query vectors
+    didn't match stored document vectors.
 
     Args:
         query_text: The query text to embed
 
     Returns:
         1536-dimensional embedding vector
-    """
-    import subprocess
-    import json
-    import sys
 
-    # Use the generate_embedding.py script with --mock flag
-    script_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "generate_embedding.py")
+    Raises:
+        RuntimeError: If OpenAI API key is not configured or API call fails
+    """
+    logger = logging.getLogger(__name__)
+
+    # Get OpenAI API key
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key or api_key == "sk-your-openai-api-key-here":
+        raise RuntimeError(
+            "OpenAI API key not configured. Set OPENAI_API_KEY environment variable."
+        )
 
     try:
-        result = subprocess.run(
-            [sys.executable, script_path, query_text, "--mock"],
-            capture_output=True,
-            text=True,
-            check=True
+        client = OpenAI(api_key=api_key)
+        response = client.embeddings.create(
+            model="text-embedding-3-small",
+            input=query_text,
+            encoding_format="float"
         )
-        embedding = json.loads(result.stdout)
+        embedding = response.data[0].embedding
+        logger.debug(f"Generated real embedding for query ({len(query_text)} chars)")
         return embedding
+
+    except RateLimitError as e:
+        logger.warning(f"OpenAI rate limit hit, retrying once: {e}")
+        # Single retry with backoff
+        time.sleep(1)
+        try:
+            response = client.embeddings.create(
+                model="text-embedding-3-small",
+                input=query_text,
+                encoding_format="float"
+            )
+            return response.data[0].embedding
+        except Exception as retry_error:
+            raise RuntimeError(f"Embedding generation failed after retry: {retry_error}") from retry_error
+
+    except APIConnectionError as e:
+        raise RuntimeError(f"OpenAI API connection failed: {e}") from e
+
     except Exception as e:
-        # Fallback to simple mock embedding
-        import numpy as np
-        np.random.seed(hash(query_text) % (2**32))
-        return np.random.randn(1536).tolist()
+        raise RuntimeError(f"Embedding generation failed: {e}") from e
 
 
 async def handle_hybrid_search(arguments: dict[str, Any]) -> dict[str, Any]:
@@ -1065,17 +1216,27 @@ async def handle_hybrid_search(arguments: dict[str, Any]) -> dict[str, Any]:
 
         # Execute searches
         with get_connection() as conn:
-            # Run semantic and keyword searches
+            # Run L2 Insights searches
             semantic_results = await semantic_search(query_embedding, top_k, conn, filter_params)
             keyword_results = await keyword_search(query_text, top_k, conn, filter_params)
+
+            # Bug Fix 2025-12-06: Run Episode Memory searches
+            # Episodes contain valuable lessons that should be searchable
+            episode_semantic_results = await episode_semantic_search(query_embedding, top_k, conn)
+            episode_keyword_results = await episode_keyword_search(query_text, top_k, conn)
 
             # Story 4.6: Run graph search
             graph_results = await graph_search(query_text, top_k, conn)
 
-        # Apply RRF fusion with all three sources
+        # Bug Fix 2025-12-06: Merge episode results with L2 results for RRF fusion
+        # Episodes use prefixed IDs ("episode_49") to distinguish from l2_insights IDs
+        all_semantic_results = semantic_results + episode_semantic_results
+        all_keyword_results = keyword_results + episode_keyword_results
+
+        # Apply RRF fusion with all sources (including episodes)
         fused_results = rrf_fusion(
-            semantic_results,
-            keyword_results,
+            all_semantic_results,
+            all_keyword_results,
             applied_weights,
             k=60,
             graph_results=graph_results
@@ -1085,22 +1246,26 @@ async def handle_hybrid_search(arguments: dict[str, Any]) -> dict[str, Any]:
         final_results = fused_results[:top_k]
 
         logger.info(
-            f"Hybrid search completed: {len(semantic_results)} semantic, "
-            f"{len(keyword_results)} keyword, {len(graph_results)} graph, "
-            f"{len(final_results)} fused (query_type={query_type})"
+            f"Hybrid search completed: {len(semantic_results)} l2_semantic, "
+            f"{len(episode_semantic_results)} episode_semantic, "
+            f"{len(keyword_results)} l2_keyword, {len(episode_keyword_results)} episode_keyword, "
+            f"{len(graph_results)} graph, {len(final_results)} fused (query_type={query_type})"
         )
 
-        # Story 4.6: Extended response format
+        # Extended response format with episode counts
         return {
             "results": final_results,
             "query_embedding_dimension": len(query_embedding),
             "semantic_results_count": len(semantic_results),
             "keyword_results_count": len(keyword_results),
-            "graph_results_count": len(graph_results),  # NEW: Story 4.6
+            "graph_results_count": len(graph_results),
+            # Bug Fix 2025-12-06: Episode memory search counts
+            "episode_semantic_count": len(episode_semantic_results),
+            "episode_keyword_count": len(episode_keyword_results),
             "final_results_count": len(final_results),
-            "query_type": query_type,                   # NEW: Story 4.6
-            "matched_keywords": matched_keywords if is_relational else [],  # NEW: Story 4.6
-            "applied_weights": applied_weights,         # NEW: Story 4.6
+            "query_type": query_type,
+            "matched_keywords": matched_keywords if is_relational else [],
+            "applied_weights": applied_weights,
             "weights": applied_weights,                 # Backwards-compatible alias
             "status": "success",
         }
