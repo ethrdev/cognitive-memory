@@ -2,9 +2,11 @@
 graph_query_neighbors Tool Implementation
 
 MCP tool for finding neighbor nodes in a graph with single-hop and multi-hop traversal.
-Supports filtering by relation type, depth-limited traversal, and cycle detection.
+Supports filtering by relation type, depth-limited traversal, cycle detection,
+and bidirectional traversal (both/outgoing/incoming).
 
 Story 4.4: graph_query_neighbors Tool Implementation
+Bug Fix: Bidirectional graph neighbors (2025-12-07)
 """
 
 from __future__ import annotations
@@ -24,10 +26,10 @@ async def handle_graph_query_neighbors(arguments: dict[str, Any]) -> dict[str, A
     Find neighbor nodes of a given node with single-hop and multi-hop traversal.
 
     Args:
-        arguments: Tool arguments containing node_name, relation_type, depth
+        arguments: Tool arguments containing node_name, relation_type, depth, direction
 
     Returns:
-        Dict with array of neighbor nodes with relation, distance, and weight data,
+        Dict with array of neighbor nodes with relation, distance, weight, and edge_direction data,
         or error response if validation/database operations fail
     """
     logger = logging.getLogger(__name__)
@@ -37,6 +39,7 @@ async def handle_graph_query_neighbors(arguments: dict[str, Any]) -> dict[str, A
         node_name = arguments.get("node_name")
         relation_type = arguments.get("relation_type")  # Optional
         depth = arguments.get("depth", 1)  # Optional, default 1
+        direction = arguments.get("direction", "both")  # Optional, default "both"
 
         # Parameter validation
         if not node_name or not isinstance(node_name, str):
@@ -69,6 +72,15 @@ async def handle_graph_query_neighbors(arguments: dict[str, Any]) -> dict[str, A
                 "tool": "graph_query_neighbors",
             }
 
+        # Direction validation (must be "both", "outgoing", or "incoming")
+        valid_directions = ("both", "outgoing", "incoming")
+        if not isinstance(direction, str) or direction not in valid_directions:
+            return {
+                "error": "Parameter validation failed",
+                "details": f"Invalid 'direction' parameter (must be one of: {', '.join(valid_directions)})",
+                "tool": "graph_query_neighbors",
+            }
+
         # Start performance timing
         start_time = time.time()
 
@@ -87,7 +99,8 @@ async def handle_graph_query_neighbors(arguments: dict[str, Any]) -> dict[str, A
             result = query_neighbors(
                 node_id=start_node["id"],
                 relation_type=relation_type,
-                max_depth=depth
+                max_depth=depth,
+                direction=direction
             )
 
             # Calculate execution time
@@ -103,7 +116,7 @@ async def handle_graph_query_neighbors(arguments: dict[str, Any]) -> dict[str, A
 
             logger.info(
                 f"Query neighbors: node='{node_name}' ({start_node['id']}), "
-                f"depth={depth}, relation_type={relation_type or 'all'}, "
+                f"depth={depth}, direction={direction}, relation_type={relation_type or 'all'}, "
                 f"found={len(result)} neighbors, time={execution_time:.2f}ms"
             )
 
@@ -117,6 +130,7 @@ async def handle_graph_query_neighbors(arguments: dict[str, Any]) -> dict[str, A
                 "query_params": {
                     "depth": depth,
                     "relation_type": relation_type,
+                    "direction": direction,
                 },
                 "execution_time_ms": round(execution_time, 2),
                 "neighbor_count": len(result),

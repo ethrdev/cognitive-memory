@@ -2,10 +2,10 @@
 MCP Server Tools Registration Module
 
 Provides tool registration and implementation for the Cognitive Memory System.
-Includes 15 tools: store_raw_dialogue, compress_to_l2_insight, hybrid_search,
-update_working_memory, store_episode, store_dual_judge_scores, ping,
-graph_add_node, graph_add_edge, graph_query_neighbors, graph_find_path,
-get_node_by_name, get_edge, and count_by_type.
+Includes 17 tools: store_raw_dialogue, compress_to_l2_insight, hybrid_search,
+update_working_memory, store_episode, store_dual_judge_scores, get_golden_test_results,
+ping, graph_add_node, graph_add_edge, graph_query_neighbors, graph_find_path,
+get_node_by_name, get_edge, count_by_type, list_episodes, and get_insight_by_id.
 """
 
 from __future__ import annotations
@@ -39,6 +39,8 @@ from mcp_server.tools.graph_find_path import handle_graph_find_path
 from mcp_server.tools.get_node_by_name import handle_get_node_by_name
 from mcp_server.tools.get_edge import handle_get_edge
 from mcp_server.tools.count_by_type import handle_count_by_type
+from mcp_server.tools.list_episodes import handle_list_episodes
+from mcp_server.tools.get_insight_by_id import handle_get_insight_by_id
 
 
 def rrf_fusion(
@@ -2138,7 +2140,7 @@ def register_tools(server: Server) -> list[Tool]:
         ),
         Tool(
             name="graph_query_neighbors",
-            description="Find neighbor nodes of a given node with single-hop and multi-hop traversal. Supports filtering by relation type, depth-limited traversal, and cycle detection.",
+            description="Find neighbor nodes of a given node with single-hop and multi-hop traversal. Supports filtering by relation type, depth-limited traversal, cycle detection, and bidirectional traversal (both/outgoing/incoming).",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -2155,6 +2157,11 @@ def register_tools(server: Server) -> list[Tool]:
                         "minimum": 1,
                         "maximum": 5,
                         "description": "Maximum traversal depth (1-5, default: 1)",
+                    },
+                    "direction": {
+                        "type": "string",
+                        "enum": ["both", "outgoing", "incoming"],
+                        "description": "Traversal direction: 'both' (default) finds neighbors via incoming AND outgoing edges, 'outgoing' only follows edges where start node is source, 'incoming' only follows edges where start node is target",
                     },
                 },
                 "required": ["node_name"],
@@ -2234,6 +2241,49 @@ def register_tools(server: Server) -> list[Tool]:
                 "required": [],
             },
         ),
+        Tool(
+            name="list_episodes",
+            description="List episode memory entries with pagination. Supports time filtering and offset-based pagination for audit purposes.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of episodes to return (1-100, default: 50)",
+                        "minimum": 1,
+                        "maximum": 100,
+                        "default": 50,
+                    },
+                    "offset": {
+                        "type": "integer",
+                        "description": "Number of episodes to skip (default: 0)",
+                        "minimum": 0,
+                        "default": 0,
+                    },
+                    "since": {
+                        "type": "string",
+                        "description": "ISO 8601 timestamp to filter episodes created after this time (optional)",
+                        "format": "date-time",
+                    },
+                },
+                "required": [],
+            },
+        ),
+        Tool(
+            name="get_insight_by_id",
+            description="Get a specific L2 insight by ID for spot verification. Returns content, source_ids, metadata, created_at. Does NOT return embedding (too large).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "description": "L2 insight ID to retrieve",
+                        "minimum": 1,
+                    },
+                },
+                "required": ["id"],
+            },
+        ),
     ]
 
     # Tool handler mapping
@@ -2253,6 +2303,8 @@ def register_tools(server: Server) -> list[Tool]:
         "get_node_by_name": handle_get_node_by_name,
         "get_edge": handle_get_edge,
         "count_by_type": handle_count_by_type,
+        "list_episodes": handle_list_episodes,
+        "get_insight_by_id": handle_get_insight_by_id,
     }
 
     # Register tool call handler (define once, outside the loop)

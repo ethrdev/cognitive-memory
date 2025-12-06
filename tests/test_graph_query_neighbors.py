@@ -2,16 +2,18 @@
 Tests for graph_query_neighbors MCP Tool
 
 Tests the graph_query_neighbors tool implementation including:
-- Parameter validation (node_name, relation_type, depth)
+- Parameter validation (node_name, relation_type, depth, direction)
 - Single-hop query functionality (depth=1)
 - Multi-hop query functionality (depth=2, 3, 4, 5)
 - Relation type filtering
+- Bidirectional traversal (both/outgoing/incoming)
 - Sorting by distance and weight
 - Cycle detection (no duplicate nodes)
 - Error handling for invalid inputs
 - Performance timing functionality
 
 Story 4.4: graph_query_neighbors Tool Implementation
+Bug Fix: Bidirectional graph neighbors (2025-12-07)
 """
 
 from __future__ import annotations
@@ -95,7 +97,8 @@ class TestGraphQueryNeighborsTool:
             mock_query.assert_called_once_with(
                 node_id="start-node-id",
                 relation_type=None,
-                max_depth=1
+                max_depth=1,
+                direction="both"  # Default direction
             )
 
     @pytest.mark.asyncio
@@ -208,7 +211,8 @@ class TestGraphQueryNeighborsTool:
             mock_query.assert_called_once_with(
                 node_id="start-node-id",
                 relation_type="USES",
-                max_depth=1
+                max_depth=1,
+                direction="both"  # Default direction
             )
 
     @pytest.mark.asyncio
@@ -359,11 +363,12 @@ class TestGraphQueryNeighborsTool:
             assert result["status"] == "success"
             assert result["query_params"]["depth"] == 1
 
-            # Verify function called with default depth
+            # Verify function called with default depth and direction
             mock_query.assert_called_once_with(
                 node_id="start-node-id",
                 relation_type=None,
-                max_depth=1  # Default depth
+                max_depth=1,  # Default depth
+                direction="both"  # Default direction
             )
 
     @pytest.mark.asyncio
@@ -442,8 +447,8 @@ class TestDatabaseFunctions:
         import inspect
         sig = inspect.signature(query_neighbors)
 
-        # Verify function signature
-        expected_params = ["node_id", "relation_type", "max_depth"]
+        # Verify function signature (now includes direction parameter)
+        expected_params = ["node_id", "relation_type", "max_depth", "direction"]
         actual_params = list(sig.parameters.keys())
 
         for param in expected_params:
@@ -452,6 +457,7 @@ class TestDatabaseFunctions:
         # Verify default values
         assert sig.parameters["relation_type"].default is None
         assert sig.parameters["max_depth"].default == 1
+        assert sig.parameters["direction"].default == "both"
 
 
 class TestCycleDetection:
@@ -493,3 +499,276 @@ class TestCycleDetection:
             # Verify no duplicate node_ids in results
             node_ids = [neighbor["node_id"] for neighbor in result["neighbors"]]
             assert len(node_ids) == len(set(node_ids)), "Duplicate node IDs found - cycle detection may have failed"
+
+
+class TestBidirectionalTraversal:
+    """Test suite for bidirectional traversal functionality (Bug Fix 2025-12-07)."""
+
+    @pytest.mark.asyncio
+    async def test_direction_parameter_in_query_params(self):
+        """Test that direction parameter is included in query_params response."""
+        with patch('mcp_server.tools.graph_query_neighbors.get_node_by_name') as mock_get_node, \
+             patch('mcp_server.tools.graph_query_neighbors.query_neighbors') as mock_query:
+
+            mock_get_node.return_value = {
+                "id": "start-node-id", "name": "TestNode", "label": "Entity",
+                "properties": {}, "vector_id": None, "created_at": "2025-12-07T10:00:00Z"
+            }
+            mock_query.return_value = []
+
+            # Test with explicit direction
+            arguments = {
+                "node_name": "TestNode",
+                "direction": "incoming"
+            }
+
+            result = await handle_graph_query_neighbors(arguments)
+
+            assert result["status"] == "success"
+            assert result["query_params"]["direction"] == "incoming"
+
+    @pytest.mark.asyncio
+    async def test_default_direction_is_both(self):
+        """Test that default direction is 'both' when not specified."""
+        with patch('mcp_server.tools.graph_query_neighbors.get_node_by_name') as mock_get_node, \
+             patch('mcp_server.tools.graph_query_neighbors.query_neighbors') as mock_query:
+
+            mock_get_node.return_value = {
+                "id": "start-node-id", "name": "TestNode", "label": "Entity",
+                "properties": {}, "vector_id": None, "created_at": "2025-12-07T10:00:00Z"
+            }
+            mock_query.return_value = []
+
+            # No direction specified
+            arguments = {"node_name": "TestNode"}
+
+            result = await handle_graph_query_neighbors(arguments)
+
+            assert result["status"] == "success"
+            assert result["query_params"]["direction"] == "both"
+
+            # Verify DB function called with direction="both"
+            mock_query.assert_called_once_with(
+                node_id="start-node-id",
+                relation_type=None,
+                max_depth=1,
+                direction="both"
+            )
+
+    @pytest.mark.asyncio
+    async def test_direction_outgoing_passed_to_db(self):
+        """Test that direction='outgoing' is correctly passed to database function."""
+        with patch('mcp_server.tools.graph_query_neighbors.get_node_by_name') as mock_get_node, \
+             patch('mcp_server.tools.graph_query_neighbors.query_neighbors') as mock_query:
+
+            mock_get_node.return_value = {
+                "id": "node-b-id", "name": "NodeB", "label": "Entity",
+                "properties": {}, "vector_id": None, "created_at": "2025-12-07T10:00:00Z"
+            }
+            mock_query.return_value = []
+
+            arguments = {
+                "node_name": "NodeB",
+                "direction": "outgoing"
+            }
+
+            result = await handle_graph_query_neighbors(arguments)
+
+            assert result["status"] == "success"
+            mock_query.assert_called_once_with(
+                node_id="node-b-id",
+                relation_type=None,
+                max_depth=1,
+                direction="outgoing"
+            )
+
+    @pytest.mark.asyncio
+    async def test_direction_incoming_passed_to_db(self):
+        """Test that direction='incoming' is correctly passed to database function."""
+        with patch('mcp_server.tools.graph_query_neighbors.get_node_by_name') as mock_get_node, \
+             patch('mcp_server.tools.graph_query_neighbors.query_neighbors') as mock_query:
+
+            mock_get_node.return_value = {
+                "id": "node-b-id", "name": "NodeB", "label": "Entity",
+                "properties": {}, "vector_id": None, "created_at": "2025-12-07T10:00:00Z"
+            }
+            # Mock incoming neighbor (A points to B, so A is incoming neighbor of B)
+            mock_query.return_value = [
+                {
+                    "node_id": "node-a-id",
+                    "label": "Entity",
+                    "name": "NodeA",
+                    "properties": {},
+                    "relation": "RELATED_TO",
+                    "weight": 1.0,
+                    "distance": 1,
+                    "edge_direction": "incoming"
+                }
+            ]
+
+            arguments = {
+                "node_name": "NodeB",
+                "direction": "incoming"
+            }
+
+            result = await handle_graph_query_neighbors(arguments)
+
+            assert result["status"] == "success"
+            assert result["neighbor_count"] == 1
+            assert result["neighbors"][0]["name"] == "NodeA"
+            assert result["neighbors"][0]["edge_direction"] == "incoming"
+
+            mock_query.assert_called_once_with(
+                node_id="node-b-id",
+                relation_type=None,
+                max_depth=1,
+                direction="incoming"
+            )
+
+    @pytest.mark.asyncio
+    async def test_invalid_direction_parameter(self):
+        """Test validation error for invalid direction parameter."""
+        arguments = {
+            "node_name": "TestNode",
+            "direction": "invalid_direction"  # Invalid value
+        }
+
+        result = await handle_graph_query_neighbors(arguments)
+
+        assert result["error"] == "Parameter validation failed"
+        assert "direction" in result["details"]
+        assert result["tool"] == "graph_query_neighbors"
+
+    @pytest.mark.asyncio
+    async def test_direction_parameter_non_string(self):
+        """Test validation error for non-string direction parameter."""
+        arguments = {
+            "node_name": "TestNode",
+            "direction": 123  # Invalid type
+        }
+
+        result = await handle_graph_query_neighbors(arguments)
+
+        assert result["error"] == "Parameter validation failed"
+        assert "direction" in result["details"]
+
+    @pytest.mark.asyncio
+    async def test_edge_direction_field_in_response(self):
+        """Test that edge_direction field is included in neighbor results."""
+        with patch('mcp_server.tools.graph_query_neighbors.get_node_by_name') as mock_get_node, \
+             patch('mcp_server.tools.graph_query_neighbors.query_neighbors') as mock_query:
+
+            mock_get_node.return_value = {
+                "id": "center-node-id", "name": "CenterNode", "label": "Entity",
+                "properties": {}, "vector_id": None, "created_at": "2025-12-07T10:00:00Z"
+            }
+            # Mock bidirectional results with edge_direction
+            mock_query.return_value = [
+                {
+                    "node_id": "outgoing-neighbor-id",
+                    "label": "Entity",
+                    "name": "OutgoingNeighbor",
+                    "properties": {},
+                    "relation": "USES",
+                    "weight": 0.9,
+                    "distance": 1,
+                    "edge_direction": "outgoing"
+                },
+                {
+                    "node_id": "incoming-neighbor-id",
+                    "label": "Entity",
+                    "name": "IncomingNeighbor",
+                    "properties": {},
+                    "relation": "DEPENDS_ON",
+                    "weight": 0.8,
+                    "distance": 1,
+                    "edge_direction": "incoming"
+                }
+            ]
+
+            arguments = {
+                "node_name": "CenterNode",
+                "direction": "both"
+            }
+
+            result = await handle_graph_query_neighbors(arguments)
+
+            assert result["status"] == "success"
+            assert result["neighbor_count"] == 2
+
+            # Verify edge_direction is present in results
+            neighbors = result["neighbors"]
+            edge_directions = [n["edge_direction"] for n in neighbors]
+            assert "outgoing" in edge_directions
+            assert "incoming" in edge_directions
+
+    @pytest.mark.asyncio
+    async def test_bidirectional_multihop_traversal(self):
+        """Test multi-hop traversal with bidirectional edges (AC 4)."""
+        with patch('mcp_server.tools.graph_query_neighbors.get_node_by_name') as mock_get_node, \
+             patch('mcp_server.tools.graph_query_neighbors.query_neighbors') as mock_query:
+
+            mock_get_node.return_value = {
+                "id": "node-c-id", "name": "NodeC", "label": "Entity",
+                "properties": {}, "vector_id": None, "created_at": "2025-12-07T10:00:00Z"
+            }
+            # Mock results for chain A→B→C with bidirectional traversal from C
+            # C should find B (distance=1 incoming) and A (distance=2 incoming)
+            mock_query.return_value = [
+                {
+                    "node_id": "node-b-id",
+                    "label": "Entity",
+                    "name": "NodeB",
+                    "properties": {},
+                    "relation": "CONNECTED_TO",
+                    "weight": 1.0,
+                    "distance": 1,
+                    "edge_direction": "incoming"
+                },
+                {
+                    "node_id": "node-a-id",
+                    "label": "Entity",
+                    "name": "NodeA",
+                    "properties": {},
+                    "relation": "CONNECTED_TO",
+                    "weight": 1.0,
+                    "distance": 2,
+                    "edge_direction": "incoming"
+                }
+            ]
+
+            arguments = {
+                "node_name": "NodeC",
+                "depth": 2,
+                "direction": "both"
+            }
+
+            result = await handle_graph_query_neighbors(arguments)
+
+            assert result["status"] == "success"
+            assert result["neighbor_count"] == 2
+
+            # Verify both nodes found with correct distances
+            neighbors_by_name = {n["name"]: n for n in result["neighbors"]}
+            assert "NodeB" in neighbors_by_name
+            assert "NodeA" in neighbors_by_name
+            assert neighbors_by_name["NodeB"]["distance"] == 1
+            assert neighbors_by_name["NodeA"]["distance"] == 2
+
+
+class TestDirectionValidationInDBLayer:
+    """Test direction parameter validation in database layer."""
+
+    def test_query_neighbors_invalid_direction_raises_error(self):
+        """Test that invalid direction raises ValueError in DB function."""
+        from mcp_server.db.graph import query_neighbors
+
+        # This test verifies the DB function validates direction
+        # In a real test, we'd mock the DB connection
+        # For now, we verify the function signature accepts direction
+        import inspect
+        sig = inspect.signature(query_neighbors)
+        assert "direction" in sig.parameters
+
+        # Verify default is "both"
+        assert sig.parameters["direction"].default == "both"

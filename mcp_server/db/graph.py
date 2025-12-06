@@ -443,33 +443,52 @@ def add_edge(
         raise
 
 
-def query_neighbors(node_id: str, relation_type: str | None = None, max_depth: int = 1) -> list[dict[str, Any]]:
+def query_neighbors(
+    node_id: str,
+    relation_type: str | None = None,
+    max_depth: int = 1,
+    direction: str = "both"
+) -> list[dict[str, Any]]:
     """
     Query neighbor nodes using single-hop or multi-hop traversal with cycle detection.
 
     Uses PostgreSQL WITH RECURSIVE CTE for graph traversal with cycle prevention
-    and optional relation type filtering.
+    and optional relation type filtering. Supports bidirectional traversal.
 
     Args:
         node_id: UUID string of the starting node
         relation_type: Optional filter for specific relation types (e.g., "USES", "SOLVES")
         max_depth: Maximum traversal depth (1-5, default 1)
+        direction: Traversal direction - "both" (default), "outgoing", or "incoming"
 
     Returns:
-        List of neighbor node dicts with relation, distance, and weight data,
+        List of neighbor node dicts with relation, distance, weight, and edge_direction data,
         sorted by distance (ASC) then weight (DESC)
     """
     logger = logging.getLogger(__name__)
+
+    # Validate direction parameter
+    valid_directions = ("both", "outgoing", "incoming")
+    if direction not in valid_directions:
+        raise ValueError(f"Invalid direction '{direction}'. Must be one of: {valid_directions}")
 
     try:
         with get_connection() as conn:
             cursor = conn.cursor()
 
-            # Use recursive CTE for multi-hop graph traversal with cycle detection
+            # Build direction conditions for SQL
+            include_outgoing = direction in ("both", "outgoing")
+            include_incoming = direction in ("both", "incoming")
+
+            # Use recursive CTE for multi-hop bidirectional graph traversal with cycle detection
             cursor.execute(
                 """
                 WITH RECURSIVE neighbors AS (
-                    -- Base case: direct neighbors (depth=1)
+                    -- ═══════════════════════════════════════════════════════════════
+                    -- BASE CASE: Direct neighbors (distance = 1)
+                    -- ═══════════════════════════════════════════════════════════════
+
+                    -- Outgoing edges (direction = 'outgoing' OR 'both')
                     SELECT
                         n.id,
                         n.label,
@@ -478,15 +497,40 @@ def query_neighbors(node_id: str, relation_type: str | None = None, max_depth: i
                         e.relation,
                         e.weight,
                         1 AS distance,
-                        ARRAY[e.source_id, n.id] AS path
+                        ARRAY[%s::uuid, n.id] AS path,
+                        'outgoing' AS edge_direction
                     FROM edges e
                     JOIN nodes n ON e.target_id = n.id
                     WHERE e.source_id = %s::uuid
                         AND (%s IS NULL OR e.relation = %s)
+                        AND %s = true
 
                     UNION ALL
 
-                    -- Recursive case: next hop
+                    -- Incoming edges (direction = 'incoming' OR 'both')
+                    SELECT
+                        n.id,
+                        n.label,
+                        n.name,
+                        n.properties,
+                        e.relation,
+                        e.weight,
+                        1 AS distance,
+                        ARRAY[%s::uuid, n.id] AS path,
+                        'incoming' AS edge_direction
+                    FROM edges e
+                    JOIN nodes n ON e.source_id = n.id
+                    WHERE e.target_id = %s::uuid
+                        AND (%s IS NULL OR e.relation = %s)
+                        AND %s = true
+
+                    UNION ALL
+
+                    -- ═══════════════════════════════════════════════════════════════
+                    -- RECURSIVE CASE: Multi-hop traversal (distance > 1)
+                    -- ═══════════════════════════════════════════════════════════════
+
+                    -- Recursive outgoing: follow outgoing edges from found nodes
                     SELECT
                         n.id,
                         n.label,
@@ -495,19 +539,53 @@ def query_neighbors(node_id: str, relation_type: str | None = None, max_depth: i
                         e.relation,
                         e.weight,
                         nb.distance + 1 AS distance,
-                        nb.path || n.id AS path
+                        nb.path || n.id AS path,
+                        'outgoing' AS edge_direction
                     FROM neighbors nb
                     JOIN edges e ON e.source_id = nb.id
                     JOIN nodes n ON e.target_id = n.id
                     WHERE nb.distance < %s
                         AND NOT (n.id = ANY(nb.path))  -- Cycle detection
                         AND (%s IS NULL OR e.relation = %s)
+                        AND %s = true
+
+                    UNION ALL
+
+                    -- Recursive incoming: follow incoming edges from found nodes
+                    SELECT
+                        n.id,
+                        n.label,
+                        n.name,
+                        n.properties,
+                        e.relation,
+                        e.weight,
+                        nb.distance + 1 AS distance,
+                        nb.path || n.id AS path,
+                        'incoming' AS edge_direction
+                    FROM neighbors nb
+                    JOIN edges e ON e.target_id = nb.id
+                    JOIN nodes n ON e.source_id = n.id
+                    WHERE nb.distance < %s
+                        AND NOT (n.id = ANY(nb.path))  -- Cycle detection
+                        AND (%s IS NULL OR e.relation = %s)
+                        AND %s = true
                 )
-                SELECT id, label, name, properties, relation, weight, distance
+                -- Final selection: shortest path per node, highest weight on tie
+                SELECT DISTINCT ON (id)
+                    id, label, name, properties, relation, weight, distance, edge_direction
                 FROM neighbors
-                ORDER BY distance ASC, weight DESC, name ASC;
+                ORDER BY id, distance ASC, weight DESC, name ASC;
                 """,
-                (node_id, relation_type, relation_type, max_depth, relation_type, relation_type),
+                (
+                    # Base case outgoing
+                    node_id, node_id, relation_type, relation_type, include_outgoing,
+                    # Base case incoming
+                    node_id, node_id, relation_type, relation_type, include_incoming,
+                    # Recursive outgoing
+                    max_depth, relation_type, relation_type, include_outgoing,
+                    # Recursive incoming
+                    max_depth, relation_type, relation_type, include_incoming,
+                ),
             )
 
             results = cursor.fetchall()
@@ -523,13 +601,20 @@ def query_neighbors(node_id: str, relation_type: str | None = None, max_depth: i
                     "relation": row["relation"],
                     "weight": float(row["weight"]),
                     "distance": int(row["distance"]),
+                    "edge_direction": row["edge_direction"],
                 })
 
-            logger.debug(f"Found {len(neighbors)} neighbors for node {node_id} with max_depth={max_depth}")
+            logger.debug(
+                f"Found {len(neighbors)} neighbors for node {node_id} "
+                f"with max_depth={max_depth}, direction={direction}"
+            )
             return neighbors
 
     except Exception as e:
-        logger.error(f"Failed to query neighbors: node_id={node_id}, relation_type={relation_type}, max_depth={max_depth}, error={e}")
+        logger.error(
+            f"Failed to query neighbors: node_id={node_id}, relation_type={relation_type}, "
+            f"max_depth={max_depth}, direction={direction}, error={e}"
+        )
         raise
 
 
