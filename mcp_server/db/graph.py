@@ -312,6 +312,7 @@ def add_edge(
             cursor = conn.cursor()
 
             # Insert edge with idempotent conflict resolution
+            # Use xmax = 0 to detect if row was inserted vs updated
             cursor.execute(
                 """
                 INSERT INTO edges (source_id, target_id, relation, weight, properties)
@@ -320,7 +321,8 @@ def add_edge(
                 DO UPDATE SET
                     weight = EXCLUDED.weight,
                     properties = EXCLUDED.properties
-                RETURNING id, source_id, target_id, relation, weight, created_at;
+                RETURNING id, source_id, target_id, relation, weight, created_at,
+                    (xmax = 0) AS was_inserted;
                 """,
                 (source_id, target_id, relation, weight, properties),
             )
@@ -333,9 +335,10 @@ def add_edge(
                 created_target_id = str(result["target_id"])
                 created_relation = result["relation"]
                 created_weight = float(result["weight"])
-                created = True
+                # xmax = 0 means row was inserted, not updated
+                created = result["was_inserted"]
 
-                logger.debug(f"Created new edge: id={edge_id}, source={created_source_id}, target={created_target_id}, relation={created_relation}")
+                logger.debug(f"{'Created new' if created else 'Updated existing'} edge: id={edge_id}, source={created_source_id}, target={created_target_id}, relation={created_relation}")
 
             else:
                 # Edge already exists, fetch the existing one
@@ -439,10 +442,9 @@ def query_neighbors(node_id: str, relation_type: str | None = None, max_depth: i
                         AND NOT (n.id = ANY(nb.path))  -- Cycle detection
                         AND (%s IS NULL OR e.relation = %s)
                 )
-                SELECT DISTINCT ON (id)
-                    id, label, name, properties, relation, weight, distance
+                SELECT id, label, name, properties, relation, weight, distance
                 FROM neighbors
-                ORDER BY id, distance ASC, weight DESC;
+                ORDER BY distance ASC, weight DESC, name ASC;
                 """,
                 (node_id, relation_type, relation_type, max_depth, relation_type, relation_type),
             )

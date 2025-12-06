@@ -93,17 +93,38 @@ def initialize_pool(
         raise PoolError(f"Connection pool initialization failed: {e}") from e
 
 
+# Transient error patterns that warrant a retry
+_TRANSIENT_ERROR_PATTERNS = [
+    "SSL connection has been closed unexpectedly",
+    "connection reset by peer",
+    "connection timed out",
+    "server closed the connection unexpectedly",
+    "could not connect to server",
+    "the connection is closed",
+]
+
+
+def _is_transient_error(error: Exception) -> bool:
+    """Check if an error is transient and should be retried."""
+    error_str = str(error).lower()
+    return any(pattern.lower() in error_str for pattern in _TRANSIENT_ERROR_PATTERNS)
+
+
 @contextmanager
-def get_connection() -> Iterator[connection]:
+def get_connection(max_retries: int = 3, retry_delay: float = 0.5) -> Iterator[connection]:
     """
-    Get a database connection from the pool.
+    Get a database connection from the pool with retry logic for transient errors.
+
+    Args:
+        max_retries: Maximum number of retry attempts for transient errors (default: 3)
+        retry_delay: Initial delay between retries in seconds, doubles each attempt (default: 0.5)
 
     Returns:
         Database connection object
 
     Raises:
-        PoolError: If pool is not initialized or exhausted
-        ConnectionHealthError: If connection health check fails
+        PoolError: If pool is not initialized or exhausted after all retries
+        ConnectionHealthError: If connection health check fails after all retries
     """
     global _connection_pool
 
@@ -112,42 +133,89 @@ def get_connection() -> Iterator[connection]:
             "Connection pool not initialized. Call initialize_pool() first."
         )
 
-    conn = None
-    try:
-        # Get connection from pool
-        conn = _connection_pool.getconn()
+    last_error: Exception | None = None
+    current_delay = retry_delay
 
-        # Health check: verify connection is alive
+    for attempt in range(max_retries + 1):
+        conn = None
         try:
-            cursor = conn.cursor()
-            cursor.execute("SELECT 1 as health_check")
-            result = cursor.fetchone()
-            if result["health_check"] != 1:
-                raise ConnectionHealthError("Connection health check failed")
-            cursor.close()
-        except (psycopg2.Error, Exception) as e:
-            _logger.warning(f"Connection health check failed: {e}")
-            # Discard bad connection and try to get a new one
-            _connection_pool.putconn(conn, close=True)
-            raise ConnectionHealthError(f"Connection health check failed: {e}") from e
+            # Get connection from pool
+            conn = _connection_pool.getconn()
 
-        _logger.debug("Database connection acquired from pool")
-        yield conn
-
-    except pool.PoolError as e:
-        _logger.error("Connection pool exhausted")
-        raise PoolError("Connection pool exhausted - no available connections") from e
-    except psycopg2.Error as e:
-        _logger.error(f"Database connection error: {e}")
-        raise PoolError(f"Database connection failed: {e}") from e
-    finally:
-        # Always return connection to pool if it was successfully acquired
-        if conn is not None:
+            # Health check: verify connection is alive
             try:
-                _connection_pool.putconn(conn)
-                _logger.debug("Database connection returned to pool")
-            except Exception as e:
-                _logger.error(f"Error returning connection to pool: {e}")
+                cursor = conn.cursor()
+                cursor.execute("SELECT 1 as health_check")
+                result = cursor.fetchone()
+                if result["health_check"] != 1:
+                    raise ConnectionHealthError("Connection health check failed")
+                cursor.close()
+            except (psycopg2.Error, Exception) as e:
+                _logger.warning(f"Connection health check failed (attempt {attempt + 1}/{max_retries + 1}): {e}")
+                # Discard bad connection
+                try:
+                    _connection_pool.putconn(conn, close=True)
+                except Exception:
+                    pass
+                conn = None
+
+                # Check if error is transient and we should retry
+                if _is_transient_error(e) and attempt < max_retries:
+                    _logger.info(f"Transient error detected, retrying in {current_delay:.1f}s...")
+                    time.sleep(current_delay)
+                    current_delay *= 2  # Exponential backoff
+                    last_error = e
+                    continue
+
+                raise ConnectionHealthError(f"Connection health check failed: {e}") from e
+
+            _logger.debug("Database connection acquired from pool")
+
+            try:
+                yield conn
+                return  # Success - exit the retry loop
+            except psycopg2.Error as e:
+                # Check if the error during operation is transient
+                if _is_transient_error(e) and attempt < max_retries:
+                    _logger.warning(f"Transient database error (attempt {attempt + 1}/{max_retries + 1}): {e}")
+                    _logger.info(f"Retrying in {current_delay:.1f}s...")
+                    time.sleep(current_delay)
+                    current_delay *= 2
+                    last_error = e
+                    continue
+                raise
+
+        except pool.PoolError as e:
+            if attempt < max_retries:
+                _logger.warning(f"Pool error (attempt {attempt + 1}/{max_retries + 1}): {e}")
+                time.sleep(current_delay)
+                current_delay *= 2
+                last_error = e
+                continue
+            _logger.error("Connection pool exhausted after all retries")
+            raise PoolError("Connection pool exhausted - no available connections") from e
+        except psycopg2.Error as e:
+            if _is_transient_error(e) and attempt < max_retries:
+                _logger.warning(f"Transient connection error (attempt {attempt + 1}/{max_retries + 1}): {e}")
+                time.sleep(current_delay)
+                current_delay *= 2
+                last_error = e
+                continue
+            _logger.error(f"Database connection error: {e}")
+            raise PoolError(f"Database connection failed: {e}") from e
+        finally:
+            # Always return connection to pool if it was successfully acquired
+            if conn is not None:
+                try:
+                    _connection_pool.putconn(conn)
+                    _logger.debug("Database connection returned to pool")
+                except Exception as e:
+                    _logger.error(f"Error returning connection to pool: {e}")
+
+    # All retries exhausted
+    if last_error:
+        _logger.error(f"All {max_retries + 1} connection attempts failed. Last error: {last_error}")
+        raise PoolError(f"Connection failed after {max_retries + 1} attempts: {last_error}") from last_error
 
 
 def close_all_connections(timeout: int = 10) -> None:
