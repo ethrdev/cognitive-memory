@@ -249,6 +249,67 @@ def get_node_by_name(name: str) -> dict[str, Any] | None:
         raise
 
 
+def get_edge_by_names(
+    source_name: str, target_name: str, relation: str
+) -> dict[str, Any] | None:
+    """
+    Retrieve an edge by source node name, target node name, and relation type.
+
+    Uses JOINs with nodes table to resolve names to node IDs.
+    Returns None gracefully if edge or either node doesn't exist.
+
+    Args:
+        source_name: Name of the source node
+        target_name: Name of the target node
+        relation: Relationship type (e.g., "USES", "SOLVES")
+
+    Returns:
+        Edge data dict or None if not found
+
+    Story 6.2: get_edge MCP Tool
+    """
+    logger = logging.getLogger(__name__)
+
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+
+            # SQL with JOINs to resolve node names to IDs
+            cursor.execute(
+                """
+                SELECT e.id, e.source_id, e.target_id, e.relation, e.weight,
+                       e.properties, e.created_at
+                FROM edges e
+                JOIN nodes ns ON e.source_id = ns.id
+                JOIN nodes nt ON e.target_id = nt.id
+                WHERE ns.name = %s AND nt.name = %s AND e.relation = %s
+                LIMIT 1;
+                """,
+                (source_name, target_name, relation),
+            )
+
+            result = cursor.fetchone()
+            if result:
+                return {
+                    "id": str(result["id"]),
+                    "source_id": str(result["source_id"]),
+                    "target_id": str(result["target_id"]),
+                    "relation": result["relation"],
+                    "weight": float(result["weight"]),
+                    "properties": result["properties"],
+                    "created_at": result["created_at"].isoformat(),
+                }
+
+            return None
+
+    except Exception as e:
+        logger.error(
+            f"Failed to get edge by names: source={source_name}, "
+            f"target={target_name}, relation={relation}, error={e}"
+        )
+        raise
+
+
 def get_or_create_node(name: str, label: str = "Entity") -> dict[str, Any]:
     """
     Get or create a node by name and label.

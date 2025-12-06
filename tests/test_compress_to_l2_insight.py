@@ -150,7 +150,7 @@ class TestHandleCompressToL2Insight:
         assert "content" in result["details"], "Error should mention content parameter"
 
     async def test_missing_source_ids_parameter(self):
-        """Test error handling for missing source_ids parameter."""
+        """Test error handling for missing source_ids parameter (None)."""
         args = {"content": "test content"}
         result = await handle_compress_to_l2_insight(args)
 
@@ -158,6 +158,37 @@ class TestHandleCompressToL2Insight:
         assert (
             "source_ids" in result["details"]
         ), "Error should mention source_ids parameter"
+
+    async def test_empty_source_ids_array_accepted(self, mock_openai_client):
+        """Test that empty source_ids array [] is accepted (Bugfix: AC-1)."""
+        args = {
+            "content": "test_insight from external source without raw dialogue",
+            "source_ids": [],  # Empty array - should be valid!
+        }
+
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
+            with patch("mcp_server.tools.OpenAI", return_value=mock_openai_client):
+                with patch(
+                    "mcp_server.tools.get_embedding_with_retry",
+                    return_value=[0.1] * 1536,
+                ):
+                    result = await handle_compress_to_l2_insight(args)
+
+                    # Should succeed - not return validation error
+                    assert "error" not in result, f"Empty source_ids should be valid, got error: {result}"
+                    assert "id" in result, "Response should contain insight ID"
+                    assert "embedding_status" in result, "Response should contain embedding status"
+
+    async def test_none_source_ids_rejected(self):
+        """Test that source_ids=None is still rejected (Bugfix: AC-2)."""
+        args = {"content": "test content", "source_ids": None}
+        result = await handle_compress_to_l2_insight(args)
+
+        assert "error" in result, "source_ids=None should return error"
+        assert (
+            "source_ids" in result["details"]
+        ), "Error should mention source_ids parameter"
+        assert result["tool"] == "compress_to_l2_insight"
 
     async def test_invalid_source_ids_type(self):
         """Test error handling for invalid source_ids type."""

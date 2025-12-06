@@ -2,9 +2,10 @@
 MCP Server Tools Registration Module
 
 Provides tool registration and implementation for the Cognitive Memory System.
-Includes 12 tools: store_raw_dialogue, compress_to_l2_insight, hybrid_search,
+Includes 14 tools: store_raw_dialogue, compress_to_l2_insight, hybrid_search,
 update_working_memory, store_episode, store_dual_judge_scores, ping,
-graph_add_node, graph_add_edge, graph_query_neighbors, and graph_find_path.
+graph_add_node, graph_add_edge, graph_query_neighbors, graph_find_path,
+get_node_by_name, and get_edge.
 """
 
 from __future__ import annotations
@@ -35,6 +36,8 @@ from mcp_server.tools.graph_add_node import handle_graph_add_node
 from mcp_server.tools.graph_add_edge import handle_graph_add_edge
 from mcp_server.tools.graph_query_neighbors import handle_graph_query_neighbors
 from mcp_server.tools.graph_find_path import handle_graph_find_path
+from mcp_server.tools.get_node_by_name import handle_get_node_by_name
+from mcp_server.tools.get_edge import handle_get_edge
 
 
 def rrf_fusion(
@@ -949,7 +952,8 @@ async def handle_compress_to_l2_insight(arguments: dict[str, Any]) -> dict[str, 
                 "tool": "compress_to_l2_insight",
             }
 
-        if not source_ids or not isinstance(source_ids, list):
+        # Accept empty list [] but reject None or non-list types
+        if source_ids is None or not isinstance(source_ids, list):
             return {
                 "error": "Parameter validation failed",
                 "details": "Missing or invalid 'source_ids' parameter (must be array of integers)",
@@ -2180,6 +2184,46 @@ def register_tools(server: Server) -> list[Tool]:
                 "required": ["start_node", "end_node"],
             },
         ),
+        Tool(
+            name="get_node_by_name",
+            description="Retrieve a graph node by its unique name for write-then-verify operations. Returns node data if found, or graceful null response if not found (no exception).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Unique name identifier of the node to retrieve",
+                    },
+                },
+                "required": ["name"],
+            },
+        ),
+        Tool(
+            name="get_edge",
+            description="Retrieve a graph edge by source name, target name, and relation for write-then-verify operations. Returns edge data if found, or graceful null response if not found (no exception).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "source_name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Name of the source node",
+                    },
+                    "target_name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Name of the target node",
+                    },
+                    "relation": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Relationship type (e.g., 'USES', 'SOLVES', 'CREATED_BY')",
+                    },
+                },
+                "required": ["source_name", "target_name", "relation"],
+            },
+        ),
     ]
 
     # Tool handler mapping
@@ -2196,6 +2240,8 @@ def register_tools(server: Server) -> list[Tool]:
         "graph_add_edge": handle_graph_add_edge,
         "graph_query_neighbors": handle_graph_query_neighbors,
         "graph_find_path": handle_graph_find_path,
+        "get_node_by_name": handle_get_node_by_name,
+        "get_edge": handle_get_edge,
     }
 
     # Register tool call handler (define once, outside the loop)
