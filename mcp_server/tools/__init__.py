@@ -2,10 +2,10 @@
 MCP Server Tools Registration Module
 
 Provides tool registration and implementation for the Cognitive Memory System.
-Includes 14 tools: store_raw_dialogue, compress_to_l2_insight, hybrid_search,
+Includes 15 tools: store_raw_dialogue, compress_to_l2_insight, hybrid_search,
 update_working_memory, store_episode, store_dual_judge_scores, ping,
 graph_add_node, graph_add_edge, graph_query_neighbors, graph_find_path,
-get_node_by_name, and get_edge.
+get_node_by_name, get_edge, and count_by_type.
 """
 
 from __future__ import annotations
@@ -38,6 +38,7 @@ from mcp_server.tools.graph_query_neighbors import handle_graph_query_neighbors
 from mcp_server.tools.graph_find_path import handle_graph_find_path
 from mcp_server.tools.get_node_by_name import handle_get_node_by_name
 from mcp_server.tools.get_edge import handle_get_edge
+from mcp_server.tools.count_by_type import handle_count_by_type
 
 
 def rrf_fusion(
@@ -2224,6 +2225,15 @@ def register_tools(server: Server) -> list[Tool]:
                 "required": ["source_name", "target_name", "relation"],
             },
         ),
+        Tool(
+            name="count_by_type",
+            description="Get counts of all memory types for audit and integrity checks. Returns counts for graph_nodes, graph_edges, l2_insights, episodes, working_memory, and raw_dialogues.",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        ),
     ]
 
     # Tool handler mapping
@@ -2242,6 +2252,7 @@ def register_tools(server: Server) -> list[Tool]:
         "graph_find_path": handle_graph_find_path,
         "get_node_by_name": handle_get_node_by_name,
         "get_edge": handle_get_edge,
+        "count_by_type": handle_count_by_type,
     }
 
     # Register tool call handler (define once, outside the loop)
