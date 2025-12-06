@@ -7,9 +7,11 @@ Run this to verify the implementation works without pytest.
 import asyncio
 import os
 import sys
+from pathlib import Path
 
 # Add project root to path
-sys.path.insert(0, "/home/ethr/01-projects/ai-experiments/i-o")
+PROJECT_ROOT = Path(__file__).parent.resolve()
+sys.path.insert(0, str(PROJECT_ROOT))
 
 # Set test database
 os.environ["DATABASE_URL"] = (

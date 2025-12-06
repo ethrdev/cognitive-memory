@@ -4,6 +4,10 @@
 
 set -e  # Exit on error
 
+# Resolve project root relative to this script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
 echo "═══════════════════════════════════════════════════════════════"
 echo "  7-Day Stability Test - Pre-Test Validation"
 echo "  Production Readiness Validation"
@@ -118,7 +122,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "CHECK 5: API Keys Configuration"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-ENV_FILE="/home/ethr/01-projects/ai-experiments/i-o/.env.production"
+ENV_FILE="$PROJECT_ROOT/.env.production"
 
 if [ ! -f "$ENV_FILE" ]; then
     echo -e "${RED}✗ FAIL: .env.production file not found${NC}"

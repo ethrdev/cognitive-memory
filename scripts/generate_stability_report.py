@@ -11,6 +11,10 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+# Resolve paths relative to project root
+SCRIPT_DIR = Path(__file__).parent.resolve()
+PROJECT_ROOT = SCRIPT_DIR.parent
+
 
 def load_metrics(metrics_file: str = "/tmp/stability-test-metrics.json") -> dict:
     """Load metrics from JSON file."""
@@ -402,9 +406,7 @@ def main():
     print()
 
     # Save report
-    output_file = Path(
-        "/home/ethr/01-projects/ai-experiments/i-o/docs/testing/7-day-stability-report.md"
-    )
+    output_file = PROJECT_ROOT / "docs/testing/7-day-stability-report.md"
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
     with open(output_file, "w") as f:

@@ -7,9 +7,11 @@ that can be tested without the full Streamlit UI running.
 """
 
 import sys
+from pathlib import Path
 
 # Add project root to path
-sys.path.insert(0, "/home/ethr/01-projects/ai-experiments/i-o")
+PROJECT_ROOT = Path(__file__).parent.resolve()
+sys.path.insert(0, str(PROJECT_ROOT))
 
 
 def test_imports():

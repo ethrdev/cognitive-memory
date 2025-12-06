@@ -1,14 +1,20 @@
 import os
 import sys
 import logging
+from pathlib import Path
+
 from mcp_server.db.connection import initialize_pool, get_connection
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Resolve paths relative to project root
+SCRIPT_DIR = Path(__file__).parent.resolve()
+PROJECT_ROOT = SCRIPT_DIR.parent
+
 def apply_migration():
-    migration_file = "/home/ethr/01-projects/ai-experiments/cognitive-memory/mcp_server/db/migrations/011_io_system_metadata.sql"
+    migration_file = PROJECT_ROOT / "mcp_server/db/migrations/011_io_system_metadata.sql"
     
     if not os.path.exists(migration_file):
         logger.error(f"Migration file not found: {migration_file}")

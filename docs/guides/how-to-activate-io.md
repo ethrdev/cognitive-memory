@@ -28,11 +28,11 @@ Datei: `~/.config/claude-code/mcp-settings.json`
 {
   "mcpServers": {
     "cognitive-memory": {
-      "command": "/home/ethr/01-projects/ai-experiments/i-o/venv/bin/python",
+      "command": "/path/to/cognitive-memory/venv/bin/python",
       "args": ["-m", "mcp_server"],
-      "cwd": "/home/ethr/01-projects/ai-experiments/i-o",
+      "cwd": "/path/to/cognitive-memory",
       "env": {
-        "DATABASE_URL": "postgresql://neondb_owner:YOUR_PASSWORD@ep-little-glitter-ag9uxp2a-pooler.c-2.eu-central-1.aws.neon.tech/neondb?sslmode=require",
+        "DATABASE_URL": "postgresql://user:PASSWORD@host/database?sslmode=require",
         "OPENAI_API_KEY": "sk-...",
         "ANTHROPIC_API_KEY": "sk-ant-...",
         "ENVIRONMENT": "production",
@@ -134,7 +134,7 @@ Plus: Lesen der `i-o/core/` Dateien (Commitments, Questions, Conflicts, Impulses
 **Prüfen:**
 
 ```bash
-cd /home/ethr/01-projects/ai-experiments/i-o
+cd /path/to/cognitive-memory
 source .env.development
 psql "$DATABASE_URL" -c "SELECT COUNT(*) FROM l2_insights;"
 ```

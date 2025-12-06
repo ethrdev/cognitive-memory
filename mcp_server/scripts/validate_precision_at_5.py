@@ -23,6 +23,7 @@ Note: This version uses MOCK DATA for infrastructure testing.
 import json
 import random
 from datetime import datetime
+from pathlib import Path
 
 import yaml
 
@@ -30,10 +31,14 @@ import yaml
 # Configuration
 # =============================================================================
 
+# Resolve paths relative to project root
+SCRIPT_DIR = Path(__file__).parent.resolve()
+PROJECT_ROOT = SCRIPT_DIR.parent.parent  # mcp_server/scripts -> mcp_server -> project_root
+
 MOCK_MODE = False  # Production mode - use real PostgreSQL
-MOCK_DATA_FILE = "/home/ethr/01-projects/ai-experiments/i-o/mcp_server/scripts/mock_ground_truth.json"
-CONFIG_FILE = "/home/ethr/01-projects/ai-experiments/i-o/config.yaml"
-OUTPUT_FILE = "/home/ethr/01-projects/ai-experiments/i-o/mcp_server/scripts/validation_results.json"
+MOCK_DATA_FILE = str(SCRIPT_DIR / "mock_ground_truth.json")
+CONFIG_FILE = str(PROJECT_ROOT / "config.yaml")
+OUTPUT_FILE = str(SCRIPT_DIR / "validation_results.json")
 
 # Success Thresholds (Graduated Criteria)
 FULL_SUCCESS_THRESHOLD = 0.75
@@ -202,8 +207,8 @@ def load_ground_truth() -> list[dict]:
         from dotenv import load_dotenv
 
         # Add mcp_server to path and load environment
-        sys.path.insert(0, "/home/ethr/01-projects/ai-experiments/i-o/mcp_server")
-        load_dotenv("/home/ethr/01-projects/ai-experiments/i-o/.env.development")
+        sys.path.insert(0, str(PROJECT_ROOT / "mcp_server"))
+        load_dotenv(str(PROJECT_ROOT / ".env.development"))
 
         from db.connection import get_connection
 

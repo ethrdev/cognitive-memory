@@ -105,7 +105,7 @@ Der Test erfordert **mindestens 10 Queries pro Tag (70 total)**:
 ### 3.1 Run Pre-Test Validation Script
 
 ```bash
-cd /home/ethr/01-projects/ai-experiments/i-o
+cd /path/to/cognitive-memory
 ./scripts/start_stability_test.sh
 ```
 
@@ -173,7 +173,7 @@ Nach erfolgreicher Pre-Test Validation beginnt der Test **automatisch**. Du muss
 **Jeden Tag (oder alle 2 Tage):**
 
 ```bash
-cd /home/ethr/01-projects/ai-experiments/i-o
+cd /path/to/cognitive-memory
 ./scripts/daily_stability_check.sh
 ```
 
@@ -255,7 +255,7 @@ psql -U mcp_user -d cognitive_memory -c "SELECT query FROM golden_test_set LIMIT
 Nach 7 Tagen (168 hours):
 
 ```bash
-cd /home/ethr/01-projects/ai-experiments/i-o
+cd /path/to/cognitive-memory
 ./scripts/end_stability_test.sh
 ```
 
@@ -327,7 +327,7 @@ Next Steps:
 ### 6.1 Automated Report Generation (Empfohlen)
 
 ```bash
-cd /home/ethr/01-projects/ai-experiments/i-o
+cd /path/to/cognitive-memory
 python3 scripts/generate_stability_report.py
 ```
 
@@ -359,7 +359,7 @@ Der Report hat 6 required Sections:
 ### 6.4 Add Report to Git
 
 ```bash
-cd /home/ethr/01-projects/ai-experiments/i-o
+cd /path/to/cognitive-memory
 git add 7-day-stability-report.md
 git commit -m "Story 3.11: 7-Day Stability Report - [PASS/PARTIAL/FAIL]"
 git push
