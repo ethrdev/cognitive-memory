@@ -480,15 +480,17 @@ def query_neighbors(
             include_outgoing = direction in ("both", "outgoing")
             include_incoming = direction in ("both", "incoming")
 
-            # Use recursive CTE for multi-hop bidirectional graph traversal with cycle detection
+            # Use two separate recursive CTEs for bidirectional traversal
+            # PostgreSQL requires that recursive references only appear in the recursive term,
+            # not in the non-recursive (base) term. Using separate CTEs avoids this limitation.
             cursor.execute(
                 """
-                WITH RECURSIVE neighbors AS (
-                    -- ═══════════════════════════════════════════════════════════════
-                    -- BASE CASE: Direct neighbors (distance = 1)
-                    -- ═══════════════════════════════════════════════════════════════
-
-                    -- Outgoing edges (direction = 'outgoing' OR 'both')
+                WITH RECURSIVE
+                -- ═══════════════════════════════════════════════════════════════
+                -- CTE 1: Outgoing edges traversal (source → target)
+                -- ═══════════════════════════════════════════════════════════════
+                outgoing_neighbors AS (
+                    -- Base case: direct outgoing neighbors
                     SELECT
                         n.id,
                         n.label,
@@ -498,16 +500,37 @@ def query_neighbors(
                         e.weight,
                         1 AS distance,
                         ARRAY[%s::uuid, n.id] AS path,
-                        'outgoing' AS edge_direction
+                        'outgoing'::text AS edge_direction
                     FROM edges e
                     JOIN nodes n ON e.target_id = n.id
                     WHERE e.source_id = %s::uuid
                         AND (%s IS NULL OR e.relation = %s)
-                        AND %s = true
 
                     UNION ALL
 
-                    -- Incoming edges (direction = 'incoming' OR 'both')
+                    -- Recursive case: follow outgoing edges from found nodes
+                    SELECT
+                        n.id,
+                        n.label,
+                        n.name,
+                        n.properties,
+                        e.relation,
+                        e.weight,
+                        ob.distance + 1 AS distance,
+                        ob.path || n.id AS path,
+                        'outgoing'::text AS edge_direction
+                    FROM outgoing_neighbors ob
+                    JOIN edges e ON e.source_id = ob.id
+                    JOIN nodes n ON e.target_id = n.id
+                    WHERE ob.distance < %s
+                        AND NOT (n.id = ANY(ob.path))  -- Cycle detection
+                        AND (%s IS NULL OR e.relation = %s)
+                ),
+                -- ═══════════════════════════════════════════════════════════════
+                -- CTE 2: Incoming edges traversal (target ← source)
+                -- ═══════════════════════════════════════════════════════════════
+                incoming_neighbors AS (
+                    -- Base case: direct incoming neighbors
                     SELECT
                         n.id,
                         n.label,
@@ -517,20 +540,15 @@ def query_neighbors(
                         e.weight,
                         1 AS distance,
                         ARRAY[%s::uuid, n.id] AS path,
-                        'incoming' AS edge_direction
+                        'incoming'::text AS edge_direction
                     FROM edges e
                     JOIN nodes n ON e.source_id = n.id
                     WHERE e.target_id = %s::uuid
                         AND (%s IS NULL OR e.relation = %s)
-                        AND %s = true
 
                     UNION ALL
 
-                    -- ═══════════════════════════════════════════════════════════════
-                    -- RECURSIVE CASE: Multi-hop traversal (distance > 1)
-                    -- ═══════════════════════════════════════════════════════════════
-
-                    -- Recursive outgoing: follow outgoing edges from found nodes
+                    -- Recursive case: follow incoming edges from found nodes
                     SELECT
                         n.id,
                         n.label,
@@ -538,53 +556,41 @@ def query_neighbors(
                         n.properties,
                         e.relation,
                         e.weight,
-                        nb.distance + 1 AS distance,
-                        nb.path || n.id AS path,
-                        'outgoing' AS edge_direction
-                    FROM neighbors nb
-                    JOIN edges e ON e.source_id = nb.id
-                    JOIN nodes n ON e.target_id = n.id
-                    WHERE nb.distance < %s
-                        AND NOT (n.id = ANY(nb.path))  -- Cycle detection
-                        AND (%s IS NULL OR e.relation = %s)
-                        AND %s = true
-
-                    UNION ALL
-
-                    -- Recursive incoming: follow incoming edges from found nodes
-                    SELECT
-                        n.id,
-                        n.label,
-                        n.name,
-                        n.properties,
-                        e.relation,
-                        e.weight,
-                        nb.distance + 1 AS distance,
-                        nb.path || n.id AS path,
-                        'incoming' AS edge_direction
-                    FROM neighbors nb
-                    JOIN edges e ON e.target_id = nb.id
+                        ib.distance + 1 AS distance,
+                        ib.path || n.id AS path,
+                        'incoming'::text AS edge_direction
+                    FROM incoming_neighbors ib
+                    JOIN edges e ON e.target_id = ib.id
                     JOIN nodes n ON e.source_id = n.id
-                    WHERE nb.distance < %s
-                        AND NOT (n.id = ANY(nb.path))  -- Cycle detection
+                    WHERE ib.distance < %s
+                        AND NOT (n.id = ANY(ib.path))  -- Cycle detection
                         AND (%s IS NULL OR e.relation = %s)
-                        AND %s = true
+                ),
+                -- ═══════════════════════════════════════════════════════════════
+                -- Combine results based on direction parameter
+                -- ═══════════════════════════════════════════════════════════════
+                combined AS (
+                    SELECT * FROM outgoing_neighbors WHERE %s = true
+                    UNION ALL
+                    SELECT * FROM incoming_neighbors WHERE %s = true
                 )
                 -- Final selection: shortest path per node, highest weight on tie
                 SELECT DISTINCT ON (id)
                     id, label, name, properties, relation, weight, distance, edge_direction
-                FROM neighbors
+                FROM combined
                 ORDER BY id, distance ASC, weight DESC, name ASC;
                 """,
                 (
-                    # Base case outgoing
-                    node_id, node_id, relation_type, relation_type, include_outgoing,
-                    # Base case incoming
-                    node_id, node_id, relation_type, relation_type, include_incoming,
-                    # Recursive outgoing
-                    max_depth, relation_type, relation_type, include_outgoing,
-                    # Recursive incoming
-                    max_depth, relation_type, relation_type, include_incoming,
+                    # Outgoing CTE: base case
+                    node_id, node_id, relation_type, relation_type,
+                    # Outgoing CTE: recursive case
+                    max_depth, relation_type, relation_type,
+                    # Incoming CTE: base case
+                    node_id, node_id, relation_type, relation_type,
+                    # Incoming CTE: recursive case
+                    max_depth, relation_type, relation_type,
+                    # Combined: direction filters
+                    include_outgoing, include_incoming,
                 ),
             )
 
