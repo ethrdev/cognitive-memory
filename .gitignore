@@ -116,6 +116,7 @@ ethr/
 # Project planning (keep local only)
 bmad/
 bmad-docs/
+.bmad/
 
 # IDE-specific configurations (keep local only)
 .claude/
