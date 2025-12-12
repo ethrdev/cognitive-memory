@@ -625,27 +625,33 @@ def register_resources(server: Server) -> list[Resource]:
         Returns:
             JSON string of the resource content. MCP SDK expects str | bytes,
             not dict. The handlers return dicts which we serialize to JSON here.
+
+        Note:
+            MCP SDK passes AnyUrl objects, not strings. We convert to str immediately
+            to avoid serialization issues with urlparse and json.dumps.
         """
+        # Convert AnyUrl to string immediately (MCP SDK passes AnyUrl, not str)
+        uri_str = str(uri)
         try:
             # Parse URI to get base path
-            path, params = parse_resource_uri(uri)
+            path, params = parse_resource_uri(uri_str)
 
             # Find matching resource handler
             if path in resource_handlers:
-                logger.info(f"Reading resource: {uri}")
-                result = await resource_handlers[path](uri)
-                logger.info(f"Resource {uri} read successfully")
+                logger.info(f"Reading resource: {uri_str}")
+                result = await resource_handlers[path](uri_str)
+                logger.info(f"Resource {uri_str} read successfully")
                 # MCP SDK expects str | bytes, serialize dict to JSON
                 return json.dumps(result, default=str, ensure_ascii=False)
             else:
                 raise ValueError(f"Unknown resource: {path}")
 
         except Exception as e:
-            logger.error(f"Failed to read resource {uri}: {e}")
+            logger.error(f"Failed to read resource {uri_str}: {e}")
             error_response = {
                 "error": "Resource read failed",
                 "details": str(e),
-                "resource": uri,
+                "resource": uri_str,
             }
             return json.dumps(error_response, ensure_ascii=False)
 
