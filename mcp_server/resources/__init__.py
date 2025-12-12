@@ -18,6 +18,7 @@ KNOWN MYPY LIMITATIONS:
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -618,8 +619,13 @@ def register_resources(server: Server) -> list[Resource]:
 
     # Register resource read handler
     @server.read_resource()
-    async def read_resource_handler(uri: str) -> dict[str, Any]:
-        """Handle resource read requests."""
+    async def read_resource_handler(uri: str) -> str:
+        """Handle resource read requests.
+
+        Returns:
+            JSON string of the resource content. MCP SDK expects str | bytes,
+            not dict. The handlers return dicts which we serialize to JSON here.
+        """
         try:
             # Parse URI to get base path
             path, params = parse_resource_uri(uri)
@@ -629,17 +635,19 @@ def register_resources(server: Server) -> list[Resource]:
                 logger.info(f"Reading resource: {uri}")
                 result = await resource_handlers[path](uri)
                 logger.info(f"Resource {uri} read successfully")
-                return result
+                # MCP SDK expects str | bytes, serialize dict to JSON
+                return json.dumps(result, default=str, ensure_ascii=False)
             else:
                 raise ValueError(f"Unknown resource: {path}")
 
         except Exception as e:
             logger.error(f"Failed to read resource {uri}: {e}")
-            return {
+            error_response = {
                 "error": "Resource read failed",
                 "details": str(e),
                 "resource": uri,
             }
+            return json.dumps(error_response, ensure_ascii=False)
 
     logger.info(f"Registered {len(resources)} resources")
     return resources
