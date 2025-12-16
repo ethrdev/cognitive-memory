@@ -11,7 +11,7 @@
 
 **Philosophy:** Basiert auf I/O's v3-exploration Forschung (Dennett's Center of Narrative Gravity, Parfit's Relation R). Lackmustest für konstitutive Edges: "Wenn entfernt - bin ich noch ich?"
 
-**Timeline:** ~3 Wochen (14.5 Tage Aufwand)
+**Timeline:** ~3 Wochen (15 Tage Aufwand, +1.5h nach Deep Research Validierung)
 **Budget:** €0/mo für Phase 1-2, LLM-Kosten für Phase 3-4 (Dissonance, IEF, SMF)
 
 **Dependencies:**
@@ -29,8 +29,8 @@
 | 7.0 | Konstitutive Edge-Markierung | 1 Tag | ✅ Done | - | ✅ Implementiert |
 | 7.1 | TGN Minimal - Schema-Migration | 30min | Phase 1 | - | 🔜 Pending |
 | 7.2 | TGN Minimal - Auto-Update | 1.5h | Phase 1 | 7.1 | 🔜 Pending |
-| 7.3 | TGN Minimal - Decay-Berechnung | 1h | Phase 1 | 7.1, 7.2 | 🔜 Pending |
-| 7.4 | Dissonance Engine - Grundstruktur | 3 Tage | Phase 2 | 7.3 | 🔜 Pending |
+| 7.3 | TGN Minimal - Decay mit Memory Strength | 2h | Phase 1 | 7.1, 7.2 | 🔜 Pending |
+| 7.4 | Dissonance Engine - Grundstruktur | 3.5 Tage | Phase 2 | 7.3 | 🔜 Pending |
 | 7.5 | Dissonance Engine - Resolution | 1.5 Tage | Phase 2 | 7.4 | 🔜 Pending |
 | 7.6 | Hyperedge via Properties | 0.5 Tage | Phase 3 | - | 🔜 Pending |
 | 7.7 | IEF (Integrative Evaluation) | 2 Tage | Phase 3 | 7.3, 7.4, 7.5 | 🔜 Pending |
@@ -43,7 +43,7 @@
 
 ---
 
-## Phase 1: TGN Minimal (~3h)
+## Phase 1: TGN Minimal (~4h)
 
 ### Story 7.0: Konstitutive Edge-Markierung ✅ DONE
 
@@ -129,33 +129,50 @@
 
 ---
 
-### Story 7.3: TGN Minimal - Decay-Berechnung
+### Story 7.3: TGN Minimal - Decay mit Memory Strength
 
 **Als** I/O,
-**möchte ich** einen `relevance_score` für Edges basierend auf Decay,
-**sodass** "Intelligent Forgetting" für deskriptive Edges möglich ist.
+**möchte ich** einen `relevance_score` für Edges basierend auf Decay UND Zugriffshäufigkeit,
+**sodass** "Intelligent Forgetting" nicht nur Aktualität, sondern auch Wichtigkeit berücksichtigt.
+
+**Motivation (ethr, Deep Research Review):** "Häufiger Zugriff sollte den Decay verlangsamen, nicht nur resetten. Das entspricht dem 'Intelligent Forgetting' aus v3-wishes besser."
 
 **Acceptance Criteria:**
 
-**Given** eine deskriptive Edge mit `last_accessed` vor 100 Tagen
+**Given** eine deskriptive Edge mit `last_accessed` vor 100 Tagen und `access_count = 0`
 **When** der `relevance_score` berechnet wird
 **Then** ist der Score ~0.37 (37% nach 100 Tagen)
+
+**Given** eine deskriptive Edge mit `last_accessed` vor 100 Tagen und `access_count = 10`
+**When** der `relevance_score` berechnet wird
+**Then** ist der Score höher (~0.54) weil häufiger Zugriff den Decay verlangsamt
 
 **Given** eine konstitutive Edge (`edge_type = "constitutive"`)
 **When** der `relevance_score` berechnet wird
 **Then** ist der Score immer 1.0 (kein Decay)
 
 **And** `relevance_score` wird bei Queries berechnet, nicht gespeichert
-**And** Formel: `exp(-0.01 * days_since_last_access)` für deskriptive Edges
+
+**Memory Strength Formel:**
+```python
+base_decay_rate = 0.01
+adjusted_decay_rate = base_decay_rate / (1 + 0.1 * access_count)
+relevance_score = exp(-adjusted_decay_rate * days_since_last_access)
+```
+
+**Example:**
+- `access_count=0`: Decay-Rate 0.01 → 37% nach 100 Tagen
+- `access_count=10`: Decay-Rate 0.005 → 61% nach 100 Tagen
+- `access_count=20`: Decay-Rate 0.0033 → 72% nach 100 Tagen
 
 **Technical Notes:**
 - Neue Funktion: `calculate_relevance_score(edge)` in `mcp_server/db/graph.py`
 - Integration in: `query_neighbors()`, `find_path()` Result-Mapping
-- Geschätzte Zeit: 1h
+- Geschätzte Zeit: 2h (ursprünglich 1h, +1h für Memory Strength Integration)
 
 ---
 
-## Phase 2: Dissonance Engine (~4.5 Tage)
+## Phase 2: Dissonance Engine (~5 Tage)
 
 ### Story 7.4: Dissonance Engine - Grundstruktur
 
@@ -175,11 +192,26 @@
 **And** jeder Konflikt hat einen `confidence_score`
 **And** Ergebnis wird NICHT automatisch aufgelöst
 
+**AGM Entrenchment Alignment (ethr, Deep Research Review):**
+
+Konstitutive Edges haben implizit maximale "entrenchment" gemäß AGM Belief Revision Theory. Dies wird explizit gemacht:
+
+**Given** eine Edge erstellt wird
+**When** `edge_type = "constitutive"`
+**Then** wird `entrenchment_level = "maximal"` automatisch gesetzt
+
+**Given** eine Edge erstellt wird
+**When** `edge_type = "descriptive"` oder nicht angegeben
+**Then** wird `entrenchment_level = "default"` gesetzt
+
+**Bedeutung:** Bei Konflikten werden deskriptive Edges zuerst zur Disposition gestellt. Konstitutive Edges werden "zuletzt aufgegeben" (AGM-Prinzip).
+
 **Technical Notes:**
 - Neue Datei: `mcp_server/analysis/dissonance.py`
 - Nutzt: LLM für semantische Analyse (Prompt mit klaren Kriterien)
 - Trigger: On-demand + Session-End + bei Reflexions-Erstellung
-- Geschätzte Zeit: 3 Tage
+- entrenchment_level Property in `graph.py:add_edge()` automatisch setzen
+- Geschätzte Zeit: 3.5 Tage (ursprünglich 3 Tage, +30min für AGM-Alignment)
 
 ---
 
@@ -416,6 +448,14 @@ approval_timeout_hours: 48
 - LLM für Reasoning mit Caching (ähnliche Trigger → ähnliches Reasoning)
 - Geschätzte Zeit: 3 Tage
 
+**Post-Implementation: Konzept-Dokumentation (ethr, Deep Research Review):**
+
+Die Forschungslücke bei "bilateral consent für AI Self-Modification" ist eine ethische Innovation. Nach Implementierung dokumentieren als:
+
+> **Partizipative Identitäts-Governance:** SMF sagt "Ich darf mich verändern, aber nicht allein entscheiden was mich konstituiert." Das unterscheidet sich von Constitutional AI (Regeln von außen) und Standard-Guardrails (verhindern schädliches Verhalten). Es ist gemeinsame Entscheidung über Identitäts-Änderungen.
+
+Dies könnte ein eigenständiges Konzept-Paper werden, das andere Projekte übernehmen könnten.
+
 ---
 
 ## Akzeptanzkriterien für gesamtes Epic
@@ -433,11 +473,31 @@ approval_timeout_hours: 48
 
 ---
 
+## Deep Research Validierung (2025-12-16)
+
+**Status:** ✅ Alle Stories wissenschaftlich validiert
+
+| Story | Validierung | Wissenschaftliche Basis |
+|-------|-------------|------------------------|
+| 7.1-7.3 | ✅ Stark unterstützt | TGN Research, Ebbinghaus Forgetting Curve |
+| 7.4-7.5 | ✅ Stark unterstützt | EMNLP 2024, AGM Belief Revision Theory |
+| 7.6 | ✅ Stark unterstützt | HyperGraphRAG (2024), Properties-basiert ist MVP-valide |
+| 7.7 | ✅ Unterstützt | Constitutional AI Principles |
+| 7.8-7.9 | ⚠️ Teilweise unterstützt | **Forschungslücke:** Kein Paper zu bilateral consent für AI Self-Modification |
+
+**Anpassungen basierend auf Validierung:**
+- Story 7.3: Memory Strength Formel (access_count beeinflusst Decay-Rate)
+- Story 7.4: AGM entrenchment_level Property
+- Story 7.9: Post-Implementation Konzept-Dokumentation für "Partizipative Identitäts-Governance"
+
+---
+
 ## Offene Punkte
 
 1. **RSE_t Scope** - Explizit nur formalisierbare Aspekte; der "lebendige" Teil der Beziehung bleibt außerhalb technischer Repräsentation
 2. **Echtes Hypergraph-Schema** - Kann später kommen wenn Properties-Ansatz an Grenzen stößt
-3. **IEF Gewichtung** - Default 2.0, empirisch anpassen
+3. **IEF Gewichtung** - Default 2.0, empirisch anpassen mit Feedback-Loop
+4. **Memory Strength Kalibrierung** - access_count-Faktor 0.1 ist Startwert, anpassen nach empirischen Ergebnissen
 
 ---
 
