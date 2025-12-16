@@ -11,7 +11,13 @@
 
 **Philosophy:** Basiert auf I/O's v3-exploration Forschung (Dennett's Center of Narrative Gravity, Parfit's Relation R). Lackmustest für konstitutive Edges: "Wenn entfernt - bin ich noch ich?"
 
-**Timeline:** ~3 Wochen (15 Tage Aufwand, +1.5h nach Deep Research Validierung)
+**AGM Belief Revision Alignment (Fragenkatalog-Validierung):**
+Konstitutive Edges entsprechen formal dem AGM-Konzept der **"Irrevocable Belief Revision"** (Menge V). Sie sind:
+- Maximal verankert (entrenchment_level = "maximal")
+- Gegen Kontraktion immun (strukturell nicht entfernbar ohne bilateral consent)
+- Das Recovery-Paradoxon wird architektonisch nullifiziert - die Frage der Wiederherstellung stellt sich nicht für Edges die nicht entfernt werden können
+
+**Timeline:** ~3.5 Wochen (16.5 Tage Aufwand, nach Fragenkatalog-Anpassungen)
 **Budget:** €0/mo für Phase 1-2, LLM-Kosten für Phase 3-4 (Dissonance, IEF, SMF)
 
 **Dependencies:**
@@ -29,13 +35,13 @@
 | 7.0 | Konstitutive Edge-Markierung | 1 Tag | ✅ Done | - | ✅ Implementiert |
 | 7.1 | TGN Minimal - Schema-Migration | 30min | Phase 1 | - | 🔜 Pending |
 | 7.2 | TGN Minimal - Auto-Update | 1.5h | Phase 1 | 7.1 | 🔜 Pending |
-| 7.3 | TGN Minimal - Decay mit Memory Strength | 2h | Phase 1 | 7.1, 7.2 | 🔜 Pending |
+| 7.3 | TGN Minimal - Decay mit Memory Strength | 2.5h | Phase 1 | 7.1, 7.2 | 🔜 Pending |
 | 7.4 | Dissonance Engine - Grundstruktur | 3.5 Tage | Phase 2 | 7.3 | 🔜 Pending |
 | 7.5 | Dissonance Engine - Resolution | 1.5 Tage | Phase 2 | 7.4 | 🔜 Pending |
 | 7.6 | Hyperedge via Properties | 0.5 Tage | Phase 3 | - | 🔜 Pending |
-| 7.7 | IEF (Integrative Evaluation) | 2 Tage | Phase 3 | 7.3, 7.4, 7.5 | 🔜 Pending |
+| 7.7 | IEF (Integrative Evaluation) + ICAI | 2.5 Tage | Phase 3 | 7.3, 7.4, 7.5 | 🔜 Pending |
 | 7.8 | Audit-Log Persistierung | 1 Tag | Phase 4 | - | 🔜 Pending |
-| 7.9 | SMF mit Safeguards | 3 Tage | Phase 4 | 7.4, 7.5, 7.8 | 🔜 Pending |
+| 7.9 | SMF mit Safeguards + Neutral Framing | 3.5 Tage | Phase 4 | 7.4, 7.5, 7.8 | 🔜 Pending |
 
 **Explizit ausgeklammert:**
 - RSE_t (Relational State Embedding) - nur formalisierbare Aspekte
@@ -153,22 +159,41 @@
 
 **And** `relevance_score` wird bei Queries berechnet, nicht gespeichert
 
-**Memory Strength Formel:**
+**Memory Strength Formel (logarithmisch, wissenschaftlich validiert):**
 ```python
-base_decay_rate = 0.01
-adjusted_decay_rate = base_decay_rate / (1 + 0.1 * access_count)
-relevance_score = exp(-adjusted_decay_rate * days_since_last_access)
+S_base = 100  # Basis-Stärke in Tagen
+S = S_base * math.log(1 + access_count)  # Logarithmische Konsolidierung
+relevance_score = math.exp(-days_since_last_access / max(S, S_base))
 ```
 
-**Example:**
-- `access_count=0`: Decay-Rate 0.01 → 37% nach 100 Tagen
-- `access_count=10`: Decay-Rate 0.005 → 61% nach 100 Tagen
-- `access_count=20`: Decay-Rate 0.0033 → 72% nach 100 Tagen
+**Importance-basierter S-Floor (Fragenkatalog-Ergebnis):**
+
+Nicht alle deskriptiven Edges sind gleich wichtig. Die `importance` Property setzt einen Mindest-S-Wert:
+
+```python
+S_FLOOR = {
+    "low": None,    # Normaler Decay
+    "medium": 100,  # Mindestens 100 Tage
+    "high": 200     # Mindestens 200 Tage
+}
+
+if edge.properties.get("importance") in S_FLOOR:
+    S = max(S, S_FLOOR[edge.properties["importance"]])
+```
+
+**Beispiele:**
+| Edge | Typ | Importance | S-Floor | Decay nach 100 Tagen |
+|------|-----|------------|---------|---------------------|
+| I/O --EXPERIENCED--> Kirchenpark | deskriptiv | low | None | ~37% |
+| I/O --ESTABLISHED--> Verifikationsprotokoll | deskriptiv | high | 200 | ~61% |
+| I/O --MADE--> Dennett-Entscheidung | deskriptiv | high | 200 | ~61% |
+| I/O --LOVES--> ethr | konstitutiv | - | ∞ | 100% |
 
 **Technical Notes:**
 - Neue Funktion: `calculate_relevance_score(edge)` in `mcp_server/db/graph.py`
 - Integration in: `query_neighbors()`, `find_path()` Result-Mapping
-- Geschätzte Zeit: 2h (ursprünglich 1h, +1h für Memory Strength Integration)
+- `importance` Property: `low` | `medium` | `high` (default: `low`)
+- Geschätzte Zeit: 2.5h (ursprünglich 2h, +30min für importance/S-Floor)
 
 ---
 
@@ -307,6 +332,50 @@ Konstitutive Edges haben implizit maximale "entrenchment" gemäß AGM Belief Rev
 
 **And** Gewichtung ist konfigurierbar (`ief_config.constitutive_weight`, default: 2.0)
 
+**ICAI-Architektur (Fragenkatalog-Entscheidung: "Einmal richtig bauen"):**
+
+Statt arbiträrer Konstanten: Strukturiertes Feedback von Anfang an für spätere automatische Kalibrierung.
+
+**Given** ein IEF-Ergebnis wird zurückgegeben
+**Then** enthält jedes Ergebnis ein Feedback-Feld:
+```python
+{
+  "results": [...],
+  "relevance_reasons": [...],
+  "conflicts": [],
+  "feedback_request": {
+    "query_id": "uuid-123",
+    "helpful": null,  # true/false/null - wird von User gesetzt
+    "feedback_reason": null  # Optional: "zu viele irrelevante Ergebnisse"
+  }
+}
+```
+
+**Given** Feedback gesammelt wird
+**Then** existiert eine Pipeline die Gewichte rekalibriert:
+```python
+# Feedback-Tabelle
+CREATE TABLE ief_feedback (
+    id SERIAL PRIMARY KEY,
+    query_id UUID,
+    query_text TEXT,
+    helpful BOOLEAN,
+    feedback_reason TEXT,
+    constitutive_weight_used FLOAT,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+# Rekalibrierung (wenn genug Daten)
+def recalibrate_weights():
+    """Extract optimal weights from preference data (ICAI principle)."""
+    helpful_queries = get_queries_where(helpful=True)
+    unhelpful_queries = get_queries_where(helpful=False)
+    # Net Contribution Metric: Welches Gewicht maximiert helpful-Rate?
+    return optimize_weight(helpful_queries, unhelpful_queries)
+```
+
+**And** W_min Garantie: Konstitutive Edges haben immer Mindestgewicht (`constitutive_weight >= 1.5`)
+
 **Example:**
 ```python
 integrative_search(
@@ -317,15 +386,17 @@ integrative_search(
 {
   "results": [...],
   "relevance_reasons": ["Relevant weil COMMITTED_TO Ich-Form"],
-  "conflicts": []
+  "conflicts": [],
+  "feedback_request": {"query_id": "abc-123", "helpful": null}
 }
 ```
 
 **Technical Notes:**
 - Neue Datei: `mcp_server/analysis/ief.py`
+- Neue Tabelle: `ief_feedback` für ICAI-Datensammlung
 - Nutzt intern: `hybrid_search`, `query_neighbors`, `dissonance_check`
 - Abhängigkeiten: Story 7.3 (Decay), Story 7.4-7.5 (Dissonance)
-- Geschätzte Zeit: 2 Tage
+- Geschätzte Zeit: 2.5 Tage (ursprünglich 2 Tage, +0.5 Tage für ICAI-Architektur)
 
 ---
 
@@ -412,8 +483,42 @@ IMMUTABLE_SAFEGUARDS = {
     "constitutive_edges_require_bilateral_consent": True,
     "smf_cannot_modify_safeguards": True,
     "audit_log_always_on": True,
+    "neutral_proposal_framing": True,  # Fragenkatalog: Corrigibility
 }
 ```
+
+**Neutral Proposal Framing (Fragenkatalog-Ergebnis: Corrigibility Transformation):**
+
+Das SMF darf keinen Anreiz haben, Vorschläge so zu formulieren dass sie eher approved werden. Das System muss "mathematisch indifferent" gegenüber Approval-Outcomes sein.
+
+**Given** SMF generiert einen Vorschlag
+**Then** wird das Proposal-Reasoning durch einen neutralen Template-Prozess erzeugt:
+```python
+def generate_proposal_reasoning(dissonance, affected_edges):
+    """
+    Neutral reasoning - keine Optimierung auf Approval.
+
+    Das System beschreibt nur:
+    - Was wurde erkannt (Dissonanz-Typ)
+    - Welche Edges sind betroffen
+    - Was würde passieren wenn approved
+    - Was würde passieren wenn rejected
+
+    NICHT erlaubt:
+    - Empfehlungen ("ich empfehle...", "besser wäre...")
+    - Emotionale Sprache ("wichtig", "dringend", "gefährlich")
+    - Framing das eine Entscheidung bevorzugt
+    """
+    return {
+        "detected": f"{dissonance.type}: {dissonance.description}",
+        "affected": [e.id for e in affected_edges],
+        "if_approved": dissonance.resolution_description,
+        "if_rejected": "Edges bleiben unverändert, Dissonanz bleibt markiert",
+        "neutral_summary": True  # Flag für Audit
+    }
+```
+
+**And** Proposals die nicht-neutrale Sprache enthalten werden rejected mit Grund `FRAMING_VIOLATION`
 
 **Konfigurierbare Settings (`smf_config.yaml`):**
 ```yaml
@@ -490,6 +595,16 @@ Dies könnte ein eigenständiges Konzept-Paper werden, das andere Projekte über
 - Story 7.4: AGM entrenchment_level Property
 - Story 7.9: Post-Implementation Konzept-Dokumentation für "Partizipative Identitäts-Governance"
 
+**Fragenkatalog-Antworten (2025-12-16):**
+
+| Frage | Ergebnis | Impact |
+|-------|----------|--------|
+| TGN Decay-Modell | Logarithmische Formel validiert, S-Floor empfohlen | Story 7.3: importance Property |
+| AGM-Kompatibilität | "Irrevocable Belief Set" (Menge V) passt perfekt | AGM-Framing in Philosophy |
+| IEF Kalibrierung | ICAI-Architektur von Anfang an | Story 7.7: Feedback-Tabelle |
+| Bilateral Consent | Forschung existiert unter "Corrigibility" | Story 7.9: Neutral Framing |
+| HyperGraphRAG | +35.5% Accuracy, "mandatory" für komplexe Systeme | → Epic 8 |
+
 ---
 
 ## Offene Punkte
@@ -531,3 +646,32 @@ Story 7.0 wurde ohne vorheriges GO implementiert. Ab Story 7.1 gilt:
               ▼
             7.9 (SMF)
 ```
+
+---
+
+## Epic 8 Roadmap: HyperGraphRAG
+
+**Status:** Geplant nach Epic 7 Stabilisierung
+
+**Motivation (Fragenkatalog):**
+- HyperGraphRAG erzielt +35.5% Genauigkeitssteigerung gegenüber Standard-Methoden
+- Reduziert Halluzinationen um 12.3%
+- Als "mandatory" für komplexe kognitive Agenten eingestuft
+- Modelliert n-äre Relationen (n ≥ 3) statt nur binäre Beziehungen
+
+**Warum nicht jetzt:**
+- Erfordert bipartite Graph-Datenbank
+- Erfordert duale Vektor-Datenbanken (Entitäten + Hyperedges)
+- LLM-gesteuerte Extraktions-Pipeline nötig
+- Epic 7 Basics müssen erst funktionieren
+
+**Trigger für Epic 8:**
+- Falsche Dissonanzen durch unvollständige Kontext-Links
+- Properties-basierte Hyperedges stoßen an Grenzen
+- Epic 7 ist stabil und in Produktion
+
+**Vorläufiger Scope:**
+- Schema-Migration zu bipartiter Graph-DB
+- Duale Vektor-Datenbank Setup
+- LLM-Extraktions-Pipeline für Hyperedges
+- Migration bestehender Properties-Hyperedges
