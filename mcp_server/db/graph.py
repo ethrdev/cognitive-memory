@@ -394,6 +394,67 @@ def _update_edge_access_stats(edge_ids: list[str], conn: Any) -> None:
         # Don't re-raise - access stats are non-critical
 
 
+def _filter_superseded_edges(neighbors: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Filtert Edges die in einer EVOLUTION-Resolution als 'supersedes' markiert sind.
+
+    Eine Edge ist superseded wenn eine Resolution-Edge existiert die:
+    - edge_type="resolution" hat
+    - resolution_type="EVOLUTION" hat
+    - Diese Edge-ID in 'supersedes' Array enthält
+
+    MVP-Implementation: Prüft edge_properties direkt.
+    Limitation: Erkennt nur Edges die selbst supersedes/superseded_by Properties haben,
+    nicht Edges die von separaten Resolution-Edges referenziert werden.
+
+    Future Enhancement: SQL-basierte Prüfung gegen Resolution-Edges für vollständige Erkennung.
+    """
+    filtered = []
+    for neighbor in neighbors:
+        props = neighbor.get("edge_properties", {})
+
+        # Resolution-Edges selbst werden nicht gefiltert
+        if props.get("edge_type") == "resolution":
+            filtered.append(neighbor)
+            continue
+
+        # Prüfe ob Edge in einer supersedes-Liste referenziert wird
+        # MVP: Einfache Heuristik - wenn Edge superseded-Marker hat
+        edge_id = neighbor.get("edge_id")
+        if edge_id and _is_edge_superseded(edge_id, props):
+            continue  # Skip superseded edge
+
+        filtered.append(neighbor)
+
+    return filtered
+
+
+def _is_edge_superseded(edge_id: str, properties: dict) -> bool:
+    """
+    Prüft ob eine Edge superseded wurde.
+
+    MVP-Heuristik:
+    1. Wenn Edge selbst 'superseded: true' Property hat → superseded
+    2. Wenn Edge edge_type='resolution' und supersedes-Liste hat → NICHT superseded (ist Resolution)
+
+    Args:
+        edge_id: UUID der Edge
+        properties: edge_properties dict
+
+    Returns:
+        True wenn Edge superseded wurde
+    """
+    # Explizites superseded-Flag (gesetzt wenn Resolution erstellt wurde)
+    if properties.get("superseded") is True:
+        return True
+
+    # Status-basierte Prüfung (Fallback)
+    if "superseded" in str(properties.get("status", "")).lower():
+        return True
+
+    return False
+
+
 def get_edge_by_id(edge_id: str) -> dict[str, Any] | None:
     """
     Hole Edge-Details für relevance_score Berechnung.
@@ -651,7 +712,8 @@ def query_neighbors(
     node_id: str,
     relation_type: str | None = None,
     max_depth: int = 1,
-    direction: str = "both"
+    direction: str = "both",
+    include_superseded: bool = False
 ) -> list[dict[str, Any]]:
     """
     Query neighbor nodes using single-hop or multi-hop traversal with cycle detection.
@@ -664,6 +726,9 @@ def query_neighbors(
         relation_type: Optional filter for specific relation types (e.g., "USES", "SOLVES")
         max_depth: Maximum traversal depth (1-5, default 1)
         direction: Traversal direction - "both" (default), "outgoing", or "incoming"
+        include_superseded: If False (default), filters out edges with superseded=True
+                           property. Set to True to include superseded edges (e.g., when
+                           querying Resolution edges). See _filter_superseded_edges().
 
     Returns:
         List of neighbor node dicts with relation, distance, weight, and edge_direction data,
@@ -848,6 +913,11 @@ def query_neighbors(
                     "access_count": neighbor.get("access_count"),
                 }
                 neighbor["relevance_score"] = calculate_relevance_score(edge_data)
+
+            # NEU: Nach relevance_score Berechnung (vor Zeile 853)
+            # MVP: Python-basierte Filterung (einfacher als SQL-Subquery)
+            if not include_superseded:
+                neighbors = _filter_superseded_edges(neighbors)
 
             # Standard-Sortierung: höchste Relevanz zuerst
             neighbors.sort(key=lambda n: n["relevance_score"], reverse=True)

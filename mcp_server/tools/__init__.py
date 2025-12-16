@@ -2,10 +2,11 @@
 MCP Server Tools Registration Module
 
 Provides tool registration and implementation for the Cognitive Memory System.
-Includes 17 tools: store_raw_dialogue, compress_to_l2_insight, hybrid_search,
+Includes 18 tools: store_raw_dialogue, compress_to_l2_insight, hybrid_search,
 update_working_memory, store_episode, store_dual_judge_scores, get_golden_test_results,
 ping, graph_add_node, graph_add_edge, graph_query_neighbors, graph_find_path,
-get_node_by_name, get_edge, count_by_type, list_episodes, and get_insight_by_id.
+get_node_by_name, get_edge, count_by_type, list_episodes, get_insight_by_id,
+dissonance_check, and resolve_dissonance.
 """
 
 from __future__ import annotations
@@ -42,6 +43,7 @@ from mcp_server.tools.count_by_type import handle_count_by_type
 from mcp_server.tools.list_episodes import handle_list_episodes
 from mcp_server.tools.get_insight_by_id import handle_get_insight_by_id
 from mcp_server.tools.dissonance_check import handle_dissonance_check as handle_dissonance_check_impl, DISSONANCE_CHECK_TOOL
+from mcp_server.tools.resolve_dissonance import handle_resolve_dissonance, RESOLVE_DISSONANCE_TOOL
 
 
 def rrf_fusion(
@@ -2215,6 +2217,11 @@ def register_tools(server: Server) -> list[Tool]:
                         "enum": ["both", "outgoing", "incoming"],
                         "description": "Traversal direction: 'both' (default) finds neighbors via incoming AND outgoing edges, 'outgoing' only follows edges where start node is source, 'incoming' only follows edges where start node is target",
                     },
+                    "include_superseded": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "If true, includes edges that have been superseded by EVOLUTION resolutions. Default: false (hide superseded)",
+                    },
                 },
                 "required": ["node_name"],
             },
@@ -2337,6 +2344,7 @@ def register_tools(server: Server) -> list[Tool]:
             },
         ),
         DISSONANCE_CHECK_TOOL,
+        RESOLVE_DISSONANCE_TOOL,
     ]
 
     # Tool handler mapping
@@ -2359,6 +2367,7 @@ def register_tools(server: Server) -> list[Tool]:
         "list_episodes": handle_list_episodes,
         "get_insight_by_id": handle_get_insight_by_id,
         "dissonance_check": handle_dissonance_check,
+        "resolve_dissonance": handle_resolve_dissonance,
     }
 
     # Register tool call handler (define once, outside the loop)

@@ -15,6 +15,7 @@ from enum import Enum
 from typing import Any, Optional
 
 from mcp_server.db.connection import get_connection
+from mcp_server.db.graph import get_or_create_node, add_edge
 from mcp_server.external.anthropic_client import HaikuClient
 
 logger = logging.getLogger(__name__)
@@ -517,3 +518,262 @@ Du analysierst potenzielle Konflikte in einer Selbst-Narrative.
 
 Falls kein Konflikt erkannt wird, setze dissonance_type auf "NONE".
 """
+
+
+def _find_review_by_id(review_id: str) -> dict[str, Any] | None:
+    """
+    Sucht einen NuanceReviewProposal in _nuance_reviews nach ID.
+
+    Args:
+        review_id: UUID des Review-Proposals (aus get_pending_reviews())
+
+    Returns:
+        Das Review-Dict mit 'dissonance' Feld oder None
+    """
+    for review in _nuance_reviews:
+        if review["id"] == review_id:
+            return review
+    return None
+
+
+def _mark_edge_as_superseded(edge_id: str, superseded_at: str, superseded_by: str) -> bool:
+    """
+    Markiert eine Edge als superseded durch Hinzufügen eines 'superseded: True' Flags.
+
+    KRITISCH-1 FIX: Diese Funktion wird von resolve_dissonance() aufgerufen um
+    sicherzustellen dass _is_edge_superseded() in graph.py die Edge korrekt
+    filtert wenn include_superseded=False gesetzt ist.
+
+    Args:
+        edge_id: UUID der Edge die superseded werden soll
+        superseded_at: ISO timestamp wann die Edge superseded wurde
+        superseded_by: Wer die Resolution erstellt hat (z.B. "I/O")
+
+    Returns:
+        True wenn erfolgreich, False bei Fehler
+
+    Note:
+        Die Funktion merged die neuen Properties mit den bestehenden,
+        um keine existierenden Metadaten zu verlieren.
+    """
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Hole aktuelle Properties
+            cursor.execute(
+                "SELECT properties FROM edges WHERE id = %s::uuid",
+                (edge_id,)
+            )
+            result = cursor.fetchone()
+
+            if not result:
+                logger.warning(f"Edge {edge_id} not found for superseded marking")
+                return False
+
+            # Parse existing properties
+            existing_props = result["properties"] or {}
+            if isinstance(existing_props, str):
+                existing_props = json.loads(existing_props)
+
+            # Merge with superseded flag
+            existing_props["superseded"] = True
+            existing_props["superseded_at"] = superseded_at
+            existing_props["superseded_by"] = superseded_by
+
+            # Update edge properties
+            cursor.execute(
+                """
+                UPDATE edges
+                SET properties = %s::jsonb,
+                    modified_at = NOW()
+                WHERE id = %s::uuid
+                """,
+                (json.dumps(existing_props), edge_id)
+            )
+            conn.commit()
+
+            logger.debug(f"Marked edge {edge_id} as superseded by {superseded_by}")
+            return True
+
+    except Exception as e:
+        logger.error(f"Failed to mark edge {edge_id} as superseded: {e}")
+        return False
+
+
+def resolve_dissonance(
+    review_id: str,  # KORRIGIERT: review_id statt dissonance_id
+    resolution_type: str,  # "EVOLUTION" | "CONTRADICTION" | "NUANCE"
+    context: str,
+    resolved_by: str = "I/O"
+) -> dict[str, Any]:
+    """
+    Erstellt eine Resolution-Hyperedge für eine erkannte Dissonanz.
+
+    Workflow:
+    1. Suche NuanceReviewProposal via review_id in _nuance_reviews
+    2. Extrahiere edge_a_id und edge_b_id aus dem gespeicherten dissonance-Objekt
+    3. Erstelle Resolution-Node als Hyperedge-Anker
+    4. Erstelle RESOLVES-Edge mit resolution-Properties
+    5. Update Review-Status auf CONFIRMED/RECLASSIFIED
+
+    Args:
+        review_id: UUID des NuanceReviewProposal (aus get_pending_reviews())
+        resolution_type: Typ der Resolution ("EVOLUTION", "CONTRADICTION", "NUANCE")
+        context: Beschreibung der Resolution
+        resolved_by: Wer hat die Resolution erstellt (default: "I/O")
+
+    Returns:
+        Dict mit resolution_edge_id, resolution_type, edge_a_id, edge_b_id, resolved_at, resolved_by
+
+    Raises:
+        ValueError: Wenn review_id nicht gefunden oder resolution_type ungültig
+    """
+    # 1. Finde den Review via ID
+    review = _find_review_by_id(review_id)
+    if not review:
+        raise ValueError(f"Review {review_id} not found in _nuance_reviews")
+
+    # 2. Extrahiere Edge-IDs aus dem dissonance-Objekt im Review
+    dissonance = review.get("dissonance", {})
+    edge_a_id = dissonance.get("edge_a_id")
+    edge_b_id = dissonance.get("edge_b_id")
+
+    if not edge_a_id or not edge_b_id:
+        raise ValueError(f"Review {review_id} has invalid dissonance data: missing edge IDs")
+
+    # 3. Validiere resolution_type
+    valid_types = ["EVOLUTION", "CONTRADICTION", "NUANCE"]
+    if resolution_type not in valid_types:
+        raise ValueError(f"Invalid resolution_type: {resolution_type}. Must be one of {valid_types}")
+
+    # 4. Erstelle Resolution-Properties basierend auf Typ
+    resolved_at = datetime.now(timezone.utc).isoformat()
+
+    # Type annotation fix (MEDIUM-1): Use dict[str, Any] for mixed value types
+    base_properties: dict[str, Any] = {
+        "edge_type": "resolution",
+        "resolution_type": resolution_type,
+        "context": context,
+        "resolved_at": resolved_at,
+        "resolved_by": resolved_by
+    }
+
+    if resolution_type == "EVOLUTION":
+        # EVOLUTION: edge_a wird durch edge_b ersetzt
+        base_properties["supersedes"] = [str(edge_a_id)]
+        base_properties["superseded_by"] = [str(edge_b_id)]
+
+        # KRITISCH-1 FIX: Set superseded=True flag on the original edge (edge_a)
+        # This enables _is_edge_superseded() filter to work correctly
+        _mark_edge_as_superseded(edge_a_id, resolved_at, resolved_by)
+    else:
+        # CONTRADICTION / NUANCE: beide bleiben aktiv
+        base_properties["affected_edges"] = [str(edge_a_id), str(edge_b_id)]
+
+    # 5. Erstelle Resolution-Node (als Hyperedge-Anker)
+    resolution_node = get_or_create_node(
+        name=f"Resolution-{review_id[:8]}",
+        label="Resolution"
+    )
+
+    # 6. Erstelle RESOLVES-Edges von Resolution-Node
+    #
+    # MVP LIMITATION (KRITISCH-2):
+    # Die target_id verwendet Edge-UUIDs statt Node-UUIDs. Das PostgreSQL-Schema
+    # erlaubt dies technisch (beide sind UUIDs), aber es ist semantisch nicht korrekt.
+    # Die Resolution-Properties (supersedes, affected_edges) enthalten die Edge-IDs
+    # als Referenzen. Für query_neighbors() Traversal ist dies NICHT nutzbar -
+    # stattdessen wird _mark_edge_as_superseded() verwendet um Edges direkt zu markieren.
+    #
+    # Future Enhancement (Epic 8): Echtes Hypergraph-Schema mit Edge-zu-Edge Relationen.
+    resolution_edge = add_edge(
+        source_id=resolution_node["node_id"],
+        target_id=edge_a_id,  # MVP: Edge-ID als Pseudo-Node-Target
+        relation="RESOLVES",
+        weight=1.0,
+        properties=json.dumps(base_properties)
+    )
+
+    # 7. Erstelle zweite RESOLVES-Edge zu Edge B (vollständige Hyperedge)
+    add_edge(
+        source_id=resolution_node["node_id"],
+        target_id=edge_b_id,  # MVP: Edge-ID als Pseudo-Node-Target
+        relation="RESOLVES",
+        weight=1.0,
+        properties=json.dumps(base_properties)
+    )
+
+    # 8. Update Review-Status
+    original_dissonance_type = dissonance.get("dissonance_type", {})
+    if isinstance(original_dissonance_type, dict):
+        # If it's a dict, get the value
+        original_type = original_dissonance_type.get("value", "unknown")
+    else:
+        # If it's a string or enum
+        original_type = str(original_dissonance_type)
+
+    review["status"] = "CONFIRMED" if resolution_type.upper() == original_type.upper() else "RECLASSIFIED"
+    review["reviewed_at"] = resolved_at
+    review["review_reason"] = context
+
+    logger.info(
+        f"Created resolution {resolution_type} for review {review_id}: "
+        f"edge_a={edge_a_id}, edge_b={edge_b_id}, node={resolution_node['node_id']}"
+    )
+
+    return {
+        "resolution_id": resolution_edge["edge_id"],
+        "resolution_node_id": resolution_node["node_id"],
+        "resolution_type": resolution_type,
+        "edge_a_id": edge_a_id,
+        "edge_b_id": edge_b_id,
+        "resolved_at": resolved_at,
+        "resolved_by": resolved_by
+    }
+
+
+def get_resolutions_for_node(node_name: str) -> list[dict[str, Any]]:
+    """
+    Findet alle Resolution-Hyperedges die einen Node betreffen.
+
+    Wird von Story 7.7 (IEF) und Story 7.9 (SMF) verwendet.
+
+    Args:
+        node_name: Name des Nodes
+
+    Returns:
+        Liste von Resolution-Dicts mit resolution_type, context, affected_edges
+    """
+    # Import here to avoid circular import
+    from mcp_server.db.graph import query_neighbors, get_node_by_name
+
+    node = get_node_by_name(node_name)
+    if not node:
+        return []
+
+    # MEDIUM-3 FIX: get_node_by_name() returns "id", not "node_id"
+    # Suche alle RESOLVES-Edges die auf diesen Node zeigen
+    neighbors = query_neighbors(
+        node_id=node["id"],  # Fixed: was node["node_id"]
+        relation_type="RESOLVES",
+        direction="incoming",
+        include_superseded=True  # Resolutions immer inkludieren
+    )
+
+    resolutions = []
+    for neighbor in neighbors:
+        props = neighbor.get("edge_properties", {})
+        if props.get("edge_type") == "resolution":
+            resolutions.append({
+                "resolution_node": neighbor.get("name"),
+                "resolution_type": props.get("resolution_type"),
+                "context": props.get("context"),
+                "supersedes": props.get("supersedes", []),
+                "superseded_by": props.get("superseded_by", []),
+                "affected_edges": props.get("affected_edges", []),
+                "resolved_at": props.get("resolved_at"),
+                "resolved_by": props.get("resolved_by")
+            })
+
+    return resolutions

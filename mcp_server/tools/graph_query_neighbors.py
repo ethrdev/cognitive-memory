@@ -40,6 +40,7 @@ async def handle_graph_query_neighbors(arguments: dict[str, Any]) -> dict[str, A
         relation_type = arguments.get("relation_type")  # Optional
         depth = arguments.get("depth", 1)  # Optional, default 1
         direction = arguments.get("direction", "both")  # Optional, default "both"
+        include_superseded = arguments.get("include_superseded", False)  # Optional, default False
 
         # Parameter validation
         if not node_name or not isinstance(node_name, str):
@@ -81,6 +82,14 @@ async def handle_graph_query_neighbors(arguments: dict[str, Any]) -> dict[str, A
                 "tool": "graph_query_neighbors",
             }
 
+        # include_superseded validation (must be boolean)
+        if not isinstance(include_superseded, bool):
+            return {
+                "error": "Parameter validation failed",
+                "details": "Invalid 'include_superseded' parameter (must be boolean)",
+                "tool": "graph_query_neighbors",
+            }
+
         # Start performance timing
         start_time = time.time()
 
@@ -100,7 +109,8 @@ async def handle_graph_query_neighbors(arguments: dict[str, Any]) -> dict[str, A
                 node_id=start_node["id"],
                 relation_type=relation_type,
                 max_depth=depth,
-                direction=direction
+                direction=direction,
+                include_superseded=include_superseded
             )
 
             # Calculate execution time
@@ -131,6 +141,7 @@ async def handle_graph_query_neighbors(arguments: dict[str, Any]) -> dict[str, A
                     "depth": depth,
                     "relation_type": relation_type,
                     "direction": direction,
+                    "include_superseded": include_superseded,
                 },
                 "execution_time_ms": round(execution_time, 2),
                 "neighbor_count": len(result),
