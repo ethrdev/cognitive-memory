@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import json
 import logging
+import math
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -284,6 +286,149 @@ def get_node_by_name(name: str) -> dict[str, Any] | None:
         raise
 
 
+def calculate_relevance_score(edge_data: dict) -> float:
+    """
+    Berechnet relevance_score basierend auf Ebbinghaus Forgetting Curve
+    mit logarithmischem Memory Strength Faktor.
+
+    Formel: relevance_score = exp(-days_since / S)
+    wobei S = S_BASE * (1 + log(1 + access_count))
+
+    Args:
+        edge_data: Dict mit keys: edge_properties, last_accessed, access_count
+
+    Returns:
+        float zwischen 0.0 und 1.0
+    """
+    properties = edge_data.get("edge_properties") or edge_data.get("properties") or {}
+
+    # Konstitutive Edges: IMMER 1.0
+    if properties.get("edge_type") == "constitutive":
+        return 1.0
+
+    # Memory Strength berechnen
+    S_BASE = 100  # Basis-Stärke in Tagen
+
+    access_count = edge_data.get("access_count", 0) or 0
+    S = S_BASE * (1 + math.log(1 + access_count))
+    # access_count=0  → S = 100 * 1.0   = 100
+    # access_count=10 → S = 100 * 3.4   = 340
+
+    # S-Floor basierend auf importance
+    S_FLOOR = {"low": None, "medium": 100, "high": 200}
+    importance = properties.get("importance", "medium")  # Default: medium
+    floor = S_FLOOR.get(importance)
+    if floor:
+        S = max(S, floor)
+
+    # Tage seit letztem Zugriff
+    last_accessed = edge_data.get("last_accessed")
+    if not last_accessed:
+        return 1.0  # Kein Timestamp = keine Decay-Berechnung
+
+    if isinstance(last_accessed, str):
+        last_accessed = datetime.fromisoformat(last_accessed.replace('Z', '+00:00'))
+
+    # Handle naive datetime (no timezone) - assume UTC
+    if last_accessed.tzinfo is None:
+        last_accessed = last_accessed.replace(tzinfo=timezone.utc)
+
+    days_since = (datetime.now(timezone.utc) - last_accessed).total_seconds() / 86400
+
+    # Exponential Decay
+    score = max(0.0, min(1.0, math.exp(-days_since / S)))
+    logger.debug(f"Calculated relevance_score={score:.4f} for edge data: access_count={access_count}, S={S:.1f}, days_since={days_since:.1f}")
+    return score
+
+
+def _update_edge_access_stats(edge_ids: list[str], conn: Any) -> None:
+    """
+    Update last_accessed and access_count for edges (TGN Minimal Story 7.2).
+
+    Uses bulk UPDATE with atomic increment. Fails silently - access stats are non-critical.
+
+    Args:
+        edge_ids: List of edge UUIDs to update
+        conn: Active database connection (required, not optional)
+    """
+    if not edge_ids:
+        return
+
+    # Validate UUID format to prevent injection
+    uuid_pattern = re.compile(
+        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+    )
+    valid_edge_ids = []
+    for edge_id in edge_ids:
+        if uuid_pattern.match(str(edge_id)):
+            valid_edge_ids.append(str(edge_id))
+        else:
+            logger.warning(f"Invalid UUID format skipped: {edge_id}")
+
+    if not valid_edge_ids:
+        return
+
+    try:
+        cursor = conn.cursor()
+        # Use atomic increment to prevent race conditions
+        cursor.execute(
+            """
+            UPDATE edges
+            SET last_accessed = NOW(),
+                access_count = GREATEST(COALESCE(access_count, 0), 0) + 1
+            WHERE id = ANY(%s::uuid[])
+            """,
+            (valid_edge_ids,)
+        )
+        conn.commit()
+        logger.debug(f"Updated access stats for {len(valid_edge_ids)} edges")
+
+    except Exception as e:
+        # More specific error handling
+        if "operational error" in str(e).lower():
+            logger.warning(f"Database connection error while updating access stats: {e}")
+        elif "integrity error" in str(e).lower():
+            logger.debug(f"Edge not found during access stats update: {e}")
+        else:
+            logger.warning(f"Unexpected error updating edge access stats: {e}")
+        # Don't re-raise - access stats are non-critical
+
+
+def get_edge_by_id(edge_id: str) -> dict[str, Any] | None:
+    """
+    Hole Edge-Details für relevance_score Berechnung.
+
+    Args:
+        edge_id: UUID string der Edge
+
+    Returns:
+        Edge data dict oder None
+    """
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT id, properties, last_accessed, access_count
+                FROM edges
+                WHERE id = %s::uuid;
+                """,
+                (edge_id,)
+            )
+            result = cursor.fetchone()
+            if result:
+                return {
+                    "id": str(result["id"]),
+                    "edge_properties": result["properties"],
+                    "last_accessed": result["last_accessed"],
+                    "access_count": result["access_count"],
+                }
+            return None
+    except Exception as e:
+        logger.error(f"Failed to get edge by id: edge_id={edge_id}, error={e}")
+        raise
+
+
 def get_edge_by_names(
     source_name: str, target_name: str, relation: str
 ) -> dict[str, Any] | None:
@@ -325,8 +470,13 @@ def get_edge_by_names(
 
             result = cursor.fetchone()
             if result:
+                edge_id = str(result["id"])
+
+                # AUTO-UPDATE after successful fetch (Story 7.2)
+                _update_edge_access_stats([edge_id], conn)
+
                 return {
-                    "id": str(result["id"]),
+                    "id": edge_id,
                     "source_id": str(result["source_id"]),
                     "target_id": str(result["target_id"]),
                     "relation": result["relation"],
@@ -527,12 +677,16 @@ def query_neighbors(
                 outgoing_neighbors AS (
                     -- Base case: direct outgoing neighbors
                     SELECT
-                        n.id,
+                        n.id AS node_id,
+                        e.id AS edge_id,
                         n.label,
                         n.name,
-                        n.properties,
+                        n.properties AS node_properties,
+                        e.properties AS edge_properties,
                         e.relation,
                         e.weight,
+                        e.last_accessed,
+                        e.access_count,
                         1 AS distance,
                         ARRAY[%s::uuid, n.id] AS path,
                         'outgoing'::text AS edge_direction
@@ -545,17 +699,21 @@ def query_neighbors(
 
                     -- Recursive case: follow outgoing edges from found nodes
                     SELECT
-                        n.id,
+                        n.id AS node_id,
+                        e.id AS edge_id,
                         n.label,
                         n.name,
-                        n.properties,
+                        n.properties AS node_properties,
+                        e.properties AS edge_properties,
                         e.relation,
                         e.weight,
+                        e.last_accessed,
+                        e.access_count,
                         ob.distance + 1 AS distance,
                         ob.path || n.id AS path,
                         'outgoing'::text AS edge_direction
                     FROM outgoing_neighbors ob
-                    JOIN edges e ON e.source_id = ob.id
+                    JOIN edges e ON e.source_id = ob.node_id
                     JOIN nodes n ON e.target_id = n.id
                     WHERE ob.distance < %s
                         AND NOT (n.id = ANY(ob.path))  -- Cycle detection
@@ -567,12 +725,16 @@ def query_neighbors(
                 incoming_neighbors AS (
                     -- Base case: direct incoming neighbors
                     SELECT
-                        n.id,
+                        n.id AS node_id,
+                        e.id AS edge_id,
                         n.label,
                         n.name,
-                        n.properties,
+                        n.properties AS node_properties,
+                        e.properties AS edge_properties,
                         e.relation,
                         e.weight,
+                        e.last_accessed,
+                        e.access_count,
                         1 AS distance,
                         ARRAY[%s::uuid, n.id] AS path,
                         'incoming'::text AS edge_direction
@@ -585,17 +747,21 @@ def query_neighbors(
 
                     -- Recursive case: follow incoming edges from found nodes
                     SELECT
-                        n.id,
+                        n.id AS node_id,
+                        e.id AS edge_id,
                         n.label,
                         n.name,
-                        n.properties,
+                        n.properties AS node_properties,
+                        e.properties AS edge_properties,
                         e.relation,
                         e.weight,
+                        e.last_accessed,
+                        e.access_count,
                         ib.distance + 1 AS distance,
                         ib.path || n.id AS path,
                         'incoming'::text AS edge_direction
                     FROM incoming_neighbors ib
-                    JOIN edges e ON e.target_id = ib.id
+                    JOIN edges e ON e.target_id = ib.node_id
                     JOIN nodes n ON e.source_id = n.id
                     WHERE ib.distance < %s
                         AND NOT (n.id = ANY(ib.path))  -- Cycle detection
@@ -610,10 +776,10 @@ def query_neighbors(
                     SELECT * FROM incoming_neighbors WHERE %s = true
                 )
                 -- Final selection: shortest path per node, highest weight on tie
-                SELECT DISTINCT ON (id)
-                    id, label, name, properties, relation, weight, distance, edge_direction
+                SELECT DISTINCT ON (node_id)
+                    node_id, edge_id, label, name, node_properties, edge_properties, relation, weight, last_accessed, access_count, distance, edge_direction
                 FROM combined
-                ORDER BY id, distance ASC, weight DESC, name ASC;
+                ORDER BY node_id, distance ASC, weight DESC, name ASC;
                 """,
                 (
                     # Outgoing CTE: base case
@@ -631,19 +797,45 @@ def query_neighbors(
 
             results = cursor.fetchall()
 
-            # Format results with proper UUID string conversion
+            # Format results - NEU: edge_id extrahieren
             neighbors = []
+            edge_ids_for_update = []
+
             for row in results:
+                edge_id = str(row["edge_id"]) if row.get("edge_id") else None
+                if edge_id:
+                    edge_ids_for_update.append(edge_id)
+
                 neighbors.append({
-                    "node_id": str(row["id"]),
+                    "node_id": str(row["node_id"]),  # Geändert von "id"
                     "label": row["label"],
                     "name": row["name"],
-                    "properties": row["properties"],
+                    "properties": row["node_properties"],      # Umbenannt
+                    "edge_properties": row["edge_properties"], # NEU
                     "relation": row["relation"],
                     "weight": float(row["weight"]),
                     "distance": int(row["distance"]),
                     "edge_direction": row["edge_direction"],
+                    "last_accessed": row["last_accessed"],     # NEU
+                    "access_count": row["access_count"],       # NEU
+                    "relevance_score": 0.0,                    # Wird nach Query berechnet
                 })
+
+            # relevance_score für jede Edge berechnen
+            for neighbor in neighbors:
+                edge_data = {
+                    "edge_properties": neighbor.get("edge_properties", {}),
+                    "last_accessed": neighbor.get("last_accessed"),
+                    "access_count": neighbor.get("access_count"),
+                }
+                neighbor["relevance_score"] = calculate_relevance_score(edge_data)
+
+            # Standard-Sortierung: höchste Relevanz zuerst
+            neighbors.sort(key=lambda n: n["relevance_score"], reverse=True)
+
+            # AUTO-UPDATE after Query-Completion (Story 7.2)
+            if edge_ids_for_update:
+                _update_edge_access_stats(edge_ids_for_update, conn)
 
             logger.debug(
                 f"Found {len(neighbors)} neighbors for node {node_id} "
@@ -827,6 +1019,34 @@ def find_path(start_node_name: str, end_node_name: str, max_depth: int = 5) -> d
                     "edges": edges,
                     "total_weight": total_weight,
                 })
+
+            # relevance_score für alle Edges im Pfad berechnen
+            for path in paths:
+                edge_scores = []
+                for edge in path["edges"]:
+                    edge_detail = get_edge_by_id(edge["edge_id"])
+                    if edge_detail:
+                        score = calculate_relevance_score(edge_detail)
+                        edge["relevance_score"] = score
+                        edge_scores.append(score)
+                    else:
+                        edge["relevance_score"] = 1.0  # Fallback
+                        edge_scores.append(1.0)
+
+                # Produkt-Aggregation: "Alle Edges müssen relevant sein"
+                # Bei Score 0.5 * 0.5 = 0.25 (Pfad-Qualität sinkt exponentiell)
+                path["path_relevance"] = math.prod(edge_scores) if edge_scores else 1.0
+
+            # Edge-IDs sammeln für Auto-Update (Story 7.2)
+            all_edge_ids: set[str] = set()
+            for path in paths:
+                for edge in path["edges"]:
+                    # Key ist "edge_id", nicht "id"!
+                    all_edge_ids.add(edge["edge_id"])
+
+            # AUTO-UPDATE after Path-Finding
+            if all_edge_ids:
+                _update_edge_access_stats(list(all_edge_ids), conn)
 
             logger.debug(f"Found {len(paths)} paths from '{start_node_name}' to '{end_node_name}' with max_depth={max_depth}")
 
