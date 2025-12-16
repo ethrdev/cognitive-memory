@@ -41,6 +41,7 @@ from mcp_server.tools.get_edge import handle_get_edge
 from mcp_server.tools.count_by_type import handle_count_by_type
 from mcp_server.tools.list_episodes import handle_list_episodes
 from mcp_server.tools.get_insight_by_id import handle_get_insight_by_id
+from mcp_server.tools.dissonance_check import handle_dissonance_check as handle_dissonance_check_impl, DISSONANCE_CHECK_TOOL
 
 
 def rrf_fusion(
@@ -1846,6 +1847,57 @@ async def handle_store_dual_judge_scores(arguments: dict[str, Any]) -> dict[str,
         }
 
 
+async def handle_dissonance_check(arguments: dict[str, Any]) -> dict[str, Any]:
+    """
+    Handle dissonance check tool invocation.
+
+    Args:
+        arguments: Tool arguments containing context_node and optional scope
+
+    Returns:
+        Formatted dissonance check results
+    """
+    from mcp.server import Server
+
+    # Extract parameters
+    context_node = arguments.get("context_node")
+    scope = arguments.get("scope", "recent")
+
+    # Validate required parameters
+    if not context_node or not isinstance(context_node, str):
+        return {
+            "error": "Parameter validation failed",
+            "details": "context_node is required and must be a string",
+            "tool": "dissonance_check",
+        }
+
+    if scope not in ["recent", "full"]:
+        return {
+            "error": "Parameter validation failed",
+            "details": "scope must be 'recent' or 'full'",
+            "tool": "dissonance_check",
+        }
+
+    # Create a server instance for the handler
+    server = Server("cognitive-memory")
+
+    # Call the actual handler
+    results = await handle_dissonance_check_impl(server, context_node, scope)
+
+    # Convert TextContent results to dict format
+    if results and len(results) > 0:
+        return {
+            "result": results[0].text,
+            "tool": "dissonance_check",
+            "status": "success",
+        }
+    else:
+        return {
+            "error": "No results returned",
+            "tool": "dissonance_check",
+        }
+
+
 async def handle_ping(arguments: dict[str, Any]) -> dict[str, Any]:
     """
     Simple ping tool for testing MCP connectivity.
@@ -2284,6 +2336,7 @@ def register_tools(server: Server) -> list[Tool]:
                 "required": ["id"],
             },
         ),
+        DISSONANCE_CHECK_TOOL,
     ]
 
     # Tool handler mapping
@@ -2305,6 +2358,7 @@ def register_tools(server: Server) -> list[Tool]:
         "count_by_type": handle_count_by_type,
         "list_episodes": handle_list_episodes,
         "get_insight_by_id": handle_get_insight_by_id,
+        "dissonance_check": handle_dissonance_check,
     }
 
     # Register tool call handler (define once, outside the loop)

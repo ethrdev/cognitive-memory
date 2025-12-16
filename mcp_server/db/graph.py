@@ -551,7 +551,26 @@ def add_edge(
         - relation: confirmed relation type
         - weight: confirmed weight
     """
+    import json
+
     logger = logging.getLogger(__name__)
+
+    # Parse properties to add entrenchment_level (Story 7.4, Task 5: AC #7, #8)
+    try:
+        props = json.loads(properties)
+    except json.JSONDecodeError:
+        props = {}
+
+    # AGM Belief Revision: Konstitutive Edges = maximal entrenchment
+    edge_type = props.get("edge_type", "descriptive")
+
+    if edge_type == "constitutive":
+        props["entrenchment_level"] = "maximal"
+    else:
+        props.setdefault("entrenchment_level", "default")
+
+    # Serialize back with updated properties
+    properties = json.dumps(props)
 
     try:
         with get_connection() as conn:

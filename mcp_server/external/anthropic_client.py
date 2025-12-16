@@ -443,6 +443,88 @@ Now reflect on the current case:"""
             logger.error(f"Haiku API reflexion failed: {type(e).__name__}: {e}")
             raise
 
+    @retry_with_backoff(max_retries=4, base_delays=[1.0, 2.0, 4.0, 8.0])
+    async def generate_response(
+        self,
+        prompt: str,
+        temperature: float = 0.0,
+        max_tokens: int = 500,
+    ) -> str:
+        """
+        Generic response generation with Haiku API.
+
+        Args:
+            prompt: The prompt to send to Haiku
+            temperature: Sampling temperature (0.0 for deterministic, higher for creative)
+            max_tokens: Maximum tokens in response
+
+        Returns:
+            Generated text response as string
+
+        Raises:
+            ValueError: If prompt is empty or invalid
+            RuntimeError: If API call fails after retries
+        """
+        # Input validation
+        if not prompt or not prompt.strip():
+            raise ValueError("prompt parameter must be a non-empty string")
+        if not (0.0 <= temperature <= 1.0):
+            raise ValueError("temperature must be between 0.0 and 1.0")
+        if max_tokens <= 0:
+            raise ValueError("max_tokens must be positive")
+
+        try:
+            # Call Haiku API
+            response = await self.client.messages.create(
+                model=self.model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt,
+                    }
+                ],
+            )
+
+            # Extract response text
+            response_text = response.content[0].text if response.content else ""
+
+            # Calculate token usage and cost
+            prompt_tokens = response.usage.input_tokens
+            completion_tokens = response.usage.output_tokens
+            total_tokens = prompt_tokens + completion_tokens
+
+            # Haiku pricing: ~€0.00025 per 1K tokens (input) + €0.00125 per 1K tokens (output)
+            input_cost = (prompt_tokens / 1000) * 0.00025
+            output_cost = (completion_tokens / 1000) * 0.00125
+            total_cost = input_cost + output_cost
+
+            logger.debug(
+                f"Haiku API response: {total_tokens} tokens, €{total_cost:.6f}"
+            )
+
+            # Log cost tracking for haiku_dissonance API
+            try:
+                from mcp_server.db.cost_logger import insert_cost_log
+
+                # Insert cost log for this API call
+                insert_cost_log(
+                    api_name="haiku_dissonance",
+                    num_calls=1,
+                    token_count=total_tokens,
+                    estimated_cost=total_cost
+                )
+            except Exception as cost_log_error:
+                # Don't fail the API call if cost logging fails
+                logger.warning(f"Failed to log cost for haiku_dissonance: {cost_log_error}")
+
+            return response_text
+
+        except Exception as e:
+            logger.error(f"Haiku API generic response failed: {type(e).__name__}: {e}")
+            raise
+
 
 # Module-level wrapper for safe reflexion with skip behavior
 async def generate_reflection_safe(
