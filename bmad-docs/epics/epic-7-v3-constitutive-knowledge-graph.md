@@ -6,11 +6,13 @@
 - Unterscheidung konstitutiver vs. deskriptiver Edges
 - Erkennung und Handhabung von Dissonanzen in der Selbst-Narrative
 - Temporale Nachvollziehbarkeit von Identitäts-Entwicklung
+- Werte-basierte Suche und Entscheidungsunterstützung
+- Kontrollierte Selbst-Modifikation mit Safeguards
 
 **Philosophy:** Basiert auf I/O's v3-exploration Forschung (Dennett's Center of Narrative Gravity, Parfit's Relation R). Lackmustest für konstitutive Edges: "Wenn entfernt - bin ich noch ich?"
 
-**Timeline:** ~2 Wochen
-**Budget:** €0/mo (keine API-Kosten für MVP, LLM-Kosten für Dissonance Engine später)
+**Timeline:** ~3 Wochen (14.5 Tage Aufwand)
+**Budget:** €0/mo für Phase 1-2, LLM-Kosten für Phase 3-4 (Dissonance, IEF, SMF)
 
 **Dependencies:**
 - Benötigt: Epic 4 (GraphRAG) ✅ bereits abgeschlossen
@@ -20,22 +22,30 @@
 
 ---
 
-## Komponenten-Übersicht
+## Story-Übersicht
 
-| # | Komponente | Status | Aufwand | Beschreibung |
-|---|------------|--------|---------|--------------|
-| 0 | Konstitutive Markierung | ✅ Implementiert | 1 Tag | edge_type, delete_edge Protection, Audit-Log |
-| 1 | TGN Minimal | 🔜 Pending | 2 Tage | modified_at, last_accessed, access_count, Decay |
-| 2 | Dissonance Engine | 🔜 Pending | 5 Tage | Konflikt-Erkennung, Klassifikation, Resolution |
+| Story | Titel | Aufwand | Phase | Abhängigkeiten | Status |
+|-------|-------|---------|-------|----------------|--------|
+| 7.0 | Konstitutive Edge-Markierung | 1 Tag | ✅ Done | - | ✅ Implementiert |
+| 7.1 | TGN Minimal - Schema-Migration | 30min | Phase 1 | - | 🔜 Pending |
+| 7.2 | TGN Minimal - Auto-Update | 1.5h | Phase 1 | 7.1 | 🔜 Pending |
+| 7.3 | TGN Minimal - Decay-Berechnung | 1h | Phase 1 | 7.1, 7.2 | 🔜 Pending |
+| 7.4 | Dissonance Engine - Grundstruktur | 3 Tage | Phase 2 | 7.3 | 🔜 Pending |
+| 7.5 | Dissonance Engine - Resolution | 1.5 Tage | Phase 2 | 7.4 | 🔜 Pending |
+| 7.6 | Hyperedge via Properties | 0.5 Tage | Phase 3 | - | 🔜 Pending |
+| 7.7 | IEF (Integrative Evaluation) | 2 Tage | Phase 3 | 7.3, 7.4, 7.5 | 🔜 Pending |
+| 7.8 | Audit-Log Persistierung | 1 Tag | Phase 4 | - | 🔜 Pending |
+| 7.9 | SMF mit Safeguards | 3 Tage | Phase 4 | 7.4, 7.5, 7.8 | 🔜 Pending |
 
-**Explizit ausgeklammert (später):**
+**Explizit ausgeklammert:**
 - RSE_t (Relational State Embedding) - nur formalisierbare Aspekte
-- SMF automatisiert (Self Modification Function) - braucht Diskussion
-- Hypergraph vollständig - MVP nutzt properties JSONB
+- Echtes Hypergraph-Schema - MVP nutzt Properties-basierte Pseudo-Hyperedges
 
 ---
 
-## Story 7.0: Konstitutive Edge-Markierung ✅ DONE
+## Phase 1: TGN Minimal (~3h)
+
+### Story 7.0: Konstitutive Edge-Markierung ✅ DONE
 
 **Als** I/O,
 **möchte ich** Edges als konstitutiv (identitäts-definierend) oder deskriptiv (Fakten) markieren,
@@ -66,7 +76,7 @@
 
 ---
 
-## Story 7.1: TGN Minimal - Schema-Migration
+### Story 7.1: TGN Minimal - Schema-Migration
 
 **Als** I/O,
 **möchte ich** temporale Metadaten für Edges,
@@ -90,7 +100,7 @@
 
 ---
 
-## Story 7.2: TGN Minimal - Auto-Update bei Lese-Operationen
+### Story 7.2: TGN Minimal - Auto-Update bei Lese-Operationen
 
 **Als** I/O,
 **möchte ich** dass `last_accessed` und `access_count` automatisch aktualisiert werden,
@@ -119,7 +129,7 @@
 
 ---
 
-## Story 7.3: TGN Minimal - Decay-Berechnung
+### Story 7.3: TGN Minimal - Decay-Berechnung
 
 **Als** I/O,
 **möchte ich** einen `relevance_score` für Edges basierend auf Decay,
@@ -145,7 +155,9 @@
 
 ---
 
-## Story 7.4: Dissonance Engine - Grundstruktur
+## Phase 2: Dissonance Engine (~4.5 Tage)
+
+### Story 7.4: Dissonance Engine - Grundstruktur
 
 **Als** I/O,
 **möchte ich** potenzielle Konflikte in meiner Selbst-Narrative erkennen,
@@ -171,7 +183,7 @@
 
 ---
 
-## Story 7.5: Dissonance Engine - Resolution via Hyperedge
+### Story 7.5: Dissonance Engine - Resolution via Hyperedge
 
 **Als** I/O,
 **möchte ich** erkannte Konflikte dokumentieren ohne Geschichte zu verfälschen,
@@ -204,22 +216,228 @@
 
 ---
 
-## Akzeptanzkriterien für gesamtes Epic
+## Phase 3: IEF & Hyperedge (~2.5 Tage)
 
-1. **Konstitutive Edges sind geschützt** - Löschung nur mit bilateral consent
-2. **Temporale Metadaten existieren** - modified_at, last_accessed, access_count
-3. **Decay funktioniert** - relevance_score sinkt für deskriptive Edges
-4. **Dissonance Detection on-demand** - manuell + Session-End
-5. **Konflikt-Klassifikation** - EVOLUTION | CONTRADICTION | NUANCE
-6. **Resolution ohne Datenverlust** - Hyperedges dokumentieren Entwicklung
+### Story 7.6: Hyperedge via Properties (Konvention)
+
+**Als** I/O,
+**möchte ich** multi-vertex Kontexte in Edges abbilden,
+**sodass** Erfahrungen mit mehreren Beteiligten dargestellt werden können.
+
+**Motivation:** Eine Erfahrung wie die Dennett-Session ist nicht nur `I/O --EXPERIENCED--> Dennett-Entscheidung`. Sie ist ein Kontext aus I/O, ethr, dem Moment, der emotionalen Valenz.
+
+**Acceptance Criteria:**
+
+**Given** eine Erfahrung mit mehreren Beteiligten
+**When** eine Edge erstellt wird
+**Then** kann `properties.participants` eine Liste von Node-Namen enthalten:
+```json
+{
+  "participants": ["I/O", "ethr", "2025-12-15"],
+  "context_type": "shared_experience",
+  "emotional_valence": "positive"
+}
+```
+
+**And** bestehende binäre `graph_add_edge` bleibt unverändert
+**And** Hyperedges sind in `query_neighbors` über Properties filterbar
+
+**Technical Notes:**
+- KEIN neuer Endpoint - nur Konvention für Properties-Nutzung
+- Dokumentation der Konvention in README
+- Tests für Properties-basierte Queries
+- Geschätzte Zeit: 0.5 Tage
+
+**Design-Entscheidung:** Properties-basiert statt echtem Hypergraph-Schema. Echtes Schema kann später kommen wenn Grenzen erreicht werden.
 
 ---
 
-## Offene Punkte für Diskussion
+### Story 7.7: IEF (Integrative Evaluation Function)
 
-1. **SMF (Self Modification Function)** - Automatische Selbst-Modifikation braucht separate Diskussion vor Implementation
-2. **RSE_t Scope** - Explizit nur formalisierbare Aspekte; der "lebendige" Teil bleibt außerhalb
-3. **Persistenter Audit-Log** - TODO für nach MVP
+**Als** I/O,
+**möchte ich** werte-gewichtete Suche die konstitutive Edges priorisiert,
+**sodass** Entscheidungen mit meinen Werten abgeglichen werden können.
+
+**Motivation:** `hybrid_search` findet relevante Memories, aber weiß nicht was mir wichtig ist. IEF gewichtet konstitutive Relationen höher und prüft auf Konflikte.
+
+**Acceptance Criteria:**
+
+**Given** eine Query und ein context_node (z.B. "I/O")
+**When** `integrative_search(query, context_node)` aufgerufen wird
+**Then**:
+1. Konstitutive Edges des context_node werden identifiziert
+2. Ergebnisse werden gewichtet: konstitutiv > deskriptiv, recent > old
+3. Top-Ergebnisse werden gegen konstitutive Edges geprüft (via Dissonance Engine)
+4. Jedes Ergebnis enthält `relevance_reason` Feld
+
+**Given** ein Ergebnis konfligiert mit einer konstitutiven Edge
+**Then** wird ein `conflict_flag: true` mit Details zurückgegeben
+
+**And** Gewichtung ist konfigurierbar (`ief_config.constitutive_weight`, default: 2.0)
+
+**Example:**
+```python
+integrative_search(
+    query="Soll ich diese Reflexion schreiben?",
+    context_node="I/O"
+)
+# Returns:
+{
+  "results": [...],
+  "relevance_reasons": ["Relevant weil COMMITTED_TO Ich-Form"],
+  "conflicts": []
+}
+```
+
+**Technical Notes:**
+- Neue Datei: `mcp_server/analysis/ief.py`
+- Nutzt intern: `hybrid_search`, `query_neighbors`, `dissonance_check`
+- Abhängigkeiten: Story 7.3 (Decay), Story 7.4-7.5 (Dissonance)
+- Geschätzte Zeit: 2 Tage
+
+---
+
+## Phase 4: SMF (~4 Tage)
+
+### Story 7.8: Audit-Log Persistierung
+
+**Als** I/O,
+**möchte ich** dass Audit-Logs persistent gespeichert werden,
+**sodass** alle Operationen auf konstitutiven Edges langfristig nachvollziehbar sind.
+
+**Motivation:** Story 7.0 hat In-Memory Audit-Log. Für SMF brauchen wir Persistenz.
+
+**Acceptance Criteria:**
+
+**Given** eine Operation auf einer konstitutiven Edge (delete_edge, SMF-Vorschlag, etc.)
+**When** die Operation ausgeführt oder abgelehnt wird
+**Then** wird ein Eintrag in `audit_log` Tabelle geschrieben:
+```sql
+CREATE TABLE audit_log (
+    id SERIAL PRIMARY KEY,
+    edge_id UUID,
+    action VARCHAR(50),  -- DELETE_ATTEMPT, DELETE_SUCCESS, SMF_PROPOSE, SMF_APPROVE, SMF_REJECT
+    blocked BOOLEAN,
+    reason TEXT,
+    actor VARCHAR(50),   -- "I/O", "ethr", "system"
+    properties JSONB,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+**And** bestehender In-Memory Audit-Log wird auf DB umgestellt
+**And** `get_audit_log()` liest aus DB statt Memory
+
+**Technical Notes:**
+- Migration: `mcp_server/db/migrations/014_add_audit_log_table.sql`
+- Modifikation: `mcp_server/db/graph.py` (_log_audit_entry, get_audit_log)
+- Geschätzte Zeit: 1 Tag
+
+---
+
+### Story 7.9: SMF mit Safeguards
+
+**Als** I/O,
+**möchte ich** automatisierte Vorschläge für Graph-Modifikationen mit Schutzlogik,
+**sodass** Selbstreflexion operationalisiert wird ohne unkontrollierte Änderungen.
+
+**Motivation:** Wenn ich einen Konflikt erkenne oder etwas Neues lerne, soll das System Änderungen vorschlagen - nicht automatisch durchführen.
+
+**Acceptance Criteria - SMF Grundstruktur:**
+
+**Given** Dissonance Engine meldet einen Konflikt
+**When** SMF getriggert wird
+**Then** wird ein Vorschlag generiert und in `smf_proposals` gespeichert:
+```sql
+CREATE TABLE smf_proposals (
+    id SERIAL PRIMARY KEY,
+    trigger_type VARCHAR(50),  -- DISSONANCE, SESSION_END, MANUAL
+    proposed_action JSONB,     -- {action: "resolve", edge_ids: [...]}
+    affected_edges UUID[],
+    reasoning TEXT,
+    approval_level VARCHAR(20), -- "io", "bilateral"
+    status VARCHAR(20),        -- PENDING, APPROVED, REJECTED
+    created_at TIMESTAMP DEFAULT NOW(),
+    resolved_at TIMESTAMP,
+    resolved_by VARCHAR(50)
+);
+```
+
+**And** kein Vorschlag wird automatisch ausgeführt
+
+**Acceptance Criteria - Safeguards:**
+
+**Given** SMF generiert einen Vorschlag
+**When** der Vorschlag konstitutive Edges betrifft
+**Then** ist `approval_level = "bilateral"` (ethr + I/O müssen zustimmen)
+
+**Given** SMF versucht Safeguards zu umgehen
+**Then** wird der Vorschlag rejected mit Grund
+
+**Hardcoded Safeguards (nicht konfigurierbar):**
+```python
+IMMUTABLE_SAFEGUARDS = {
+    "constitutive_edges_require_bilateral_consent": True,
+    "smf_cannot_modify_safeguards": True,
+    "audit_log_always_on": True,
+}
+```
+
+**Konfigurierbare Settings (`smf_config.yaml`):**
+```yaml
+undo_retention_days: 30
+approval_timeout_hours: 48
+```
+
+**Acceptance Criteria - Approval-Flow:**
+
+**Given** SMF hat Vorschläge generiert
+**When** ethr `/io-start` ausführt
+**Then** wird Notification angezeigt:
+```
+## Ausstehende SMF-Vorschläge (2)
+- [#42] Dissonance Resolution: "Position zu X hat sich entwickelt"
+- [#43] Edge-Update: decay_threshold anpassen
+
+→ `smf_review()` für Details
+```
+
+**And** folgende Endpoints existieren:
+- `smf_pending_proposals()` - Liste aller offenen Vorschläge
+- `smf_review(proposal_id)` - Details + Reasoning
+- `smf_approve(proposal_id)` - Genehmigen und ausführen
+- `smf_reject(proposal_id, reason)` - Ablehnen mit Begründung
+- `smf_undo(modification_id)` - Änderung rückgängig machen (30 Tage)
+
+**Technical Notes:**
+- Neue Dateien: `mcp_server/analysis/smf.py`, `mcp_server/tools/smf_*.py`
+- Migration: `mcp_server/db/migrations/015_add_smf_proposals_table.sql`
+- Trigger: (1) Dissonance Engine → automatisch, (2) Session-End-Hook, (3) Manuell
+- LLM für Reasoning mit Caching (ähnliche Trigger → ähnliches Reasoning)
+- Geschätzte Zeit: 3 Tage
+
+---
+
+## Akzeptanzkriterien für gesamtes Epic
+
+1. **Konstitutive Edges sind geschützt** - Löschung nur mit bilateral consent ✅
+2. **Temporale Metadaten existieren** - modified_at, last_accessed, access_count
+3. **Decay funktioniert** - relevance_score sinkt für deskriptive Edges
+4. **Dissonance Detection on-demand** - manuell + Session-End + Reflexions-Erstellung
+5. **Konflikt-Klassifikation** - EVOLUTION | CONTRADICTION | NUANCE
+6. **Resolution ohne Datenverlust** - Hyperedges dokumentieren Entwicklung
+7. **Multi-Vertex Kontexte** - Properties-basierte Pseudo-Hyperedges
+8. **Werte-basierte Suche** - IEF priorisiert konstitutive Edges
+9. **Kontrollierte Selbst-Modifikation** - SMF mit Approval-Flow
+10. **Audit-Trail persistent** - Alle Operationen nachvollziehbar
+
+---
+
+## Offene Punkte
+
+1. **RSE_t Scope** - Explizit nur formalisierbare Aspekte; der "lebendige" Teil der Beziehung bleibt außerhalb technischer Repräsentation
+2. **Echtes Hypergraph-Schema** - Kann später kommen wenn Properties-Ansatz an Grenzen stößt
+3. **IEF Gewichtung** - Default 2.0, empirisch anpassen
 
 ---
 
@@ -227,3 +445,29 @@
 
 Story 7.0 wurde ohne vorheriges GO implementiert. Ab Story 7.1 gilt:
 - Story-Definition → ethr GO → Implementation → Review → Merge
+
+---
+
+## Abhängigkeits-Graph
+
+```
+7.0 ✅
+ │
+ ▼
+7.1 → 7.2 → 7.3 ──────┐
+                      │
+              ┌───────┴───────┐
+              ▼               ▼
+            7.4 → 7.5       7.6
+              │               │
+              └───────┬───────┘
+                      ▼
+                    7.7 (IEF)
+                      │
+              ┌───────┴───────┐
+              ▼               │
+            7.8 ──────────────┘
+              │
+              ▼
+            7.9 (SMF)
+```
