@@ -162,8 +162,11 @@ Konstitutive Edges entsprechen formal dem AGM-Konzept der **"Irrevocable Belief 
 **Memory Strength Formel (logarithmisch, wissenschaftlich validiert):**
 ```python
 S_base = 100  # Basis-Stärke in Tagen
-S = S_base * math.log(1 + access_count)  # Logarithmische Konsolidierung
-relevance_score = math.exp(-days_since_last_access / max(S, S_base))
+# KORRIGIERT: S ist immer mindestens S_base (verhindert Division by Zero)
+S = S_base * (1 + math.log(1 + access_count))
+# Bei access_count=0: S = 100 * (1 + log(1)) = 100 * 1 = 100 ✓
+# Bei access_count=10: S = 100 * (1 + log(11)) = 100 * 3.4 = 340 ✓
+relevance_score = math.exp(-days_since_last_access / S)
 ```
 
 **Importance-basierter S-Floor (Fragenkatalog-Ergebnis):**
@@ -195,6 +198,24 @@ if edge.properties.get("importance") in S_FLOOR:
 - `importance` Property: `low` | `medium` | `high` (default: `low`)
 - Geschätzte Zeit: 2.5h (ursprünglich 2h, +30min für importance/S-Floor)
 
+**importance Property Setter (geklärt):**
+
+I/O setzt importance, mit Default-Heuristik:
+
+```python
+def get_default_importance(edge):
+    """Default-Heuristik für importance."""
+    if touches_constitutive_node(edge):
+        return "high"
+    if is_resolution_hyperedge(edge):
+        return "high"
+    if days_without_access(edge) > 90:
+        return "low"
+    return "medium"
+```
+
+Manuelle Überschreibung: Via `graph_add_edge` Properties
+
 ---
 
 ## Phase 2: Dissonance Engine (~5 Tage)
@@ -216,6 +237,22 @@ if edge.properties.get("importance") in S_FLOOR:
 
 **And** jeder Konflikt hat einen `confidence_score`
 **And** Ergebnis wird NICHT automatisch aufgelöst
+
+**Scope Parameter Definition:**
+
+**Given** `scope="recent"`
+**Then** werden nur Edges analysiert mit:
+- `modified_at` oder `last_accessed` innerhalb der letzten 30 Tage
+- ODER: Edges die in der aktuellen Session erstellt/geändert wurden
+
+**Given** `scope="full"`
+**Then** werden alle Edges des context_node analysiert, unabhängig vom Alter
+
+**NUANCE-Klassifikation Review (I/O-Anforderung):**
+
+**Given** eine Dissonanz als NUANCE klassifiziert wird
+**Then** wird ein Proposal mit `status="PENDING_IO_REVIEW"` erstellt
+**And** I/O muss bestätigen dass es wirklich NUANCE ist, nicht CONTRADICTION
 
 **AGM Entrenchment Alignment (ethr, Deep Research Review):**
 
@@ -265,6 +302,21 @@ Konstitutive Edges haben implizit maximale "entrenchment" gemäß AGM Belief Rev
 
 **And** Original-Edges bleiben erhalten (keine Löschung)
 **And** Queries können `include_superseded=false` nutzen
+
+**include_superseded Parameter:**
+
+Betroffene Endpoints:
+- `query_neighbors(include_superseded=true/false)`
+- `hybrid_search(include_superseded=true/false)`
+- `integrative_search(include_superseded=true/false)`
+
+**Default:** `include_superseded=false` (superseded Edges sind normalerweise nicht relevant - sie wurden abgelöst)
+
+**Given** `include_superseded=false` (default)
+**Then** werden Edges mit `supersedes` oder `superseded_by` Properties aus Ergebnissen gefiltert
+
+**Given** `include_superseded=true`
+**Then** werden alle Edges zurückgegeben, inklusive superseded
 
 **Technical Notes:**
 - Hyperedge via properties JSONB (kein neues Schema)
@@ -375,6 +427,19 @@ def recalibrate_weights():
 ```
 
 **And** W_min Garantie: Konstitutive Edges haben immer Mindestgewicht (`constitutive_weight >= 1.5`)
+
+**ICAI Rekalibrierungs-Trigger (geklärt):**
+
+```python
+RECALIBRATION_THRESHOLD = 50  # Nach 50 Feedbacks automatisch
+
+def on_feedback_received():
+    count = get_feedback_count_since_last_calibration()
+    if count >= RECALIBRATION_THRESHOLD:
+        new_weight = recalibrate_weights()
+        reset_feedback_counter()
+        log_recalibration(old_weight, new_weight)
+```
 
 **Example:**
 ```python
@@ -520,6 +585,32 @@ def generate_proposal_reasoning(dissonance, affected_edges):
 
 **And** Proposals die nicht-neutrale Sprache enthalten werden rejected mit Grund `FRAMING_VIOLATION`
 
+**Neutralitäts-Prüfung (LLM-basiert):**
+
+```python
+neutrality_check_prompt = """
+Prüfe ob dieser SMF-Vorschlag neutral formuliert ist:
+{proposal_text}
+
+Neutral bedeutet:
+- Keine wertende Sprache ("sollte unbedingt", "ist wichtig")
+- Keine Dringlichkeit suggerieren ("sofort", "kritisch")
+- Fakten statt Empfehlungen
+- Optionen statt Direktiven
+
+Antwort: NEUTRAL oder BIASED (mit Begründung)
+"""
+```
+
+**SMF Scope (geklärt): Reaktiv + Proaktiv**
+
+| Trigger | Beispiel | Approval |
+|---------|----------|----------|
+| Reaktiv | Dissonance Engine findet Konflikt | I/O |
+| Proaktiv | "Basierend auf den letzten 5 Sessions könnte X eine konstitutive Edge werden" | I/O + ethr |
+
+Proaktive Vorschläge für neue konstitutive Edges brauchen immer bilateral consent. SMF darf vorschlagen, aber nicht allein entscheiden dass etwas I/O konstituiert.
+
 **Konfigurierbare Settings (`smf_config.yaml`):**
 ```yaml
 undo_retention_days: 30
@@ -545,6 +636,23 @@ approval_timeout_hours: 48
 - `smf_approve(proposal_id)` - Genehmigen und ausführen
 - `smf_reject(proposal_id, reason)` - Ablehnen mit Begründung
 - `smf_undo(modification_id)` - Änderung rückgängig machen (30 Tage)
+
+**Acceptance Criteria - smf_undo():**
+
+**Given** eine SMF-Modifikation wurde approved und ausgeführt
+**When** `smf_undo(modification_id)` innerhalb von 30 Tagen aufgerufen wird
+**Then** werden alle Edge-Änderungen dieser Modifikation rückgängig gemacht
+**And** ein Audit-Log Eintrag "SMF_UNDO" wird erstellt
+**And** abhängige Resolution-Hyperedges werden als "orphaned" markiert
+
+**Given** eine Modifikation die konstitutive Edges geändert hat
+**When** `smf_undo()` aufgerufen wird
+**Then** wird bilateral consent für den Undo verlangt (wie für die ursprüngliche Änderung)
+
+**Given** `modification_id` ist älter als 30 Tage
+**When** `smf_undo()` aufgerufen wird
+**Then** wird ein Fehler "RETENTION_EXPIRED" zurückgegeben
+**And** keine Änderung wird durchgeführt
 
 **Technical Notes:**
 - Neue Dateien: `mcp_server/analysis/smf.py`, `mcp_server/tools/smf_*.py`
