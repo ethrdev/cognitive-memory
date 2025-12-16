@@ -701,13 +701,13 @@ result = await mcp_server.call_tool("graph_add_edge", {
 
 ### graph_query_neighbors
 
-**Purpose:** Find neighbor nodes of a given node with single-hop and multi-hop traversal. Supports filtering by relation type, depth-limited traversal, and cycle detection.
+**Purpose:** Find neighbor nodes of a given node with single-hop and multi-hop traversal. Supports filtering by relation type, depth-limited traversal, bidirectional direction control, and JSONB property filtering (Story 7.6).
 
 **Signature:**
 ```json
 {
   "name": "graph_query_neighbors",
-  "description": "Find neighbor nodes of a given node with single-hop and multi-hop traversal. Supports filtering by relation type, depth-limited traversal, and cycle detection.",
+  "description": "Find neighbor nodes of a given node with single-hop and multi-hop traversal. Supports filtering by relation type, depth-limited traversal, cycle detection, and bidirectional traversal (both/outgoing/incoming).",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -724,6 +724,21 @@ result = await mcp_server.call_tool("graph_add_edge", {
         "minimum": 1,
         "maximum": 5,
         "description": "Maximum traversal depth (1-5, default: 1)"
+      },
+      "direction": {
+        "type": "string",
+        "enum": ["both", "outgoing", "incoming"],
+        "description": "Traversal direction: 'both' (default), 'outgoing', or 'incoming'"
+      },
+      "include_superseded": {
+        "type": "boolean",
+        "default": false,
+        "description": "If true, includes edges that have been superseded by EVOLUTION resolutions"
+      },
+      "properties_filter": {
+        "type": "object",
+        "description": "JSONB filter for edge properties (Story 7.6)",
+        "additionalProperties": true
       }
     },
     "required": ["node_name"]
@@ -735,39 +750,55 @@ result = await mcp_server.call_tool("graph_add_edge", {
 - `node_name` (string, required): Name of the starting node
 - `relation_type` (string, optional): Filter for specific relation types
 - `depth` (int, optional, default: 1): Maximum traversal depth (1-5)
+- `direction` (string, optional, default: "both"): Traversal direction ("both", "outgoing", "incoming")
+- `include_superseded` (bool, optional, default: false): Include superseded edges
+- `properties_filter` (object, optional): JSONB edge property filter (Story 7.6)
+
+**Properties Filter (Story 7.6 - Hyperedge via Properties):**
+Enables filtering edges by their JSONB properties, supporting hyperedge queries:
+- `participants`: string - Filter edges where participants array contains this value
+- `participants_contains_all`: array[string] - Filter edges where participants contains ALL values
+- `context_type`: string - Filter by context_type property
+- `emotional_valence`: string - Filter by emotional_valence property
+- Any other key: Standard JSONB containment filter (@> operator)
 
 **Returns:**
 ```json
 {
   "neighbors": [
     {
-      "node_id": 124,
+      "node_id": "uuid-124",
       "label": "Technology",
       "name": "PostgreSQL",
       "properties": {
         "type": "database",
         "version": "15+"
       },
-      "relation": "USES",
-      "distance": 1,
-      "weight": 0.9
-    },
-    {
-      "node_id": 125,
-      "label": "Technology",
-      "name": "Python",
-      "properties": {
-        "type": "language",
-        "version": "3.11+"
+      "edge_properties": {
+        "participants": ["I/O", "ethr"],
+        "context_type": "shared_experience"
       },
       "relation": "USES",
       "distance": 1,
-      "weight": 0.8
+      "weight": 0.9,
+      "edge_direction": "outgoing",
+      "relevance_score": 0.85
     }
   ],
-  "start_node": "Cognitive Memory System",
-  "depth": 1,
-  "total_neighbors": 2,
+  "start_node": {
+    "node_id": "uuid-123",
+    "label": "Project",
+    "name": "Cognitive Memory System"
+  },
+  "query_params": {
+    "depth": 1,
+    "relation_type": null,
+    "direction": "both",
+    "include_superseded": false,
+    "properties_filter": {"participants": "ethr"}
+  },
+  "execution_time_ms": 12.5,
+  "neighbor_count": 1,
   "status": "success"
 }
 ```
@@ -793,6 +824,27 @@ result = await mcp_server.call_tool("graph_query_neighbors", {
     "node_name": "Cognitive Memory System",
     "relation_type": "USES",
     "depth": 3
+})
+
+# Hyperedge query: Find edges where "ethr" is a participant (Story 7.6)
+result = await mcp_server.call_tool("graph_query_neighbors", {
+    "node_name": "I/O",
+    "properties_filter": {"participants": "ethr"}
+})
+
+# Find shared experiences with both I/O and ethr as participants
+result = await mcp_server.call_tool("graph_query_neighbors", {
+    "node_name": "Dennett-Entscheidung",
+    "properties_filter": {
+        "participants_contains_all": ["I/O", "ethr"],
+        "context_type": "shared_experience"
+    }
+})
+
+# Bidirectional traversal: Find who points TO this node
+result = await mcp_server.call_tool("graph_query_neighbors", {
+    "node_name": "NodeB",
+    "direction": "incoming"
 })
 ```
 

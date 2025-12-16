@@ -22,6 +22,77 @@ from mcp_server.db.connection import get_connection
 
 logger = logging.getLogger(__name__)
 
+
+def _build_properties_filter_sql(
+    properties_filter: dict[str, Any]
+) -> tuple[list[str], list[Any]]:
+    """
+    Build SQL WHERE clauses for JSONB properties filtering.
+
+    Supported filter keys:
+    - "participants": str → Array-element query (? operator)
+    - "participants_contains_all": list[str] → Array-containment (@> operator)
+    - Other keys: Standard JSONB-containment (@> operator)
+
+    Args:
+        properties_filter: Dict with filter key-value pairs
+
+    Returns:
+        Tuple of (where_clauses: list[str], params: list[Any])
+
+    Raises:
+        ValueError: For invalid filter formats
+
+    Story 7.6: Hyperedge via Properties (Konvention)
+    """
+    where_clauses: list[str] = []
+    params: list[Any] = []
+
+    if not properties_filter:
+        return where_clauses, params
+
+    for key, value in properties_filter.items():
+        if key == "participants" and isinstance(value, str):
+            # Single participant check: properties->'participants' ? 'ethr'
+            where_clauses.append("e.properties->'participants' ? %s")
+            params.append(value)
+
+        elif key == "participants" and not isinstance(value, str):
+            raise ValueError(
+                f"Invalid 'participants' filter value: expected string, got {type(value).__name__}. "
+                f"Use 'participants_contains_all' for array matching."
+            )
+
+        elif key == "participants_contains_all" and isinstance(value, list):
+            # All participants must be present: @> '["I/O", "ethr"]'::jsonb
+            where_clauses.append("e.properties->'participants' @> %s::jsonb")
+            params.append(json.dumps(value))
+
+        elif key == "participants_contains_all" and not isinstance(value, list):
+            raise ValueError(
+                f"Invalid 'participants_contains_all' filter value: expected list, got {type(value).__name__}."
+            )
+
+        elif isinstance(value, (str, int, float, bool)):
+            # Standard property match: properties @> '{"key": "value"}'::jsonb
+            filter_obj = {key: value}
+            where_clauses.append("e.properties @> %s::jsonb")
+            params.append(json.dumps(filter_obj))
+
+        elif isinstance(value, dict):
+            # Nested object match
+            filter_obj = {key: value}
+            where_clauses.append("e.properties @> %s::jsonb")
+            params.append(json.dumps(filter_obj))
+
+        else:
+            raise ValueError(
+                f"Invalid properties_filter value for key '{key}': "
+                f"expected str, int, float, bool, list (for participants_contains_all), or dict"
+            )
+
+    return where_clauses, params
+
 # Valid edge types for constitutive knowledge graph
 VALID_EDGE_TYPES = {"constitutive", "descriptive"}
 
@@ -713,7 +784,8 @@ def query_neighbors(
     relation_type: str | None = None,
     max_depth: int = 1,
     direction: str = "both",
-    include_superseded: bool = False
+    include_superseded: bool = False,
+    properties_filter: dict[str, Any] | None = None
 ) -> list[dict[str, Any]]:
     """
     Query neighbor nodes using single-hop or multi-hop traversal with cycle detection.
@@ -729,10 +801,15 @@ def query_neighbors(
         include_superseded: If False (default), filters out edges with superseded=True
                            property. Set to True to include superseded edges (e.g., when
                            querying Resolution edges). See _filter_superseded_edges().
+        properties_filter: Optional JSONB filter for edge properties. Supported filters:
+                          - "participants": str - Filter edges where participants array contains value
+                          - "participants_contains_all": list[str] - Filter where participants has ALL values
+                          - Other keys: Standard JSONB containment filter (@> operator)
+                          Story 7.6: Hyperedge via Properties (Konvention)
 
     Returns:
         List of neighbor node dicts with relation, distance, weight, and edge_direction data,
-        sorted by distance (ASC) then weight (DESC)
+        sorted by relevance_score (DESC)
     """
     logger = logging.getLogger(__name__)
 
@@ -749,11 +826,25 @@ def query_neighbors(
             include_outgoing = direction in ("both", "outgoing")
             include_incoming = direction in ("both", "incoming")
 
+            # Story 7.6: Build properties filter SQL clauses
+            props_where_sql = ""
+            props_params: list[Any] = []
+            if properties_filter:
+                try:
+                    filter_clauses, filter_params = _build_properties_filter_sql(properties_filter)
+                    if filter_clauses:
+                        props_where_sql = " AND " + " AND ".join(filter_clauses)
+                        props_params = filter_params
+                except ValueError as e:
+                    raise ValueError(f"Invalid properties_filter: {e}") from e
+
             # Use two separate recursive CTEs for bidirectional traversal
             # PostgreSQL requires that recursive references only appear in the recursive term,
             # not in the non-recursive (base) term. Using separate CTEs avoids this limitation.
-            cursor.execute(
-                """
+            #
+            # Story 7.6: Properties filter is applied to all 4 query blocks
+            # (outgoing base, outgoing recursive, incoming base, incoming recursive)
+            sql_query = f"""
                 WITH RECURSIVE
                 -- ═══════════════════════════════════════════════════════════════
                 -- CTE 1: Outgoing edges traversal (source → target)
@@ -778,6 +869,7 @@ def query_neighbors(
                     JOIN nodes n ON e.target_id = n.id
                     WHERE e.source_id = %s::uuid
                         AND (%s IS NULL OR e.relation = %s)
+                        {props_where_sql}
 
                     UNION ALL
 
@@ -802,6 +894,7 @@ def query_neighbors(
                     WHERE ob.distance < %s
                         AND NOT (n.id = ANY(ob.path))  -- Cycle detection
                         AND (%s IS NULL OR e.relation = %s)
+                        {props_where_sql}
                 ),
                 -- ═══════════════════════════════════════════════════════════════
                 -- CTE 2: Incoming edges traversal (target ← source)
@@ -826,6 +919,7 @@ def query_neighbors(
                     JOIN nodes n ON e.source_id = n.id
                     WHERE e.target_id = %s::uuid
                         AND (%s IS NULL OR e.relation = %s)
+                        {props_where_sql}
 
                     UNION ALL
 
@@ -850,6 +944,7 @@ def query_neighbors(
                     WHERE ib.distance < %s
                         AND NOT (n.id = ANY(ib.path))  -- Cycle detection
                         AND (%s IS NULL OR e.relation = %s)
+                        {props_where_sql}
                 ),
                 -- ═══════════════════════════════════════════════════════════════
                 -- Combine results based on direction parameter
@@ -864,20 +959,28 @@ def query_neighbors(
                     node_id, edge_id, label, name, node_properties, edge_properties, relation, weight, last_accessed, access_count, distance, edge_direction
                 FROM combined
                 ORDER BY node_id, distance ASC, weight DESC, name ASC;
-                """,
-                (
-                    # Outgoing CTE: base case
-                    node_id, node_id, relation_type, relation_type,
-                    # Outgoing CTE: recursive case
-                    max_depth, relation_type, relation_type,
-                    # Incoming CTE: base case
-                    node_id, node_id, relation_type, relation_type,
-                    # Incoming CTE: recursive case
-                    max_depth, relation_type, relation_type,
-                    # Combined: direction filters
-                    include_outgoing, include_incoming,
-                ),
+                """
+
+            # Build parameter tuple with properties filter params repeated for each CTE block
+            # Pattern: base_params + props_params (4 times: outgoing base, outgoing rec, incoming base, incoming rec)
+            params: tuple[Any, ...] = (
+                # Outgoing CTE: base case
+                node_id, node_id, relation_type, relation_type,
+                *props_params,  # Properties filter for outgoing base
+                # Outgoing CTE: recursive case
+                max_depth, relation_type, relation_type,
+                *props_params,  # Properties filter for outgoing recursive
+                # Incoming CTE: base case
+                node_id, node_id, relation_type, relation_type,
+                *props_params,  # Properties filter for incoming base
+                # Incoming CTE: recursive case
+                max_depth, relation_type, relation_type,
+                *props_params,  # Properties filter for incoming recursive
+                # Combined: direction filters
+                include_outgoing, include_incoming,
             )
+
+            cursor.execute(sql_query, params)
 
             results = cursor.fetchall()
 

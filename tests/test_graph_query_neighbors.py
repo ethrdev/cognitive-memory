@@ -14,6 +14,15 @@ Tests the graph_query_neighbors tool implementation including:
 
 Story 4.4: graph_query_neighbors Tool Implementation
 Bug Fix: Bidirectional graph neighbors (2025-12-07)
+Story 7.6: Hyperedge via Properties (properties_filter parameter)
+
+Default Parameter Values (for mock assertions):
+- node_id: Required (from get_node_by_name lookup)
+- relation_type: None (all relations)
+- max_depth: 1 (single-hop)
+- direction: "both" (bidirectional traversal)
+- include_superseded: False (Story 7.5 - hide superseded edges)
+- properties_filter: None (Story 7.6 - no JSONB filtering)
 """
 
 from __future__ import annotations
@@ -98,7 +107,9 @@ class TestGraphQueryNeighborsTool:
                 node_id="start-node-id",
                 relation_type=None,
                 max_depth=1,
-                direction="both"  # Default direction
+                direction="both",  # Default direction
+                include_superseded=False,  # Story 7.5 default
+                properties_filter=None  # Story 7.6 default
             )
 
     @pytest.mark.asyncio
@@ -212,7 +223,9 @@ class TestGraphQueryNeighborsTool:
                 node_id="start-node-id",
                 relation_type="USES",
                 max_depth=1,
-                direction="both"  # Default direction
+                direction="both",  # Default direction
+                include_superseded=False,  # Story 7.5 default
+                properties_filter=None  # Story 7.6 default
             )
 
     @pytest.mark.asyncio
@@ -368,7 +381,9 @@ class TestGraphQueryNeighborsTool:
                 node_id="start-node-id",
                 relation_type=None,
                 max_depth=1,  # Default depth
-                direction="both"  # Default direction
+                direction="both",  # Default direction
+                include_superseded=False,  # Story 7.5 default
+                properties_filter=None  # Story 7.6 default
             )
 
     @pytest.mark.asyncio
@@ -552,7 +567,9 @@ class TestBidirectionalTraversal:
                 node_id="start-node-id",
                 relation_type=None,
                 max_depth=1,
-                direction="both"
+                direction="both",
+                include_superseded=False,  # Story 7.5 default
+                properties_filter=None  # Story 7.6 default
             )
 
     @pytest.mark.asyncio
@@ -579,7 +596,9 @@ class TestBidirectionalTraversal:
                 node_id="node-b-id",
                 relation_type=None,
                 max_depth=1,
-                direction="outgoing"
+                direction="outgoing",
+                include_superseded=False,  # Story 7.5 default
+                properties_filter=None  # Story 7.6 default
             )
 
     @pytest.mark.asyncio
@@ -622,7 +641,9 @@ class TestBidirectionalTraversal:
                 node_id="node-b-id",
                 relation_type=None,
                 max_depth=1,
-                direction="incoming"
+                direction="incoming",
+                include_superseded=False,  # Story 7.5 default
+                properties_filter=None  # Story 7.6 default
             )
 
     @pytest.mark.asyncio

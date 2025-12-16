@@ -26,11 +26,13 @@ async def handle_graph_query_neighbors(arguments: dict[str, Any]) -> dict[str, A
     Find neighbor nodes of a given node with single-hop and multi-hop traversal.
 
     Args:
-        arguments: Tool arguments containing node_name, relation_type, depth, direction
+        arguments: Tool arguments containing node_name, relation_type, depth, direction, properties_filter
 
     Returns:
         Dict with array of neighbor nodes with relation, distance, weight, and edge_direction data,
         or error response if validation/database operations fail
+
+    Story 7.6: Added properties_filter parameter for JSONB-based edge property filtering
     """
     logger = logging.getLogger(__name__)
 
@@ -41,6 +43,7 @@ async def handle_graph_query_neighbors(arguments: dict[str, Any]) -> dict[str, A
         depth = arguments.get("depth", 1)  # Optional, default 1
         direction = arguments.get("direction", "both")  # Optional, default "both"
         include_superseded = arguments.get("include_superseded", False)  # Optional, default False
+        properties_filter = arguments.get("properties_filter")  # Optional, Story 7.6
 
         # Parameter validation
         if not node_name or not isinstance(node_name, str):
@@ -90,6 +93,15 @@ async def handle_graph_query_neighbors(arguments: dict[str, Any]) -> dict[str, A
                 "tool": "graph_query_neighbors",
             }
 
+        # Story 7.6: properties_filter validation (must be dict/object if provided)
+        if properties_filter is not None:
+            if not isinstance(properties_filter, dict):
+                return {
+                    "error": "Parameter validation failed",
+                    "details": "Invalid 'properties_filter' parameter (must be object/dict)",
+                    "tool": "graph_query_neighbors",
+                }
+
         # Start performance timing
         start_time = time.time()
 
@@ -105,12 +117,14 @@ async def handle_graph_query_neighbors(arguments: dict[str, Any]) -> dict[str, A
                 }
 
             # Query neighbors with the specified parameters
+            # Story 7.6: Added properties_filter parameter
             result = query_neighbors(
                 node_id=start_node["id"],
                 relation_type=relation_type,
                 max_depth=depth,
                 direction=direction,
-                include_superseded=include_superseded
+                include_superseded=include_superseded,
+                properties_filter=properties_filter
             )
 
             # Calculate execution time
@@ -142,6 +156,7 @@ async def handle_graph_query_neighbors(arguments: dict[str, Any]) -> dict[str, A
                     "relation_type": relation_type,
                     "direction": direction,
                     "include_superseded": include_superseded,
+                    "properties_filter": properties_filter,  # Story 7.6
                 },
                 "execution_time_ms": round(execution_time, 2),
                 "neighbor_count": len(result),

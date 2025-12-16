@@ -2222,6 +2222,18 @@ def register_tools(server: Server) -> list[Tool]:
                         "default": False,
                         "description": "If true, includes edges that have been superseded by EVOLUTION resolutions. Default: false (hide superseded)",
                     },
+                    "properties_filter": {
+                        "type": "object",
+                        "description": (
+                            "JSONB filter for edge properties. Supported filters:\n"
+                            "- 'participants': string - Filter edges where participants array contains this value\n"
+                            "- 'participants_contains_all': array - Filter edges where participants contains ALL values\n"
+                            "- 'context_type': string - Filter by context_type property\n"
+                            "- 'emotional_valence': string - Filter by emotional_valence property\n"
+                            "- Any other key: Standard JSONB containment filter"
+                        ),
+                        "additionalProperties": True,
+                    },
                 },
                 "required": ["node_name"],
             },
