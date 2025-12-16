@@ -91,17 +91,18 @@ Konstitutive Edges entsprechen formal dem AGM-Konzept der **"Irrevocable Belief 
 **Acceptance Criteria:**
 
 **Given** die edges-Tabelle existiert
-**When** Migration 013 ausgeführt wird
+**When** Migration 015 ausgeführt wird
 **Then** existieren folgende neue Felder:
-- `modified_at TIMESTAMP DEFAULT NOW()` - wann Edge zuletzt geändert
-- `last_accessed TIMESTAMP DEFAULT NOW()` - wann Edge zuletzt gelesen
+- `modified_at TIMESTAMPTZ DEFAULT NOW()` - wann Edge zuletzt geändert
+- `last_accessed TIMESTAMPTZ DEFAULT NOW()` - wann Edge zuletzt gelesen
 - `access_count INTEGER DEFAULT 0` - wie oft gelesen
 
 **And** ein Index `idx_edges_last_accessed` existiert für Decay-Queries
 
 **Technical Notes:**
-- Datei: `mcp_server/db/migrations/013_add_tgn_temporal_fields.sql`
+- Datei: `mcp_server/db/migrations/015_add_tgn_temporal_fields.sql`
 - Keine Breaking Changes - alle Felder haben Defaults
+- Bonus: Composite Index `idx_edges_access_stats` für relevance_score Queries
 - Geschätzte Zeit: 30min
 
 ---
