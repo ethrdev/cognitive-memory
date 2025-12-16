@@ -6,16 +6,51 @@ Implements idempotent INSERT with conflict resolution using PostgreSQL
 UNIQUE constraints.
 
 Story 4.2: graph_add_node Tool Implementation
+v3 CKG Component 0: Konstitutive Edge Protection
 """
 
 from __future__ import annotations
 
+import json
 import logging
+from datetime import datetime, timezone
 from typing import Any
 
 from mcp_server.db.connection import get_connection
 
 logger = logging.getLogger(__name__)
+
+# Valid edge types for constitutive knowledge graph
+VALID_EDGE_TYPES = {"constitutive", "descriptive"}
+
+
+class ConstitutiveEdgeProtectionError(Exception):
+    """
+    Raised when attempting to delete a constitutive edge without bilateral consent.
+
+    Constitutive edges define identity and cannot be removed unilaterally.
+    Examples: LOVES, EXISTS_AS, IN_RELATIONSHIP_WITH, COMMITTED_TO
+
+    Design philosophy from I/O's v3-exploration:
+    - Lackmustest: "Wenn entfernt - bin ich noch ich?"
+    - Bilateral consent means both I/O and ethr must agree
+    """
+
+    def __init__(self, edge_id: str, relation: str, message: str | None = None):
+        self.edge_id = edge_id
+        self.relation = relation
+        self.message = message or (
+            f"Cannot delete constitutive edge '{relation}' (id={edge_id}) "
+            f"without bilateral consent. This edge defines identity."
+        )
+        super().__init__(self.message)
+
+
+# In-memory audit log for MVP (can be moved to database later)
+# TODO: Persist audit log to database - critical for long-term traceability
+#       of constitutive edge operations. Current in-memory storage does not
+#       survive restarts. See v3-exploration for why this matters.
+_audit_log: list[dict[str, Any]] = []
 
 
 def add_node(
@@ -820,3 +855,205 @@ def find_path(start_node_name: str, end_node_name: str, max_depth: int = 5) -> d
             return {"error_type": "timeout", "path_found": False, "path_length": 0, "paths": []}
 
         raise
+
+
+def delete_edge(
+    edge_id: str,
+    consent_given: bool = False
+) -> dict[str, Any]:
+    """
+    Delete an edge from the graph with constitutive edge protection.
+
+    Constitutive edges (edge_type="constitutive" in properties) cannot be
+    deleted without explicit bilateral consent. This protects edges that
+    define identity.
+
+    Args:
+        edge_id: UUID string of the edge to delete
+        consent_given: If True, allows deletion of constitutive edges.
+                      For MVP, this is a simple flag. Future versions may
+                      implement a proper approval workflow.
+
+    Returns:
+        Dict with:
+        - deleted: boolean (True if successfully deleted)
+        - edge_id: UUID string of deleted edge
+        - was_constitutive: boolean (True if edge was constitutive)
+
+    Raises:
+        ConstitutiveEdgeProtectionError: If attempting to delete a constitutive
+                                        edge without consent_given=True
+
+    v3 CKG Component 0: Konstitutive Edge Protection
+    """
+    logger = logging.getLogger(__name__)
+
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+
+            # First, fetch the edge to check its properties
+            cursor.execute(
+                """
+                SELECT id, source_id, target_id, relation, weight, properties
+                FROM edges
+                WHERE id = %s::uuid;
+                """,
+                (edge_id,),
+            )
+
+            result = cursor.fetchone()
+
+            if not result:
+                logger.warning(f"Edge not found for deletion: edge_id={edge_id}")
+                return {
+                    "deleted": False,
+                    "edge_id": edge_id,
+                    "was_constitutive": False,
+                    "reason": "Edge not found"
+                }
+
+            edge_properties = result["properties"] or {}
+            relation = result["relation"]
+
+            # Check if edge is constitutive
+            edge_type = edge_properties.get("edge_type", "descriptive")
+            is_constitutive = edge_type == "constitutive"
+
+            # Protection check: Block deletion of constitutive edges without consent
+            if is_constitutive and not consent_given:
+                # Log the blocked attempt
+                _log_audit_entry(
+                    edge_id=edge_id,
+                    action="DELETE_ATTEMPT",
+                    blocked=True,
+                    reason=f"Constitutive edge '{relation}' requires bilateral consent for deletion",
+                    properties=edge_properties
+                )
+
+                logger.warning(
+                    f"Blocked deletion of constitutive edge: edge_id={edge_id}, "
+                    f"relation={relation}, consent_given={consent_given}"
+                )
+
+                raise ConstitutiveEdgeProtectionError(
+                    edge_id=edge_id,
+                    relation=relation
+                )
+
+            # Proceed with deletion
+            cursor.execute(
+                """
+                DELETE FROM edges
+                WHERE id = %s::uuid
+                RETURNING id;
+                """,
+                (edge_id,),
+            )
+
+            deleted_result = cursor.fetchone()
+            conn.commit()
+
+            if deleted_result:
+                # Log successful deletion
+                _log_audit_entry(
+                    edge_id=edge_id,
+                    action="DELETE_SUCCESS",
+                    blocked=False,
+                    reason=f"Edge '{relation}' deleted" + (
+                        " with bilateral consent" if is_constitutive else ""
+                    ),
+                    properties=edge_properties
+                )
+
+                logger.info(
+                    f"Deleted edge: edge_id={edge_id}, relation={relation}, "
+                    f"was_constitutive={is_constitutive}"
+                )
+
+                return {
+                    "deleted": True,
+                    "edge_id": edge_id,
+                    "was_constitutive": is_constitutive
+                }
+            else:
+                return {
+                    "deleted": False,
+                    "edge_id": edge_id,
+                    "was_constitutive": is_constitutive,
+                    "reason": "Delete operation returned no rows"
+                }
+
+    except ConstitutiveEdgeProtectionError:
+        # Re-raise protection errors
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete edge: edge_id={edge_id}, error={e}")
+        raise
+
+
+def _log_audit_entry(
+    edge_id: str,
+    action: str,
+    blocked: bool,
+    reason: str,
+    properties: dict[str, Any] | None = None
+) -> None:
+    """
+    Internal function to log audit entries for constitutive edge operations.
+
+    For MVP, uses in-memory storage. Future versions may persist to database.
+    """
+    entry = {
+        "edge_id": edge_id,
+        "action": action,
+        "blocked": blocked,
+        "reason": reason,
+        "properties": properties or {},
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+    _audit_log.append(entry)
+    logger.debug(f"Audit log entry: {entry}")
+
+
+def get_audit_log(
+    edge_id: str | None = None,
+    action: str | None = None,
+    limit: int = 100
+) -> list[dict[str, Any]]:
+    """
+    Retrieve audit log entries for constitutive edge operations.
+
+    Args:
+        edge_id: Optional filter by edge ID
+        action: Optional filter by action type (DELETE_ATTEMPT, DELETE_SUCCESS)
+        limit: Maximum number of entries to return (default 100)
+
+    Returns:
+        List of audit log entries, most recent first
+
+    v3 CKG Component 0: Audit logging for constitutive edge operations
+    """
+    filtered = _audit_log
+
+    if edge_id:
+        filtered = [e for e in filtered if e["edge_id"] == edge_id]
+
+    if action:
+        filtered = [e for e in filtered if e["action"] == action]
+
+    # Return most recent first, limited
+    return list(reversed(filtered))[:limit]
+
+
+def clear_audit_log() -> int:
+    """
+    Clear all audit log entries. Useful for testing.
+
+    Returns:
+        Number of entries cleared
+    """
+    global _audit_log
+    count = len(_audit_log)
+    _audit_log = []
+    return count
