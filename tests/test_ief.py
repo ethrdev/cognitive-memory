@@ -13,7 +13,9 @@ from unittest.mock import MagicMock, patch
 
 from mcp_server.analysis.ief import (
     calculate_ief_score, _calculate_recency_boost, _cosine_similarity,
-    CONSTITUTIVE_BOOST, NUANCE_PENALTY
+    CONSTITUTIVE_BOOST, NUANCE_PENALTY, W_MIN_CONSTITUTIVE,
+    on_feedback_received, recalibrate_weights, get_feedback_count,
+    RECALIBRATION_THRESHOLD, _feedback_count_since_calibration
 )
 
 
@@ -348,3 +350,224 @@ class TestMCPToolsWithIEF:
 
         assert "error" in result
         assert "1536 numbers" in result["details"]
+
+
+# =============================================================================
+# ICAI (Integrative Context Assembly Interface) Tests - Story 7.7
+# =============================================================================
+
+class TestFeedbackRequest:
+    """Tests for feedback_request field in IEF results."""
+
+    def test_feedback_request_field_exists(self):
+        """AC Zeile 394-406: calculate_ief_score returns feedback_request."""
+        edge_data = {
+            "edge_id": "test-edge",
+            "edge_properties": {},
+            "modified_at": datetime.now(timezone.utc),
+        }
+        result = calculate_ief_score(edge_data)
+
+        assert "feedback_request" in result
+        assert "query_id" in result["feedback_request"]
+        assert "helpful" in result["feedback_request"]
+        assert "feedback_reason" in result["feedback_request"]
+
+    def test_feedback_request_query_id_is_uuid(self):
+        """query_id should be a valid UUID string."""
+        import uuid
+
+        edge_data = {
+            "edge_id": "test-edge",
+            "edge_properties": {},
+            "modified_at": datetime.now(timezone.utc),
+        }
+        result = calculate_ief_score(edge_data)
+
+        query_id = result["feedback_request"]["query_id"]
+        # Should not raise ValueError if valid UUID
+        uuid.UUID(query_id)
+
+    def test_feedback_request_initial_state(self):
+        """helpful and feedback_reason should be None initially."""
+        edge_data = {
+            "edge_id": "test-edge",
+            "edge_properties": {},
+            "modified_at": datetime.now(timezone.utc),
+        }
+        result = calculate_ief_score(edge_data)
+
+        assert result["feedback_request"]["helpful"] is None
+        assert result["feedback_request"]["feedback_reason"] is None
+
+
+class TestOnFeedbackReceived:
+    """Tests for on_feedback_received() ICAI function."""
+
+    @patch('mcp_server.db.connection.get_connection')
+    def test_stores_feedback_in_database(self, mock_get_conn):
+        """AC Zeile 411-420: Feedback is stored in ief_feedback table."""
+        # Setup mock
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = [42]  # feedback_id
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value = mock_cursor
+        mock_get_conn.return_value = mock_conn
+
+        # Reset feedback counter
+        import mcp_server.analysis.ief as ief_module
+        ief_module._feedback_count_since_calibration = 0
+
+        result = on_feedback_received(
+            query_id="test-query-123",
+            helpful=True,
+            feedback_reason="Very relevant results",
+            query_text="test query"
+        )
+
+        # Verify INSERT was called
+        mock_cursor.execute.assert_called()
+        call_args = mock_cursor.execute.call_args[0]
+        assert "INSERT INTO ief_feedback" in call_args[0]
+        assert result["feedback_id"] == 42
+        assert result["helpful"] is True
+
+    @patch('mcp_server.db.connection.get_connection')
+    @patch('mcp_server.analysis.ief.recalibrate_weights')
+    def test_triggers_recalibration_at_threshold(self, mock_recal, mock_get_conn):
+        """AC Zeile 437-444: Recalibration triggers after threshold."""
+        # Setup mock
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = [1]
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value = mock_cursor
+        mock_get_conn.return_value = mock_conn
+        mock_recal.return_value = {"constitutive": 0.25}
+
+        # Set counter just below threshold
+        import mcp_server.analysis.ief as ief_module
+        ief_module._feedback_count_since_calibration = RECALIBRATION_THRESHOLD - 1
+
+        result = on_feedback_received(
+            query_id="trigger-recal",
+            helpful=True
+        )
+
+        # Should trigger recalibration
+        assert result["recalibration_triggered"] is True
+        mock_recal.assert_called_once()
+
+    @patch('mcp_server.db.connection.get_connection')
+    def test_no_recalibration_below_threshold(self, mock_get_conn):
+        """No recalibration when below threshold."""
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = [1]
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value = mock_cursor
+        mock_get_conn.return_value = mock_conn
+
+        import mcp_server.analysis.ief as ief_module
+        ief_module._feedback_count_since_calibration = 0
+
+        result = on_feedback_received(
+            query_id="no-recal",
+            helpful=False
+        )
+
+        assert result["recalibration_triggered"] is False
+
+
+class TestRecalibrateWeights:
+    """Tests for recalibrate_weights() ICAI function."""
+
+    @patch('mcp_server.db.connection.get_connection')
+    def test_maintains_w_min_guarantee(self, mock_get_conn):
+        """AC Zeile 432: W_MIN_CONSTITUTIVE >= 1.5 is guaranteed."""
+        # Setup mock - simulate data that would push weight down
+        mock_cursor = MagicMock()
+        mock_cursor.fetchall.return_value = [
+            (True, 0.10, 10),   # helpful: low avg weight
+            (False, 0.30, 10),  # unhelpful: higher avg weight
+        ]
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value = mock_cursor
+        mock_get_conn.return_value = mock_conn
+
+        result = recalibrate_weights()
+
+        # W_MIN guarantee must be in result
+        assert "w_min_guarantee" in result
+        assert result["w_min_guarantee"] == W_MIN_CONSTITUTIVE
+        assert result["w_min_guarantee"] >= 1.5
+
+    @patch('mcp_server.db.connection.get_connection')
+    def test_returns_all_weights(self, mock_get_conn):
+        """recalibrate_weights returns complete weight set."""
+        mock_cursor = MagicMock()
+        mock_cursor.fetchall.return_value = []
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value = mock_cursor
+        mock_get_conn.return_value = mock_conn
+
+        result = recalibrate_weights()
+
+        assert "relevance" in result
+        assert "similarity" in result
+        assert "recency" in result
+        assert "constitutive" in result
+        assert "total" in result
+
+    @patch('mcp_server.db.connection.get_connection')
+    def test_adjusts_weight_based_on_feedback(self, mock_get_conn):
+        """Weight adjusts towards helpful query patterns."""
+        import mcp_server.analysis.ief as ief_module
+        original_weight = ief_module.IEF_WEIGHT_CONSTITUTIVE
+
+        # Setup: helpful queries used higher weight
+        mock_cursor = MagicMock()
+        mock_cursor.fetchall.return_value = [
+            (True, 0.30, 25),   # helpful: higher avg weight
+            (False, 0.20, 25),  # unhelpful: lower avg weight
+        ]
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value = mock_cursor
+        mock_get_conn.return_value = mock_conn
+
+        result = recalibrate_weights()
+
+        # Weight should increase (towards helpful pattern)
+        assert result["constitutive"] >= original_weight
+
+        # Reset for other tests
+        ief_module.IEF_WEIGHT_CONSTITUTIVE = original_weight
+
+
+class TestWMinConstitutiveGuarantee:
+    """Explicit tests for W_MIN constitutive guarantee."""
+
+    def test_w_min_constant_value(self):
+        """W_MIN_CONSTITUTIVE is exactly 1.5."""
+        assert W_MIN_CONSTITUTIVE == 1.5
+
+    def test_constitutive_edge_never_below_w_min(self):
+        """Constitutive edges always get at least W_MIN weight."""
+        edge_data = {
+            "edge_id": "constitutive-edge",
+            "edge_properties": {"edge_type": "constitutive"},
+            "modified_at": datetime.now(timezone.utc),
+        }
+        result = calculate_ief_score(edge_data)
+
+        assert result["components"]["constitutive_weight"] >= W_MIN_CONSTITUTIVE
+
+    def test_descriptive_edge_below_w_min_allowed(self):
+        """Descriptive edges CAN be below W_MIN (they get 1.0)."""
+        edge_data = {
+            "edge_id": "descriptive-edge",
+            "edge_properties": {"edge_type": "descriptive"},
+            "modified_at": datetime.now(timezone.utc),
+        }
+        result = calculate_ief_score(edge_data)
+
+        assert result["components"]["constitutive_weight"] == 1.0
+        assert result["components"]["constitutive_weight"] < W_MIN_CONSTITUTIVE
