@@ -870,6 +870,7 @@ def query_neighbors(
                         e.weight,
                         e.last_accessed,
                         e.access_count,
+                        e.modified_at,
                         1 AS distance,
                         ARRAY[%s::uuid, n.id] AS path,
                         'outgoing'::text AS edge_direction
@@ -893,6 +894,7 @@ def query_neighbors(
                         e.weight,
                         e.last_accessed,
                         e.access_count,
+                        e.modified_at,
                         ob.distance + 1 AS distance,
                         ob.path || n.id AS path,
                         'outgoing'::text AS edge_direction
@@ -920,6 +922,7 @@ def query_neighbors(
                         e.weight,
                         e.last_accessed,
                         e.access_count,
+                        e.modified_at,
                         1 AS distance,
                         ARRAY[%s::uuid, n.id] AS path,
                         'incoming'::text AS edge_direction
@@ -943,6 +946,7 @@ def query_neighbors(
                         e.weight,
                         e.last_accessed,
                         e.access_count,
+                        e.modified_at,
                         ib.distance + 1 AS distance,
                         ib.path || n.id AS path,
                         'incoming'::text AS edge_direction
@@ -964,7 +968,7 @@ def query_neighbors(
                 )
                 -- Final selection: shortest path per node, highest weight on tie
                 SELECT DISTINCT ON (node_id)
-                    node_id, edge_id, label, name, node_properties, edge_properties, relation, weight, last_accessed, access_count, distance, edge_direction
+                    node_id, edge_id, label, name, node_properties, edge_properties, relation, weight, last_accessed, access_count, modified_at, distance, edge_direction
                 FROM combined
                 ORDER BY node_id, distance ASC, weight DESC, name ASC;
                 """
@@ -1013,6 +1017,7 @@ def query_neighbors(
                     "edge_direction": row["edge_direction"],
                     "last_accessed": row["last_accessed"],     # NEU
                     "access_count": row["access_count"],       # NEU
+                    "modified_at": row["modified_at"],         # Story 7.7: For IEF recency boost
                     "relevance_score": 0.0,                    # Wird nach Query berechnet
                 })
 
@@ -1275,7 +1280,6 @@ def find_path(
 
             # NEU: IEF Score für jeden Pfad wenn ICAI aktiviert
             if use_ief:
-                import math
                 from mcp_server.analysis.ief import calculate_ief_score
                 from mcp_server.analysis.dissonance import get_pending_nuance_edge_ids
 

@@ -184,6 +184,7 @@ async def handle_graph_query_neighbors(arguments: dict[str, Any]) -> dict[str, A
                     "direction": direction,
                     "include_superseded": include_superseded,
                     "properties_filter": properties_filter,  # Story 7.6
+                    "use_ief": use_ief,  # Story 7.7: ICAI parameter
                 },
                 "execution_time_ms": round(execution_time, 2),
                 "neighbor_count": len(result),

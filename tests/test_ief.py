@@ -269,8 +269,8 @@ class TestIEFIntegration:
         assert 0.0 <= result["ief_score"] <= 1.5
 
 
-class TestIEFIntegration:
-    """Integration tests for IEF components."""
+class TestNuancePenaltyIntegration:
+    """Integration tests for IEF nuance penalty components."""
 
     def test_nuance_penalty_integration(self):
         """Test that nuance penalty is applied correctly."""
