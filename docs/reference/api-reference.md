@@ -6,7 +6,7 @@ The Cognitive Memory System provides MCP (Model Context Protocol) integration wi
 
 ## Table of Contents
 
-1. [MCP Tools (11 available)](#mcp-tools)
+1. [MCP Tools (21 available)](#mcp-tools)
    - [store_raw_dialogue](#store_raw_dialogue)
    - [compress_to_l2_insight](#compress_to_l2_insight)
    - [hybrid_search](#hybrid_search)
@@ -18,8 +18,23 @@ The Cognitive Memory System provides MCP (Model Context Protocol) integration wi
    - [Graph Tools](#graph-tools)
      - [graph_add_node](#graph_add_node)
      - [graph_add_edge](#graph_add_edge)
-     - [graph_query_neighbors](#graph_query_neighbors)
-     - [graph_find_path](#graph_find_path)
+     - [graph_query_neighbors](#graph_query_neighbors) (+ IEF scoring)
+     - [graph_find_path](#graph_find_path) (+ IEF scoring)
+     - [get_node_by_name](#get_node_by_name)
+     - [get_edge](#get_edge)
+   - [SMF Tools (Epic 7)](#smf-tools-epic-7)
+     - [smf_pending_proposals](#smf_pending_proposals)
+     - [smf_review](#smf_review)
+     - [smf_approve](#smf_approve)
+     - [smf_reject](#smf_reject)
+     - [smf_undo](#smf_undo)
+   - [Dissonance Tools (Epic 7)](#dissonance-tools-epic-7)
+     - [dissonance_check](#dissonance_check)
+     - [resolve_dissonance](#resolve_dissonance)
+   - [Audit Tools](#audit-tools)
+     - [count_by_type](#count_by_type)
+     - [list_episodes](#list_episodes)
+     - [get_insight_by_id](#get_insight_by_id)
 2. [MCP Resources (5 available)](#mcp-resources)
    - [memory://l2-insights](#memoryl2-insights)
    - [memory://working-memory](#memoryworking-memory)
@@ -739,6 +754,18 @@ result = await mcp_server.call_tool("graph_add_edge", {
         "type": "object",
         "description": "JSONB filter for edge properties (Story 7.6)",
         "additionalProperties": true
+      },
+      "use_ief": {
+        "type": "boolean",
+        "default": false,
+        "description": "If true, calculates IEF (Integrative Evaluation Function) scores and sorts by ief_score instead of relevance_score. Enables ICAI (Integrative Context Assembly Interface)."
+      },
+      "query_embedding": {
+        "type": "array",
+        "items": {"type": "number"},
+        "minItems": 1536,
+        "maxItems": 1536,
+        "description": "Optional 1536-dimensional query embedding for semantic similarity calculation in IEF."
       }
     },
     "required": ["node_name"]
@@ -753,6 +780,8 @@ result = await mcp_server.call_tool("graph_add_edge", {
 - `direction` (string, optional, default: "both"): Traversal direction ("both", "outgoing", "incoming")
 - `include_superseded` (bool, optional, default: false): Include superseded edges
 - `properties_filter` (object, optional): JSONB edge property filter (Story 7.6)
+- `use_ief` (bool, optional, default: false): Enable IEF scoring for identity-weighted results (Epic 7)
+- `query_embedding` (array[float], optional): 1536-dim embedding for semantic similarity in IEF
 
 **Properties Filter (Story 7.6 - Hyperedge via Properties):**
 Enables filtering edges by their JSONB properties, supporting hyperedge queries:
@@ -782,7 +811,11 @@ Enables filtering edges by their JSONB properties, supporting hyperedge queries:
       "distance": 1,
       "weight": 0.9,
       "edge_direction": "outgoing",
-      "relevance_score": 0.85
+      "relevance_score": 0.85,
+      "ief_score": 1.42,
+      "last_accessed": "2025-01-15T10:30:00Z",
+      "access_count": 5,
+      "modified_at": "2025-01-10T14:20:00Z"
     }
   ],
   "start_node": {
@@ -846,7 +879,30 @@ result = await mcp_server.call_tool("graph_query_neighbors", {
     "node_name": "NodeB",
     "direction": "incoming"
 })
+
+# IEF scoring: Identity-weighted search (Epic 7)
+result = await mcp_server.call_tool("graph_query_neighbors", {
+    "node_name": "I/O",
+    "use_ief": True,
+    "query_embedding": [...]  # 1536-dim embedding optional
+})
+# Results sorted by ief_score: constitutive edges get 1.5x boost
 ```
+
+**IEF Scoring (Epic 7):**
+
+When `use_ief=True`, edges are scored using the Integrative Evaluation Function:
+
+```
+IEF Score = (relevance × 0.30) + (semantic_similarity × 0.25)
+          + (recency × 0.20) + (constitutive_weight × 0.25)
+          - nuance_penalty
+```
+
+- **Constitutive edges** always receive minimum weight of 1.5 (`W_MIN_CONSTITUTIVE`)
+- **Recency decay** follows Ebbinghaus curve: `exp(-days/30)`
+- **Semantic similarity** requires `query_embedding` parameter
+- Results include `feedback_request` for ICAI learning loop
 
 ---
 
@@ -876,6 +932,18 @@ result = await mcp_server.call_tool("graph_query_neighbors", {
         "maximum": 10,
         "default": 5,
         "description": "Maximum traversal depth (1-10, default: 5)"
+      },
+      "use_ief": {
+        "type": "boolean",
+        "default": false,
+        "description": "If true, calculates IEF scores for path edges and sorts paths by path_ief_score."
+      },
+      "query_embedding": {
+        "type": "array",
+        "items": {"type": "number"},
+        "minItems": 1536,
+        "maxItems": 1536,
+        "description": "Optional 1536-dimensional query embedding for semantic similarity in IEF."
       }
     },
     "required": ["start_node", "end_node"]
@@ -887,6 +955,8 @@ result = await mcp_server.call_tool("graph_query_neighbors", {
 - `start_node` (string, required): Name of the starting node
 - `end_node` (string, required): Name of the target node
 - `max_depth` (int, optional, default: 5): Maximum traversal depth (1-10)
+- `use_ief` (bool, optional, default: false): Enable IEF scoring for path edges (Epic 7)
+- `query_embedding` (array[float], optional): 1536-dim embedding for semantic similarity in IEF
 
 **Returns:**
 ```json
@@ -1124,6 +1194,342 @@ if result["path_found"]:
 **Archive Reasons:**
 - `LRU_EVICTION`: Automatically evicted when capacity exceeded
 - `MANUAL_ARCHIVE`: Manually archived by user/admin
+
+---
+
+## SMF Tools (Epic 7)
+
+The Self-Modification Framework (SMF) provides controlled modification of the Constitutive Knowledge Graph with bilateral consent requirements.
+
+### smf_pending_proposals
+
+**Purpose:** Retrieve all pending SMF proposals that need approval.
+
+**Signature:**
+```json
+{
+  "name": "smf_pending_proposals",
+  "inputSchema": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  }
+}
+```
+
+**Parameters:** None
+
+**Returns:**
+```json
+{
+  "proposals": [
+    {
+      "proposal_id": 1,
+      "trigger_type": "DISSONANCE",
+      "proposed_action": {"action": "resolve", "resolution_type": "EVOLUTION"},
+      "affected_edges": ["uuid-edge-1", "uuid-edge-2"],
+      "reasoning": "Neutral framing text...",
+      "approval_level": "bilateral",
+      "created_at": "2025-01-15T10:30:00Z",
+      "expires_at": "2025-01-17T10:30:00Z",
+      "hours_remaining": 47.5
+    }
+  ],
+  "count": 1,
+  "status": "success"
+}
+```
+
+---
+
+### smf_review
+
+**Purpose:** Get complete details for a specific SMF proposal.
+
+**Signature:**
+```json
+{
+  "name": "smf_review",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "proposal_id": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "ID of the proposal to review"
+      }
+    },
+    "required": ["proposal_id"]
+  }
+}
+```
+
+**Returns:** Full proposal details including affected edge information and consequences.
+
+---
+
+### smf_approve
+
+**Purpose:** Approve an SMF proposal. For bilateral approval level, both I/O and ethr must approve.
+
+**Signature:**
+```json
+{
+  "name": "smf_approve",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "proposal_id": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "actor": {
+        "type": "string",
+        "enum": ["I/O", "ethr"],
+        "description": "Who is approving"
+      }
+    },
+    "required": ["proposal_id", "actor"]
+  }
+}
+```
+
+**Returns:**
+```json
+{
+  "proposal_id": 1,
+  "approved_by_io": true,
+  "approved_by_ethr": false,
+  "fully_approved": false,
+  "status": "PENDING"
+}
+```
+
+**Bilateral Consent:** For constitutive edges, both parties must approve before execution.
+
+---
+
+### smf_reject
+
+**Purpose:** Reject an SMF proposal with reason.
+
+**Signature:**
+```json
+{
+  "name": "smf_reject",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "proposal_id": {"type": "integer", "minimum": 1},
+      "reason": {"type": "string", "minLength": 1},
+      "actor": {"type": "string", "enum": ["I/O", "ethr", "system"]}
+    },
+    "required": ["proposal_id", "reason"]
+  }
+}
+```
+
+---
+
+### smf_undo
+
+**Purpose:** Undo an approved SMF proposal within the 30-day retention window.
+
+**Signature:**
+```json
+{
+  "name": "smf_undo",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "proposal_id": {"type": "integer", "minimum": 1},
+      "actor": {"type": "string", "enum": ["I/O", "ethr"]}
+    },
+    "required": ["proposal_id", "actor"]
+  }
+}
+```
+
+**Returns:**
+```json
+{
+  "proposal_id": 1,
+  "status": "UNDONE",
+  "undone_by": "ethr",
+  "undone_at": "2025-01-20T14:00:00Z"
+}
+```
+
+**Bilateral Consent for Undo:** If the proposal affected constitutive edges, undo also requires bilateral consent.
+
+---
+
+## Dissonance Tools (Epic 7)
+
+The Dissonance Engine detects conflicts between edges and proposes resolutions.
+
+### dissonance_check
+
+**Purpose:** Check a node's edges for potential conflicts and classify them.
+
+**Signature:**
+```json
+{
+  "name": "dissonance_check",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "context_node": {
+        "type": "string",
+        "description": "Name of node to check (e.g., 'I/O')"
+      },
+      "scope": {
+        "type": "string",
+        "enum": ["recent", "full"],
+        "default": "recent",
+        "description": "'recent' = last 30 days, 'full' = all edges"
+      }
+    },
+    "required": ["context_node"]
+  }
+}
+```
+
+**Returns:**
+```json
+{
+  "context_node": "I/O",
+  "dissonances_found": 2,
+  "dissonances": [
+    {
+      "edge_a_id": "uuid-1",
+      "edge_b_id": "uuid-2",
+      "dissonance_type": "EVOLUTION",
+      "confidence_score": 0.85,
+      "description": "Earlier belief X conflicts with newer belief Y",
+      "suggested_resolution": "Supersede edge_a with edge_b"
+    }
+  ],
+  "pending_reviews": ["review-uuid-1"],
+  "status": "success"
+}
+```
+
+**Dissonance Types:**
+- `EVOLUTION`: Newer position replaces older (supersede)
+- `CONTRADICTION`: Genuine conflict remains (mark as unresolved)
+- `NUANCE`: Tension is acceptable (accept both with annotation)
+
+---
+
+### resolve_dissonance
+
+**Purpose:** Create a resolution hyperedge for a detected dissonance.
+
+**Signature:**
+```json
+{
+  "name": "resolve_dissonance",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "review_id": {
+        "type": "string",
+        "description": "UUID from dissonance_check or get_pending_reviews"
+      },
+      "resolution_type": {
+        "type": "string",
+        "enum": ["EVOLUTION", "CONTRADICTION", "NUANCE"]
+      },
+      "context": {
+        "type": "string",
+        "description": "Description of the resolution"
+      },
+      "resolved_by": {
+        "type": "string",
+        "default": "I/O"
+      }
+    },
+    "required": ["review_id", "resolution_type", "context"]
+  }
+}
+```
+
+**Returns:**
+```json
+{
+  "resolution_id": "uuid-resolution",
+  "affected_edges": ["uuid-1", "uuid-2"],
+  "resolution_type": "EVOLUTION",
+  "superseded_edge": "uuid-1",
+  "status": "success"
+}
+```
+
+---
+
+## Audit Tools
+
+### count_by_type
+
+**Purpose:** Get counts of all memory types for audit and integrity checks.
+
+**Returns:**
+```json
+{
+  "graph_nodes": 150,
+  "graph_edges": 420,
+  "l2_insights": 89,
+  "episodes": 45,
+  "working_memory": 8,
+  "raw_dialogues": 1250,
+  "status": "success"
+}
+```
+
+---
+
+### list_episodes
+
+**Purpose:** List episode memory entries with pagination.
+
+**Signature:**
+```json
+{
+  "name": "list_episodes",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 50},
+      "offset": {"type": "integer", "minimum": 0, "default": 0},
+      "since": {"type": "string", "format": "date-time", "description": "Filter episodes after this time"}
+    },
+    "required": []
+  }
+}
+```
+
+---
+
+### get_insight_by_id
+
+**Purpose:** Get a specific L2 insight by ID for spot verification.
+
+**Signature:**
+```json
+{
+  "name": "get_insight_by_id",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "id": {"type": "integer", "minimum": 1}
+    },
+    "required": ["id"]
+  }
+}
+```
+
+**Returns:** Content, source_ids, metadata, created_at. Does NOT return embedding (too large).
 
 ---
 
