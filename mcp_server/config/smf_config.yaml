@@ -1,0 +1,27 @@
+# SMF Configuration (Story 7.9, AC Zeile 617-621)
+# Self-Modification Framework Settings
+#
+# NOTE: IMMUTABLE_SAFEGUARDS in smf.py are NOT configurable here.
+# These settings only affect operational parameters.
+
+# Undo retention window in days
+# After this period, smf_undo() will return RETENTION_EXPIRED
+undo_retention_days: 30
+
+# Approval timeout in hours
+# Proposals not acted upon within this window get auto-expired
+approval_timeout_hours: 48
+
+# Notification settings
+notifications:
+  # Show pending proposals on /io-start
+  show_on_session_start: true
+  # Maximum proposals to show in notification
+  max_display: 5
+
+# Proposal limits
+limits:
+  # Max pending proposals per trigger type
+  max_pending_per_type: 10
+  # Auto-expire proposals older than this (hours)
+  auto_expire_hours: 168  # 7 days

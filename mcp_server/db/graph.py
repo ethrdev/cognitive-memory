@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from mcp_server.db.connection import get_connection
+from psycopg2.extras import Json
 
 logger = logging.getLogger(__name__)
 
@@ -119,11 +120,6 @@ class ConstitutiveEdgeProtectionError(Exception):
         super().__init__(self.message)
 
 
-# In-memory audit log for MVP (can be moved to database later)
-# TODO: Persist audit log to database - critical for long-term traceability
-#       of constitutive edge operations. Current in-memory storage does not
-#       survive restarts. See v3-exploration for why this matters.
-_audit_log: list[dict[str, Any]] = []
 
 
 def add_node(
@@ -355,6 +351,47 @@ def get_node_by_name(name: str) -> dict[str, Any] | None:
     except Exception as e:
         logger.error(f"Failed to get node by name: name={name}, error={e}")
         raise
+
+
+def get_default_importance(edge_data: dict) -> str:
+    """
+    Default-Heuristik für importance Property (Story 7.3, AC Zeile 209-218).
+
+    Args:
+        edge_data: Dict mit edge_properties, last_accessed, source_name, target_name
+
+    Returns:
+        "high", "medium", or "low"
+    """
+    properties = edge_data.get("edge_properties") or edge_data.get("properties") or {}
+
+    # Check 1: Touches constitutive node → high
+    # (edges connected to nodes that are targets of constitutive edges)
+    source_name = edge_data.get("source_name", "")
+    target_name = edge_data.get("target_name", "")
+
+    # I/O is always considered a constitutive node
+    if source_name == "I/O" or target_name == "I/O":
+        return "high"
+
+    # Check 2: Is resolution hyperedge → high
+    if properties.get("edge_type") == "resolution":
+        return "high"
+
+    # Check 3: Days without access > 90 → low
+    last_accessed = edge_data.get("last_accessed")
+    if last_accessed:
+        if isinstance(last_accessed, str):
+            last_accessed = datetime.fromisoformat(last_accessed.replace('Z', '+00:00'))
+        if last_accessed.tzinfo is None:
+            last_accessed = last_accessed.replace(tzinfo=timezone.utc)
+
+        days_without_access = (datetime.now(timezone.utc) - last_accessed).total_seconds() / 86400
+        if days_without_access > 90:
+            return "low"
+
+    # Default: medium
+    return "medium"
 
 
 def calculate_relevance_score(edge_data: dict) -> float:
@@ -1005,6 +1042,10 @@ def query_neighbors(
                 if edge_id:
                     edge_ids_for_update.append(edge_id)
 
+                # Datetime serialization: Convert to ISO strings for JSON compatibility
+                last_accessed = row["last_accessed"]
+                modified_at = row["modified_at"]
+
                 neighbors.append({
                     "node_id": str(row["node_id"]),  # Geändert von "id"
                     "label": row["label"],
@@ -1015,9 +1056,9 @@ def query_neighbors(
                     "weight": float(row["weight"]),
                     "distance": int(row["distance"]),
                     "edge_direction": row["edge_direction"],
-                    "last_accessed": row["last_accessed"],     # NEU
+                    "last_accessed": last_accessed.isoformat() if last_accessed else None,
                     "access_count": row["access_count"],       # NEU
-                    "modified_at": row["modified_at"],         # Story 7.7: For IEF recency boost
+                    "modified_at": modified_at.isoformat() if modified_at else None,
                     "relevance_score": 0.0,                    # Wird nach Query berechnet
                 })
 
@@ -1416,7 +1457,8 @@ def delete_edge(
                     action="DELETE_ATTEMPT",
                     blocked=True,
                     reason=f"Constitutive edge '{relation}' requires bilateral consent for deletion",
-                    properties=edge_properties
+                    properties=edge_properties,
+                    actor="system"
                 )
 
                 logger.warning(
@@ -1451,7 +1493,8 @@ def delete_edge(
                     reason=f"Edge '{relation}' deleted" + (
                         " with bilateral consent" if is_constitutive else ""
                     ),
-                    properties=edge_properties
+                    properties=edge_properties,
+                    actor="I/O" if is_constitutive else "system"
                 )
 
                 logger.info(
@@ -1485,63 +1528,84 @@ def _log_audit_entry(
     action: str,
     blocked: bool,
     reason: str,
-    properties: dict[str, Any] | None = None
+    properties: dict[str, Any] | None = None,
+    actor: str = "system"
 ) -> None:
-    """
-    Internal function to log audit entries for constitutive edge operations.
-
-    For MVP, uses in-memory storage. Future versions may persist to database.
-    """
-    entry = {
-        "edge_id": edge_id,
-        "action": action,
-        "blocked": blocked,
-        "reason": reason,
-        "properties": properties or {},
-        "timestamp": datetime.now(timezone.utc).isoformat()
-    }
-    _audit_log.append(entry)
-    logger.debug(f"Audit log entry: {entry}")
+    """Log audit entry for constitutive edge operations to database."""
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO audit_log (edge_id, action, blocked, reason, actor, properties)
+                VALUES (%s, %s, %s, %s, %s, %s);
+                """,
+                (edge_id, action, blocked, reason, actor, Json(properties or {}))
+            )
+            conn.commit()
+            logger.debug(f"Audit log entry persisted: edge_id={edge_id}, action={action}")
+    except Exception as e:
+        logger.error(f"Failed to persist audit log entry: edge_id={edge_id}, error={e}")
 
 
 def get_audit_log(
     edge_id: str | None = None,
     action: str | None = None,
+    actor: str | None = None,
     limit: int = 100
 ) -> list[dict[str, Any]]:
-    """
-    Retrieve audit log entries for constitutive edge operations.
+    """Retrieve audit log entries from database."""
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            query_parts = ["SELECT id, edge_id, action, blocked, reason, actor, properties, created_at FROM audit_log"]
+            conditions, params = [], []
 
-    Args:
-        edge_id: Optional filter by edge ID
-        action: Optional filter by action type (DELETE_ATTEMPT, DELETE_SUCCESS)
-        limit: Maximum number of entries to return (default 100)
+            if edge_id:
+                conditions.append("edge_id = %s")
+                params.append(edge_id)
+            if action:
+                conditions.append("action = %s")
+                params.append(action)
+            if actor:
+                conditions.append("actor = %s")
+                params.append(actor)
+            if conditions:
+                query_parts.append("WHERE " + " AND ".join(conditions))
 
-    Returns:
-        List of audit log entries, most recent first
+            query_parts.append("ORDER BY created_at DESC")
+            query_parts.append(f"LIMIT {limit}")
 
-    v3 CKG Component 0: Audit logging for constitutive edge operations
-    """
-    filtered = _audit_log
-
-    if edge_id:
-        filtered = [e for e in filtered if e["edge_id"] == edge_id]
-
-    if action:
-        filtered = [e for e in filtered if e["action"] == action]
-
-    # Return most recent first, limited
-    return list(reversed(filtered))[:limit]
+            cursor.execute(" ".join(query_parts), params)
+            return [
+                {
+                    "id": row["id"],
+                    "edge_id": str(row["edge_id"]),
+                    "action": row["action"],
+                    "blocked": row["blocked"],
+                    "reason": row["reason"],
+                    "actor": row["actor"],
+                    "properties": row["properties"] or {},
+                    "timestamp": row["created_at"].isoformat() if row["created_at"] else None
+                }
+                for row in cursor.fetchall()
+            ]
+    except Exception as e:
+        logger.error(f"Failed to retrieve audit log: error={e}")
+        return []
 
 
 def clear_audit_log() -> int:
-    """
-    Clear all audit log entries. Useful for testing.
-
-    Returns:
-        Number of entries cleared
-    """
-    global _audit_log
-    count = len(_audit_log)
-    _audit_log = []
-    return count
+    """Clear all audit log entries. Only for testing purposes."""
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) as count FROM audit_log;")
+            count = cursor.fetchone()["count"] or 0
+            cursor.execute("TRUNCATE TABLE audit_log;")
+            conn.commit()
+            logger.info(f"Cleared {count} audit log entries")
+            return count
+    except Exception as e:
+        logger.error(f"Failed to clear audit log: error={e}")
+        return 0

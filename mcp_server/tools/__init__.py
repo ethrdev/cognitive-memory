@@ -2,11 +2,12 @@
 MCP Server Tools Registration Module
 
 Provides tool registration and implementation for the Cognitive Memory System.
-Includes 18 tools: store_raw_dialogue, compress_to_l2_insight, hybrid_search,
+Includes 23 tools: store_raw_dialogue, compress_to_l2_insight, hybrid_search,
 update_working_memory, store_episode, store_dual_judge_scores, get_golden_test_results,
 ping, graph_add_node, graph_add_edge, graph_query_neighbors, graph_find_path,
 get_node_by_name, get_edge, count_by_type, list_episodes, get_insight_by_id,
-dissonance_check, and resolve_dissonance.
+dissonance_check, resolve_dissonance, smf_pending_proposals, smf_review,
+smf_approve, smf_reject, and smf_undo.
 """
 
 from __future__ import annotations
@@ -44,6 +45,11 @@ from mcp_server.tools.list_episodes import handle_list_episodes
 from mcp_server.tools.get_insight_by_id import handle_get_insight_by_id
 from mcp_server.tools.dissonance_check import handle_dissonance_check as handle_dissonance_check_impl, DISSONANCE_CHECK_TOOL
 from mcp_server.tools.resolve_dissonance import handle_resolve_dissonance, RESOLVE_DISSONANCE_TOOL
+from mcp_server.tools.smf_pending_proposals import handle_smf_pending_proposals
+from mcp_server.tools.smf_review import handle_smf_review
+from mcp_server.tools.smf_approve import handle_smf_approve
+from mcp_server.tools.smf_reject import handle_smf_reject
+from mcp_server.tools.smf_undo import handle_smf_undo
 
 
 def rrf_fusion(
@@ -2381,6 +2387,96 @@ def register_tools(server: Server) -> list[Tool]:
         ),
         DISSONANCE_CHECK_TOOL,
         RESOLVE_DISSONANCE_TOOL,
+        Tool(
+            name="smf_pending_proposals",
+            description="Retrieve all pending SMF proposals that need approval. Returns proposals with full details including trigger_type, proposed_action, reasoning, approval_level, created_at, and affected_edges.",
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        ),
+        Tool(
+            name="smf_review",
+            description="Retrieve complete details for a specific SMF proposal. Returns full proposal information, affected edge details, and consequences of approval/rejection.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "proposal_id": {
+                        "type": "integer",
+                        "description": "ID of the proposal to review",
+                        "minimum": 1,
+                    },
+                },
+                "required": ["proposal_id"],
+            },
+        ),
+        Tool(
+            name="smf_approve",
+            description="Approve an SMF proposal with proper consent handling. Supports bilateral approval for constitutive edges and executes resolutions upon full approval.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "proposal_id": {
+                        "type": "integer",
+                        "description": "ID of the proposal to approve",
+                        "minimum": 1,
+                    },
+                    "actor": {
+                        "type": "string",
+                        "description": "Who is approving ('I/O' or 'ethr')",
+                        "enum": ["I/O", "ethr"],
+                    },
+                },
+                "required": ["proposal_id", "actor"],
+            },
+        ),
+        Tool(
+            name="smf_reject",
+            description="Reject an SMF proposal with reason logging. Updates proposal status to REJECTED and creates audit log entries.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "proposal_id": {
+                        "type": "integer",
+                        "description": "ID of the proposal to reject",
+                        "minimum": 1,
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": "Reason for rejection",
+                        "minLength": 1,
+                    },
+                    "actor": {
+                        "type": "string",
+                        "description": "Who is rejecting ('I/O', 'ethr', or 'system')",
+                        "enum": ["I/O", "ethr", "system"],
+                        "default": "system",
+                    },
+                },
+                "required": ["proposal_id", "reason"],
+            },
+        ),
+        Tool(
+            name="smf_undo",
+            description="Undo an approved SMF proposal within the 30-day retention window. Reverses edge changes and marks resolution hyperedges as orphaned.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "proposal_id": {
+                        "type": "integer",
+                        "description": "ID of the proposal to undo",
+                        "minimum": 1,
+                    },
+                    "actor": {
+                        "type": "string",
+                        "description": "Who is requesting the undo ('I/O' or 'ethr')",
+                        "enum": ["I/O", "ethr"],
+                    },
+                },
+                "required": ["proposal_id", "actor"],
+            },
+        ),
     ]
 
     # Tool handler mapping
@@ -2404,6 +2500,11 @@ def register_tools(server: Server) -> list[Tool]:
         "get_insight_by_id": handle_get_insight_by_id,
         "dissonance_check": handle_dissonance_check,
         "resolve_dissonance": handle_resolve_dissonance,
+        "smf_pending_proposals": handle_smf_pending_proposals,
+        "smf_review": handle_smf_review,
+        "smf_approve": handle_smf_approve,
+        "smf_reject": handle_smf_reject,
+        "smf_undo": handle_smf_undo,
     }
 
     # Register tool call handler (define once, outside the loop)

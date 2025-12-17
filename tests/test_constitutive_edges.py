@@ -280,3 +280,128 @@ class TestEdgeTypeValidation:
             )
 
         assert "edge_type" in str(exc_info.value).lower()
+
+
+class TestAuditLogPersistence:
+    """Tests für DB-basierte Audit-Log Persistierung (Story 7.8)."""
+
+    def test_audit_entry_persists_to_db(self, db_connection):
+        """AC #1, #4: Audit-Eintrag wird in DB geschrieben."""
+        from mcp_server.db.graph import _log_audit_entry, get_audit_log, clear_audit_log
+        clear_audit_log()
+        test_uuid = str(uuid.uuid4())
+        _log_audit_entry(test_uuid, "DELETE_ATTEMPT", True, "Test", {"test": True}, "test-actor")
+        entries = get_audit_log(edge_id=test_uuid)
+        assert len(entries) == 1
+        assert entries[0]["actor"] == "test-actor"
+
+    def test_audit_log_survives_connection_close(self, db_connection):
+        """AC #2: Audit-Log überlebt Connection-Close."""
+        from mcp_server.db.graph import _log_audit_entry, get_audit_log, clear_audit_log
+        clear_audit_log()
+        test_uuid = str(uuid.uuid4())
+        _log_audit_entry(test_uuid, "DELETE_SUCCESS", False, "Before close", actor="I/O")
+        # Connection wird vom Fixture verwaltet - neue Query holt aus DB
+        entries = get_audit_log(edge_id=test_uuid)
+        assert len(entries) == 1
+
+    def test_audit_log_performance(self, db_connection):
+        """AC #5: Performance <50ms bei 1000+ Einträgen (lokal) / <200ms (Cloud)."""
+        import time
+        from mcp_server.db.graph import _log_audit_entry, get_audit_log, clear_audit_log
+        clear_audit_log()
+        # Erstelle eine einzige UUID für alle Performance-Tests
+        base_uuid = str(uuid.uuid4())
+        for i in range(1000):
+            _log_audit_entry(base_uuid, "DELETE_ATTEMPT", True, f"Entry {i}", actor="system")
+        start = time.perf_counter()
+        entries = get_audit_log(limit=100)
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        # Cloud-Datenbanken haben höhere Latenz - Grenze anpassen
+        assert len(entries) == 100 and elapsed_ms < 200
+
+    def test_audit_log_filters(self, db_connection):
+        """Filter-Parameter funktionieren korrekt."""
+        from mcp_server.db.graph import _log_audit_entry, get_audit_log, clear_audit_log
+        clear_audit_log()
+        edge_uuid = str(uuid.uuid4())
+        _log_audit_entry(edge_uuid, "DELETE_ATTEMPT", True, "A1", actor="system")
+        _log_audit_entry(edge_uuid, "DELETE_SUCCESS", False, "S1", actor="I/O")
+        assert len(get_audit_log(edge_id=edge_uuid)) == 2
+        assert len(get_audit_log(action="DELETE_SUCCESS")) == 1
+        assert len(get_audit_log(actor="I/O")) == 1
+
+    def test_graceful_migration(self, db_connection):
+        """AC #6: Code works before migration table exists."""
+        from mcp_server.db.graph import _log_audit_entry, get_audit_log
+        # Temporarily drop table to simulate pre-migration state
+        with db_connection.cursor() as cursor:
+            cursor.execute("DROP TABLE IF EXISTS audit_log CASCADE;")
+            db_connection.commit()
+
+        # Functions should handle missing table gracefully
+        _log_audit_entry("test-migration", "DELETE_ATTEMPT", True, "Test before migration", actor="system")
+        entries = get_audit_log(edge_id="test-migration")
+
+        # Should return empty list instead of crashing
+        assert entries == []
+
+        # Recreate table for other tests
+        with db_connection.cursor() as cursor:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS audit_log (
+                    id SERIAL PRIMARY KEY,
+                    edge_id UUID NOT NULL,
+                    action VARCHAR(50) NOT NULL,
+                    blocked BOOLEAN NOT NULL DEFAULT FALSE,
+                    reason TEXT,
+                    actor VARCHAR(50) NOT NULL DEFAULT 'system',
+                    properties JSONB DEFAULT '{}',
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+                CREATE INDEX idx_audit_log_created_at ON audit_log(created_at DESC);
+            """)
+            db_connection.commit()
+
+    def test_uuid_reference_integrity(self, db_connection):
+        """Audit entries remain even after edge deletion (orphaned entries)."""
+        from mcp_server.db.graph import _log_audit_entry, get_audit_log, delete_edge, clear_audit_log
+        clear_audit_log()
+
+        # Use a valid UUID for edge_id
+        test_edge_id = str(uuid.uuid4())
+
+        # Log an audit entry for this edge
+        _log_audit_entry(test_edge_id, "DELETE_ATTEMPT", True, "Test integrity", actor="system")
+
+        # Simulate edge deletion by just logging another entry
+        _log_audit_entry(test_edge_id, "DELETE_SUCCESS", False, "Edge deleted", actor="I/O")
+
+        # Audit entries should still exist even though edge is gone
+        entries = get_audit_log(edge_id=test_edge_id)
+        assert len(entries) == 2  # DELETE_ATTEMPT + DELETE_SUCCESS
+        assert entries[0]["edge_id"] == test_edge_id
+        assert entries[0]["action"] == "DELETE_SUCCESS"  # Most recent first
+
+    def test_atomic_operations(self, db_connection):
+        """AC #4: Verify atomic audit logging with explicit COMMIT."""
+        from mcp_server.db.graph import _log_audit_entry, get_audit_log, clear_audit_log
+        clear_audit_log()
+
+        # Force an error by passing an invalid edge_id (too long for UUID)
+        # This should trigger exception handling and not write partial data
+        invalid_edge_id = "x" * 300  # UUID max length is 36
+        _log_audit_entry(invalid_edge_id, "DELETE_ATTEMPT", True, "Test atomicity", actor="system")
+
+        # No entry should be written due to error
+        entries = get_audit_log()
+        assert len(entries) == 0
+
+        # Valid entry should be written atomically
+        valid_edge_id = str(uuid.uuid4())
+        _log_audit_entry(valid_edge_id, "DELETE_SUCCESS", False, "Valid atomic operation", actor="I/O")
+
+        entries = get_audit_log()
+        assert len(entries) == 1
+        assert entries[0]["edge_id"] == valid_edge_id
+        assert entries[0]["action"] == "DELETE_SUCCESS"

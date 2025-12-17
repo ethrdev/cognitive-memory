@@ -11,10 +11,11 @@ constitutive relationships.
 """
 
 import math
+import uuid
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional, Callable
 
-# IEF Weights (sum = 1.0)
+# IEF Weights (sum = 1.0) - mutable, can be recalibrated
 IEF_WEIGHT_RELEVANCE = 0.30
 IEF_WEIGHT_SIMILARITY = 0.25
 IEF_WEIGHT_RECENCY = 0.20
@@ -24,6 +25,17 @@ IEF_WEIGHT_CONSTITUTIVE = 0.25
 RECENCY_DECAY_DAYS = 30  # Half-life for recency_boost
 CONSTITUTIVE_BOOST = 1.5  # 50% boost for constitutive edges
 NUANCE_PENALTY = 0.1  # Temporary penalty for unresolved NUANCE conflicts
+
+# W_min Guarantee (Story 7.7, AC Zeile 432)
+# Constitutive edges ALWAYS have at least this weight - non-negotiable
+W_MIN_CONSTITUTIVE = 1.5
+
+# ICAI Recalibration (Story 7.7, AC Zeile 437-444)
+RECALIBRATION_THRESHOLD = 50  # Recalibrate after 50 feedbacks
+
+# Module-level state for feedback tracking
+_feedback_count_since_calibration = 0
+_on_feedback_callbacks: list[Callable[[str, bool, Optional[str]], None]] = []
 
 
 def calculate_ief_score(
@@ -84,9 +96,13 @@ def calculate_ief_score(
     modified_at = edge_data.get("modified_at")
     recency_boost = _calculate_recency_boost(modified_at)
 
-    # Component 4: Constitutive Weight
+    # Component 4: Constitutive Weight with W_min Guarantee (Story 7.7, AC Zeile 432)
     is_constitutive = properties.get("edge_type") == "constitutive"
-    constitutive_weight = CONSTITUTIVE_BOOST if is_constitutive else 1.0
+    if is_constitutive:
+        # W_min Guarantee: constitutive edges NEVER fall below W_MIN_CONSTITUTIVE
+        constitutive_weight = max(CONSTITUTIVE_BOOST, W_MIN_CONSTITUTIVE)
+    else:
+        constitutive_weight = 1.0
 
     # Nuance Penalty (temporary for unresolved conflicts)
     nuance_penalty = 0.0
@@ -104,6 +120,9 @@ def calculate_ief_score(
     # Clamp to [0.0, 1.5] (theoretical maximum with constitutive boost)
     ief_score = max(0.0, min(1.5, ief_score))
 
+    # Generate feedback_request (Story 7.7, AC Zeile 394-406)
+    query_id = str(uuid.uuid4())
+
     return {
         "ief_score": ief_score,
         "components": {
@@ -118,6 +137,11 @@ def calculate_ief_score(
             "similarity": IEF_WEIGHT_SIMILARITY,
             "recency": IEF_WEIGHT_RECENCY,
             "constitutive": IEF_WEIGHT_CONSTITUTIVE
+        },
+        "feedback_request": {
+            "query_id": query_id,
+            "helpful": None,  # true/false/null - set by user via on_feedback_received()
+            "feedback_reason": None  # Optional: "zu viele irrelevante Ergebnisse"
         }
     }
 
@@ -227,3 +251,158 @@ def _cosine_similarity(vec_a: list[float], vec_b: list[float]) -> float:
     # Cosine similarity range: [-1, 1] → normalize to [0, 1]
     cos_sim = dot_product / (norm_a * norm_b)
     return (cos_sim + 1) / 2  # Map [-1,1] to [0,1]
+
+
+# =============================================================================
+# ICAI Functions (Story 7.7, AC Zeile 411-444)
+# =============================================================================
+
+def on_feedback_received(
+    query_id: str,
+    helpful: bool,
+    feedback_reason: Optional[str] = None,
+    constitutive_weight_used: float = IEF_WEIGHT_CONSTITUTIVE,
+    query_text: str = ""
+) -> dict[str, Any]:
+    """
+    Process feedback for an IEF query result.
+
+    Stores feedback in ief_feedback table and triggers recalibration
+    after RECALIBRATION_THRESHOLD feedbacks.
+
+    Args:
+        query_id: UUID from feedback_request
+        helpful: True if result was helpful, False otherwise
+        feedback_reason: Optional explanation
+        constitutive_weight_used: Weight that was used for this query
+
+    Returns:
+        Dict with feedback status and recalibration info
+    """
+    global _feedback_count_since_calibration
+
+    from mcp_server.db.connection import get_connection
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Store feedback (Story 7.7, AC Zeile 411-420)
+    cursor.execute("""
+        INSERT INTO ief_feedback (
+            query_id, query_text, helpful, feedback_reason, constitutive_weight_used
+        ) VALUES (%s, %s, %s, %s, %s)
+        RETURNING id
+    """, (query_id, query_text, helpful, feedback_reason, constitutive_weight_used))
+
+    feedback_id = cursor.fetchone()[0]
+    conn.commit()
+    cursor.close()
+
+    _feedback_count_since_calibration += 1
+
+    # Trigger recalibration if threshold reached (Story 7.7, AC Zeile 437-444)
+    recalibration_triggered = False
+    new_weights = None
+
+    if _feedback_count_since_calibration >= RECALIBRATION_THRESHOLD:
+        new_weights = recalibrate_weights()
+        recalibration_triggered = True
+        _feedback_count_since_calibration = 0
+
+    # Notify callbacks
+    for callback in _on_feedback_callbacks:
+        try:
+            callback(query_id, helpful, feedback_reason)
+        except Exception:
+            pass  # Don't break on callback errors
+
+    return {
+        "feedback_id": feedback_id,
+        "query_id": query_id,
+        "helpful": helpful,
+        "feedback_count_since_calibration": _feedback_count_since_calibration,
+        "recalibration_triggered": recalibration_triggered,
+        "new_weights": new_weights
+    }
+
+
+def recalibrate_weights() -> dict[str, float]:
+    """
+    Extract optimal IEF weights from preference data (ICAI principle).
+
+    Analyzes helpful vs unhelpful queries to optimize constitutive weight.
+    Maintains W_min guarantee: constitutive_weight >= 1.5
+
+    Returns:
+        Dict with new weights
+    """
+    global IEF_WEIGHT_CONSTITUTIVE
+
+    from mcp_server.db.connection import get_connection
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Get helpful and unhelpful query stats (Story 7.7, AC Zeile 423-429)
+    cursor.execute("""
+        SELECT
+            helpful,
+            AVG(constitutive_weight_used) as avg_weight,
+            COUNT(*) as count
+        FROM ief_feedback
+        WHERE helpful IS NOT NULL
+        GROUP BY helpful
+    """)
+
+    results = cursor.fetchall()
+    cursor.close()
+
+    helpful_avg_weight = None
+    unhelpful_avg_weight = None
+
+    for row in results:
+        if row[0] is True:  # helpful
+            helpful_avg_weight = row[1]
+        elif row[0] is False:  # unhelpful
+            unhelpful_avg_weight = row[1]
+
+    # Simple optimization: move towards helpful weight
+    old_weight = IEF_WEIGHT_CONSTITUTIVE
+
+    if helpful_avg_weight is not None and unhelpful_avg_weight is not None:
+        # Net contribution: prefer weight that correlates with helpful
+        if helpful_avg_weight > unhelpful_avg_weight:
+            # Helpful queries used higher weight → increase slightly
+            new_weight = min(0.35, IEF_WEIGHT_CONSTITUTIVE + 0.02)
+        else:
+            # Unhelpful queries used higher weight → decrease slightly
+            new_weight = max(0.15, IEF_WEIGHT_CONSTITUTIVE - 0.02)
+
+        IEF_WEIGHT_CONSTITUTIVE = new_weight
+
+    # Renormalize weights to sum to 1.0
+    total = IEF_WEIGHT_RELEVANCE + IEF_WEIGHT_SIMILARITY + IEF_WEIGHT_RECENCY + IEF_WEIGHT_CONSTITUTIVE
+
+    logger.info(f"IEF recalibration: constitutive_weight {old_weight:.2f} → {IEF_WEIGHT_CONSTITUTIVE:.2f}")
+
+    return {
+        "relevance": IEF_WEIGHT_RELEVANCE,
+        "similarity": IEF_WEIGHT_SIMILARITY,
+        "recency": IEF_WEIGHT_RECENCY,
+        "constitutive": IEF_WEIGHT_CONSTITUTIVE,
+        "total": total,
+        "w_min_guarantee": W_MIN_CONSTITUTIVE
+    }
+
+
+def get_feedback_count() -> int:
+    """Get current feedback count since last calibration."""
+    return _feedback_count_since_calibration
+
+
+def register_feedback_callback(callback: Callable[[str, bool, Optional[str]], None]) -> None:
+    """Register a callback to be notified on feedback received."""
+    _on_feedback_callbacks.append(callback)

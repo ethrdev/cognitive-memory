@@ -15,8 +15,12 @@ from enum import Enum
 from typing import Any, Optional
 
 from mcp_server.db.connection import get_connection
-from mcp_server.db.graph import get_or_create_node, add_edge
+from mcp_server.db.graph import get_or_create_node, add_edge, get_edge_by_id
 from mcp_server.external.anthropic_client import HaikuClient
+from mcp_server.analysis.smf import (
+    TriggerType, ApprovalLevel, create_smf_proposal,
+    generate_neutral_reasoning, validate_neutrality, validate_safeguards, IMMUTABLE_SAFEGUARDS
+)
 
 logger = logging.getLogger(__name__)
 
@@ -214,6 +218,9 @@ class DissonanceEngine:
                                 self.create_nuance_review(result)
                                 pending_reviews.append(result)
                                 result.requires_review = True
+
+                            # SMF Integration: Create proposal for all detected dissonances (Story 7.9)
+                            await self.create_smf_proposal(result, edge_a, edge_b)
 
                     except Exception as e:
                         # MED-3 Fix: Propagate API errors for proper fallback handling
@@ -449,6 +456,113 @@ class DissonanceEngine:
         )
         _nuance_reviews.append(asdict(proposal))
         return proposal
+
+    async def create_smf_proposal(self, dissonance: DissonanceResult, edge_a: dict, edge_b: dict) -> None:
+        """
+        Erstellt SMF Proposal für erkannte Dissonanzen (Story 7.9).
+
+        This integrates Self-Modification Framework with dissonance detection.
+        """
+        if dissonance.dissonance_type == DissonanceType.NONE:
+            return
+
+        try:
+            # Prüfe ob konstitutive Edges betroffen sind
+            edge_a_props = edge_a.get("properties", {})
+            edge_b_props = edge_b.get("properties", {})
+
+            is_constitutive = (
+                edge_a_props.get("edge_type") == "constitutive" or
+                edge_b_props.get("edge_type") == "constitutive"
+            )
+
+            approval_level = ApprovalLevel.BILATERAL if is_constitutive else ApprovalLevel.IO
+
+            # Erstelle neutrales Reasoning
+            affected_edges_data = [
+                {
+                    "id": edge_a["id"],
+                    "relation": edge_a["relation"],
+                    "source_name": edge_a.get("source_name", "Unknown"),
+                    "target_name": edge_a.get("target_name", "Unknown")
+                },
+                {
+                    "id": edge_b["id"],
+                    "relation": edge_b["relation"],
+                    "source_name": edge_b.get("source_name", "Unknown"),
+                    "target_name": edge_b.get("target_name", "Unknown")
+                }
+            ]
+
+            reasoning_data = generate_neutral_reasoning(
+                dissonance={
+                    "dissonance_type": dissonance.dissonance_type.value,
+                    "description": dissonance.description
+                },
+                affected_edges=affected_edges_data
+            )
+
+            # Validiere Neutralität
+            is_neutral, violations = await validate_neutrality(reasoning_data["full_reasoning"], self.haiku_client)
+
+            if not is_neutral:
+                logger.warning(f"SMF proposal rejected due to framing violations: {violations}")
+                # Audit-Log für Framing Verstoß
+                from mcp_server.db.graph import _log_audit_entry
+                _log_audit_entry(
+                    edge_id=edge_a["id"],
+                    action="FRAMING_VIOLATION",
+                    blocked=True,
+                    reason=f"SMF proposal rejected: {', '.join(violations)}",
+                    actor="system"
+                )
+                return
+
+            # Erstelle SMF Proposal
+            proposed_action = {
+                "action": "resolve",
+                "edge_ids": [edge_a["id"], edge_b["id"]],
+                "resolution_type": dissonance.dissonance_type.value,
+                "dissonance_id": f"{edge_a['id']}-{edge_b['id']}"
+            }
+
+            proposal_data = {
+                "trigger_type": TriggerType.DISSONANCE.value,
+                "proposed_action": proposed_action,
+                "affected_edges": [edge_a["id"], edge_b["id"]],
+                "reasoning": reasoning_data["full_reasoning"],
+                "approval_level": approval_level.value
+            }
+
+            # Validiere Safeguards
+            is_valid, violation_reason = validate_safeguards(proposal_data)
+            if not is_valid:
+                logger.warning(f"SMF proposal rejected due to safeguard violation: {violation_reason}")
+                # Audit-Log für Safeguard Verstoß
+                from mcp_server.db.graph import _log_audit_entry
+                _log_audit_entry(
+                    edge_id=edge_a["id"],
+                    action="SAFEGUARD_VIOLATION",
+                    blocked=True,
+                    reason=violation_reason,
+                    actor="system"
+                )
+                return
+
+            # Erstelle Proposal in Datenbank
+            proposal_id = create_smf_proposal(
+                trigger_type=TriggerType.DISSONANCE,
+                proposed_action=proposed_action,
+                affected_edges=[edge_a["id"], edge_b["id"]],
+                reasoning=reasoning_data["full_reasoning"],
+                approval_level=approval_level
+            )
+
+            logger.info(f"Created SMF proposal {proposal_id} for {dissonance.dissonance_type.value} dissonance")
+
+        except Exception as e:
+            logger.error(f"Failed to create SMF proposal: {e}")
+            # Nicht fatal - dissonance detection continues without SMF
 
     def get_pending_reviews(self) -> list[dict[str, Any]]:
         """Holt alle ausstehenden NUANCE Reviews."""

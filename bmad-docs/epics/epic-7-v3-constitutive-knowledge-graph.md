@@ -32,16 +32,18 @@ Konstitutive Edges entsprechen formal dem AGM-Konzept der **"Irrevocable Belief 
 
 | Story | Titel | Aufwand | Phase | Abhängigkeiten | Status |
 |-------|-------|---------|-------|----------------|--------|
-| 7.0 | Konstitutive Edge-Markierung | 1 Tag | ✅ Done | - | ✅ Implementiert |
-| 7.1 | TGN Minimal - Schema-Migration | 30min | Phase 1 | - | 🔜 Pending |
-| 7.2 | TGN Minimal - Auto-Update | 1.5h | Phase 1 | 7.1 | 🔜 Pending |
-| 7.3 | TGN Minimal - Decay mit Memory Strength | 2.5h | Phase 1 | 7.1, 7.2 | 🔜 Pending |
-| 7.4 | Dissonance Engine - Grundstruktur | 3.5 Tage | Phase 2 | 7.3 | 🔜 Pending |
-| 7.5 | Dissonance Engine - Resolution | 1.5 Tage | Phase 2 | 7.4 | 🔜 Pending |
-| 7.6 | Hyperedge via Properties | 0.5 Tage | Phase 3 | - | 🔜 Pending |
-| 7.7 | IEF (Integrative Evaluation) + ICAI | 2.5 Tage | Phase 3 | 7.3, 7.4, 7.5 | 🔜 Pending |
-| 7.8 | Audit-Log Persistierung | 1 Tag | Phase 4 | - | 🔜 Pending |
-| 7.9 | SMF mit Safeguards + Neutral Framing | 3.5 Tage | Phase 4 | 7.4, 7.5, 7.8 | 🔜 Pending |
+| 7.0 | Konstitutive Edge-Markierung | 1 Tag | Phase 1 | - | ✅ Done |
+| 7.1 | TGN Minimal - Schema-Migration | 30min | Phase 1 | - | ✅ Done |
+| 7.2 | TGN Minimal - Auto-Update | 1.5h | Phase 1 | 7.1 | ✅ Done |
+| 7.3 | TGN Minimal - Decay mit Memory Strength | 2.5h | Phase 1 | 7.1, 7.2 | ✅ Done |
+| 7.4 | Dissonance Engine - Grundstruktur | 3.5 Tage | Phase 2 | 7.3 | ✅ Done |
+| 7.5 | Dissonance Engine - Resolution | 1.5 Tage | Phase 2 | 7.4 | ✅ Done |
+| 7.6 | Hyperedge via Properties | 0.5 Tage | Phase 3 | - | ✅ Done |
+| 7.7 | IEF (Integrative Evaluation) + ICAI | 2.5 Tage | Phase 3 | 7.3, 7.4, 7.5 | ✅ Done |
+| 7.8 | Audit-Log Persistierung | 1 Tag | Phase 4 | - | ✅ Done |
+| 7.9 | SMF mit Safeguards + Neutral Framing | 3.5 Tage | Phase 4 | 7.4, 7.5, 7.8 | ✅ Done |
+
+**Epic Status:** ✅ APPROVED (Review 2025-12-17)
 
 **Explizit ausgeklammert:**
 - RSE_t (Relational State Embedding) - nur formalisierbare Aspekte
