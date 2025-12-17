@@ -38,6 +38,8 @@ async def handle_graph_find_path(arguments: dict[str, Any]) -> dict[str, Any]:
         start_node = arguments.get("start_node")
         end_node = arguments.get("end_node")
         max_depth = arguments.get("max_depth", 5)  # Optional, default 5
+        use_ief = arguments.get("use_ief", False)  # Optional, default False
+        query_embedding = arguments.get("query_embedding")  # Optional
 
         # Parameter validation
         if not start_node or not isinstance(start_node, str):
@@ -73,6 +75,32 @@ async def handle_graph_find_path(arguments: dict[str, Any]) -> dict[str, Any]:
                 "error_type": "invalid_parameters",
                 "tool": "graph_find_path",
             }
+
+        # use_ief validation (must be boolean)
+        if not isinstance(use_ief, bool):
+            return {
+                "error": "Parameter validation failed",
+                "details": "Invalid 'use_ief' parameter (must be boolean)",
+                "error_type": "invalid_parameters",
+                "tool": "graph_find_path",
+            }
+
+        # query_embedding validation (must be array of 1536 numbers if provided)
+        if query_embedding is not None:
+            if not isinstance(query_embedding, list):
+                return {
+                    "error": "Parameter validation failed",
+                    "details": "Invalid 'query_embedding' parameter (must be array of numbers)",
+                    "error_type": "invalid_parameters",
+                    "tool": "graph_find_path",
+                }
+            if len(query_embedding) != 1536:
+                return {
+                    "error": "Parameter validation failed",
+                    "details": "Invalid 'query_embedding' parameter (must be exactly 1536 numbers)",
+                    "error_type": "invalid_parameters",
+                    "tool": "graph_find_path",
+                }
 
         # Start performance timing
         start_time = time.time()
@@ -127,7 +155,9 @@ async def handle_graph_find_path(arguments: dict[str, Any]) -> dict[str, Any]:
             result = find_path(
                 start_node_name=start_node,
                 end_node_name=end_node,
-                max_depth=max_depth
+                max_depth=max_depth,
+                use_ief=use_ief,
+                query_embedding=query_embedding
             )
 
             # Calculate execution time

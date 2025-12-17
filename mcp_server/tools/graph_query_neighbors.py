@@ -44,6 +44,8 @@ async def handle_graph_query_neighbors(arguments: dict[str, Any]) -> dict[str, A
         direction = arguments.get("direction", "both")  # Optional, default "both"
         include_superseded = arguments.get("include_superseded", False)  # Optional, default False
         properties_filter = arguments.get("properties_filter")  # Optional, Story 7.6
+        use_ief = arguments.get("use_ief", False)  # Optional, default False
+        query_embedding = arguments.get("query_embedding")  # Optional
 
         # Parameter validation
         if not node_name or not isinstance(node_name, str):
@@ -102,6 +104,29 @@ async def handle_graph_query_neighbors(arguments: dict[str, Any]) -> dict[str, A
                     "tool": "graph_query_neighbors",
                 }
 
+        # use_ief validation (must be boolean)
+        if not isinstance(use_ief, bool):
+            return {
+                "error": "Parameter validation failed",
+                "details": "Invalid 'use_ief' parameter (must be boolean)",
+                "tool": "graph_query_neighbors",
+            }
+
+        # query_embedding validation (must be array of 1536 numbers if provided)
+        if query_embedding is not None:
+            if not isinstance(query_embedding, list):
+                return {
+                    "error": "Parameter validation failed",
+                    "details": "Invalid 'query_embedding' parameter (must be array of numbers)",
+                    "tool": "graph_query_neighbors",
+                }
+            if len(query_embedding) != 1536:
+                return {
+                    "error": "Parameter validation failed",
+                    "details": "Invalid 'query_embedding' parameter (must be exactly 1536 numbers)",
+                    "tool": "graph_query_neighbors",
+                }
+
         # Start performance timing
         start_time = time.time()
 
@@ -124,7 +149,9 @@ async def handle_graph_query_neighbors(arguments: dict[str, Any]) -> dict[str, A
                 max_depth=depth,
                 direction=direction,
                 include_superseded=include_superseded,
-                properties_filter=properties_filter
+                properties_filter=properties_filter,
+                use_ief=use_ief,
+                query_embedding=query_embedding
             )
 
             # Calculate execution time

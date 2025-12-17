@@ -785,7 +785,9 @@ def query_neighbors(
     max_depth: int = 1,
     direction: str = "both",
     include_superseded: bool = False,
-    properties_filter: dict[str, Any] | None = None
+    properties_filter: dict[str, Any] | None = None,
+    use_ief: bool = False,
+    query_embedding: list[float] | None = None
 ) -> list[dict[str, Any]]:
     """
     Query neighbor nodes using single-hop or multi-hop traversal with cycle detection.
@@ -807,9 +809,15 @@ def query_neighbors(
                           - Other keys: Standard JSONB containment filter (@> operator)
                           Story 7.6: Hyperedge via Properties (Konvention)
 
+        use_ief: If true, calculates IEF (Integrative Evaluation Function) scores and sorts
+                 by ief_score instead of relevance_score. Enables ICAI (Integrative Context
+                 Assembly Interface).
+        query_embedding: Optional 1536-dimensional query embedding for semantic similarity
+                         calculation in IEF.
+
     Returns:
         List of neighbor node dicts with relation, distance, weight, and edge_direction data,
-        sorted by relevance_score (DESC)
+        sorted by relevance_score (DESC) or ief_score (DESC) when use_ief=True
     """
     logger = logging.getLogger(__name__)
 
@@ -1011,19 +1019,49 @@ def query_neighbors(
             # relevance_score für jede Edge berechnen
             for neighbor in neighbors:
                 edge_data = {
+                    "edge_id": neighbor.get("edge_id"),
                     "edge_properties": neighbor.get("edge_properties", {}),
                     "last_accessed": neighbor.get("last_accessed"),
                     "access_count": neighbor.get("access_count"),
+                    "modified_at": neighbor.get("modified_at"),  # For recency boost
+                    "vector_id": neighbor.get("edge_properties", {}).get("vector_id"),  # For semantic similarity
                 }
                 neighbor["relevance_score"] = calculate_relevance_score(edge_data)
+
+            # NEU: IEF Score Berechnung wenn ICAI aktiviert
+            if use_ief:
+                from mcp_server.analysis.ief import calculate_ief_score
+                from mcp_server.analysis.dissonance import get_pending_nuance_edge_ids
+
+                pending_nuance_ids = get_pending_nuance_edge_ids()
+
+                for neighbor in neighbors:
+                    edge_data = {
+                        "edge_id": neighbor.get("edge_id"),
+                        "edge_properties": neighbor.get("edge_properties", {}),
+                        "last_accessed": neighbor.get("last_accessed"),
+                        "access_count": neighbor.get("access_count"),
+                        "modified_at": neighbor.get("modified_at"),
+                        "vector_id": neighbor.get("edge_properties", {}).get("vector_id"),
+                    }
+                    ief_result = calculate_ief_score(
+                        edge_data=edge_data,
+                        query_embedding=query_embedding,
+                        pending_nuance_edge_ids=pending_nuance_ids
+                    )
+                    neighbor["ief_score"] = ief_result["ief_score"]
+                    neighbor["ief_components"] = ief_result["components"]
 
             # NEU: Nach relevance_score Berechnung (vor Zeile 853)
             # MVP: Python-basierte Filterung (einfacher als SQL-Subquery)
             if not include_superseded:
                 neighbors = _filter_superseded_edges(neighbors)
 
-            # Standard-Sortierung: höchste Relevanz zuerst
-            neighbors.sort(key=lambda n: n["relevance_score"], reverse=True)
+            # Sortierung: IEF wenn aktiviert, sonst relevance_score
+            if use_ief:
+                neighbors.sort(key=lambda n: n.get("ief_score", 0), reverse=True)
+            else:
+                neighbors.sort(key=lambda n: n["relevance_score"], reverse=True)
 
             # AUTO-UPDATE after Query-Completion (Story 7.2)
             if edge_ids_for_update:
@@ -1043,7 +1081,13 @@ def query_neighbors(
         raise
 
 
-def find_path(start_node_name: str, end_node_name: str, max_depth: int = 5) -> dict[str, Any]:
+def find_path(
+    start_node_name: str,
+    end_node_name: str,
+    max_depth: int = 5,
+    use_ief: bool = False,
+    query_embedding: list[float] | None = None
+) -> dict[str, Any]:
     """
     Find the shortest path between two nodes using BFS-based pathfinding.
 
@@ -1228,6 +1272,34 @@ def find_path(start_node_name: str, end_node_name: str, max_depth: int = 5) -> d
                 # Produkt-Aggregation: "Alle Edges müssen relevant sein"
                 # Bei Score 0.5 * 0.5 = 0.25 (Pfad-Qualität sinkt exponentiell)
                 path["path_relevance"] = math.prod(edge_scores) if edge_scores else 1.0
+
+            # NEU: IEF Score für jeden Pfad wenn ICAI aktiviert
+            if use_ief:
+                import math
+                from mcp_server.analysis.ief import calculate_ief_score
+                from mcp_server.analysis.dissonance import get_pending_nuance_edge_ids
+
+                pending_nuance_ids = get_pending_nuance_edge_ids()
+
+                for path in paths:
+                    path_ief_scores = []
+                    for edge in path["edges"]:
+                        edge_detail = get_edge_by_id(edge["edge_id"])
+                        if edge_detail:
+                            ief_result = calculate_ief_score(
+                                edge_data=edge_detail,
+                                query_embedding=query_embedding,
+                                pending_nuance_edge_ids=pending_nuance_ids
+                            )
+                            edge["ief_score"] = ief_result["ief_score"]
+                            edge["ief_components"] = ief_result["components"]
+                            path_ief_scores.append(ief_result["ief_score"])
+
+                    # Pfad-IEF als Produkt (analog zu path_relevance)
+                    path["path_ief_score"] = math.prod(path_ief_scores) if path_ief_scores else 1.0
+
+                # Sortierung nach path_ief_score wenn ICAI aktiviert
+                paths.sort(key=lambda p: p.get("path_ief_score", 0), reverse=True)
 
             # Edge-IDs sammeln für Auto-Update (Story 7.2)
             all_edge_ids: set[str] = set()

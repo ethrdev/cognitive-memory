@@ -454,6 +454,30 @@ class DissonanceEngine:
         """Holt alle ausstehenden NUANCE Reviews."""
         return [r for r in _nuance_reviews if r["status"] == "PENDING_IO_REVIEW"]
 
+
+def get_pending_nuance_edge_ids() -> set[str]:
+    """
+    Gibt alle Edge-IDs zurück die in ungelösten NUANCE-Reviews beteiligt sind.
+
+    Wird von IEF verwendet um temporären Penalty anzuwenden.
+
+    Returns:
+        Set von Edge-ID Strings
+    """
+    edge_ids: set[str] = set()
+
+    for review in _nuance_reviews:
+        if review.get("status") == "PENDING_IO_REVIEW":
+            dissonance = review.get("dissonance", {})
+            edge_a = dissonance.get("edge_a_id")
+            edge_b = dissonance.get("edge_b_id")
+            if edge_a:
+                edge_ids.add(str(edge_a))
+            if edge_b:
+                edge_ids.add(str(edge_b))
+
+    return edge_ids
+
     def resolve_review(
         self,
         review_id: str,
