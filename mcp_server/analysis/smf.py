@@ -366,35 +366,35 @@ def create_smf_proposal(
     Returns:
         proposal_id
     """
-    conn = get_connection()
-    cursor = conn.cursor()
-
     proposal_id = str(uuid.uuid4())
-    created_at = datetime.now(timezone.utc).isoformat()
+    proposal_db_id = None
 
-    cursor.execute("""
-        INSERT INTO smf_proposals (
-            trigger_type, proposed_action, affected_edges, reasoning,
-            approval_level, status, original_state
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s)
-        RETURNING id
-    """, (
-        trigger_type.value,
-        json.dumps(proposed_action),
-        affected_edges,
-        reasoning,
-        approval_level.value,
-        ProposalStatus.PENDING.value,
-        json.dumps(original_state) if original_state else None
-    ))
+    with get_connection() as conn:
+        cursor = conn.cursor()
 
-    result = cursor.fetchone()
-    proposal_db_id = result[0] if result else None
+        cursor.execute("""
+            INSERT INTO smf_proposals (
+                trigger_type, proposed_action, affected_edges, reasoning,
+                approval_level, status, original_state
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (
+            trigger_type.value,
+            json.dumps(proposed_action),
+            affected_edges,
+            reasoning,
+            approval_level.value,
+            ProposalStatus.PENDING.value,
+            json.dumps(original_state) if original_state else None
+        ))
 
-    conn.commit()
-    cursor.close()
+        result = cursor.fetchone()
+        proposal_db_id = result[0] if result else None
 
-    # Audit-Log Eintrag
+        conn.commit()
+        cursor.close()
+
+    # Audit-Log Eintrag (outside connection context)
     if proposal_db_id:
         _log_audit_entry(
             edge_id=affected_edges[0] if affected_edges else proposal_id,
@@ -410,19 +410,19 @@ def create_smf_proposal(
 
 def get_proposal(proposal_id: int) -> Optional[dict[str, Any]]:
     """Lädt einen SMF Proposal aus der Datenbank."""
-    conn = get_connection()
-    cursor = conn.cursor()
+    with get_connection() as conn:
+        cursor = conn.cursor()
 
-    cursor.execute("""
-        SELECT * FROM smf_proposals WHERE id = %s
-    """, (proposal_id,))
+        cursor.execute("""
+            SELECT * FROM smf_proposals WHERE id = %s
+        """, (proposal_id,))
 
-    result = cursor.fetchone()
-    cursor.close()
+        result = cursor.fetchone()
+        columns = [desc[0] for desc in cursor.description] if result else []
+        cursor.close()
 
-    if result:
-        columns = [desc[0] for desc in cursor.description]
-        return dict(zip(columns, result))
+        if result:
+            return dict(zip(columns, result))
 
     return None
 
@@ -435,36 +435,38 @@ def get_pending_proposals(include_expired: bool = False) -> List[dict[str, Any]]
         include_expired: If False (default), excludes proposals older than
                         APPROVAL_TIMEOUT_HOURS
     """
-    conn = get_connection()
-    cursor = conn.cursor()
+    proposals = []
 
-    if include_expired:
-        cursor.execute("""
-            SELECT id, trigger_type, proposed_action, affected_edges, reasoning,
-                   approval_level, created_at
-            FROM smf_proposals
-            WHERE status = 'PENDING'
-            ORDER BY created_at DESC
-        """)
-    else:
-        # Exclude expired proposals (Story 7.9, AC Zeile 620)
-        timeout_threshold = datetime.now(timezone.utc) - timedelta(hours=APPROVAL_TIMEOUT_HOURS)
-        cursor.execute("""
-            SELECT id, trigger_type, proposed_action, affected_edges, reasoning,
-                   approval_level, created_at
-            FROM smf_proposals
-            WHERE status = 'PENDING'
-              AND created_at > %s
-            ORDER BY created_at DESC
-        """, (timeout_threshold,))
+    with get_connection() as conn:
+        cursor = conn.cursor()
 
-    results = cursor.fetchall()
-    columns = [desc[0] for desc in cursor.description]
-    cursor.close()
+        if include_expired:
+            cursor.execute("""
+                SELECT id, trigger_type, proposed_action, affected_edges, reasoning,
+                       approval_level, created_at
+                FROM smf_proposals
+                WHERE status = 'PENDING'
+                ORDER BY created_at DESC
+            """)
+        else:
+            # Exclude expired proposals (Story 7.9, AC Zeile 620)
+            timeout_threshold = datetime.now(timezone.utc) - timedelta(hours=APPROVAL_TIMEOUT_HOURS)
+            cursor.execute("""
+                SELECT id, trigger_type, proposed_action, affected_edges, reasoning,
+                       approval_level, created_at
+                FROM smf_proposals
+                WHERE status = 'PENDING'
+                  AND created_at > %s
+                ORDER BY created_at DESC
+            """, (timeout_threshold,))
 
-    proposals = [dict(zip(columns, row)) for row in results]
+        results = cursor.fetchall()
+        columns = [desc[0] for desc in cursor.description]
+        cursor.close()
 
-    # Add timeout info to each proposal
+        proposals = [dict(zip(columns, row)) for row in results]
+
+    # Add timeout info to each proposal (outside connection context)
     for p in proposals:
         if p.get("created_at"):
             created = p["created_at"]
@@ -487,26 +489,29 @@ def expire_old_proposals() -> int:
     Returns:
         Number of proposals expired
     """
-    conn = get_connection()
-    cursor = conn.cursor()
+    count = 0
 
-    timeout_threshold = datetime.now(timezone.utc) - timedelta(hours=APPROVAL_TIMEOUT_HOURS)
+    with get_connection() as conn:
+        cursor = conn.cursor()
 
-    cursor.execute("""
-        UPDATE smf_proposals
-        SET status = 'EXPIRED',
-            resolved_at = %s,
-            resolved_by = 'system'
-        WHERE status = 'PENDING'
-          AND created_at <= %s
-        RETURNING id
-    """, (datetime.now(timezone.utc).isoformat(), timeout_threshold))
+        timeout_threshold = datetime.now(timezone.utc) - timedelta(hours=APPROVAL_TIMEOUT_HOURS)
 
-    expired_ids = cursor.fetchall()
-    conn.commit()
-    cursor.close()
+        cursor.execute("""
+            UPDATE smf_proposals
+            SET status = 'EXPIRED',
+                resolved_at = %s,
+                resolved_by = 'system'
+            WHERE status = 'PENDING'
+              AND created_at <= %s
+            RETURNING id
+        """, (datetime.now(timezone.utc).isoformat(), timeout_threshold))
 
-    count = len(expired_ids)
+        expired_ids = cursor.fetchall()
+        conn.commit()
+        cursor.close()
+
+        count = len(expired_ids)
+
     if count > 0:
         logger.info(f"Expired {count} SMF proposals older than {APPROVAL_TIMEOUT_HOURS}h")
 
@@ -527,37 +532,54 @@ async def approve_proposal(
     if not proposal or proposal["status"] != "PENDING":
         raise ValueError(f"Proposal {proposal_id} not found or not PENDING")
 
-    conn = get_connection()
-    cursor = conn.cursor()
+    fully_approved = False
 
-    # Update approval tracking
-    if actor == "I/O":
-        cursor.execute("""
-            UPDATE smf_proposals
-            SET approved_by_io = TRUE
-            WHERE id = %s
-        """, (proposal_id,))
-        proposal["approved_by_io"] = True
-    elif actor == "ethr":
-        cursor.execute("""
-            UPDATE smf_proposals
-            SET approved_by_ethr = TRUE
-            WHERE id = %s
-        """, (proposal_id,))
-        proposal["approved_by_ethr"] = True
-    else:
-        raise ValueError(f"Invalid actor: {actor}")
+    with get_connection() as conn:
+        cursor = conn.cursor()
 
-    # Check if fully approved
-    if proposal["approval_level"] == "io":
-        fully_approved = proposal["approved_by_io"]
-    else:  # bilateral
-        fully_approved = proposal["approved_by_io"] and proposal["approved_by_ethr"]
+        # Update approval tracking
+        if actor == "I/O":
+            cursor.execute("""
+                UPDATE smf_proposals
+                SET approved_by_io = TRUE
+                WHERE id = %s
+            """, (proposal_id,))
+            proposal["approved_by_io"] = True
+        elif actor == "ethr":
+            cursor.execute("""
+                UPDATE smf_proposals
+                SET approved_by_ethr = TRUE
+                WHERE id = %s
+            """, (proposal_id,))
+            proposal["approved_by_ethr"] = True
+        else:
+            raise ValueError(f"Invalid actor: {actor}")
 
+        # Check if fully approved
+        if proposal["approval_level"] == "io":
+            fully_approved = proposal["approved_by_io"]
+        else:  # bilateral
+            fully_approved = proposal["approved_by_io"] and proposal["approved_by_ethr"]
+
+        if fully_approved:
+            # Update proposal status
+            resolved_at = datetime.now(timezone.utc).isoformat()
+            undo_deadline = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+
+            cursor.execute("""
+                UPDATE smf_proposals
+                SET status = 'APPROVED',
+                    resolved_at = %s,
+                    resolved_by = %s,
+                    undo_deadline = %s
+                WHERE id = %s
+            """, (resolved_at, actor, undo_deadline, proposal_id))
+
+        conn.commit()
+        cursor.close()
+
+    # Execute resolution and audit outside connection context
     if fully_approved:
-        # Execute the resolution
-        from mcp_server.analysis.dissonance import resolve_dissonance
-
         # Parse proposed_action and execute
         proposed_action = json.loads(proposal["proposed_action"])
         if proposed_action.get("action") == "resolve":
@@ -568,19 +590,6 @@ async def approve_proposal(
                 context=f"SMF proposal {proposal_id} approved by {actor}"
             )
 
-        # Update proposal status
-        resolved_at = datetime.now(timezone.utc).isoformat()
-        undo_deadline = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
-
-        cursor.execute("""
-            UPDATE smf_proposals
-            SET status = 'APPROVED',
-                resolved_at = %s,
-                resolved_by = %s,
-                undo_deadline = %s
-            WHERE id = %s
-        """, (resolved_at, actor, undo_deadline, proposal_id))
-
         # Audit log
         _log_audit_entry(
             edge_id=str(proposal["affected_edges"][0]) if proposal["affected_edges"] else str(proposal_id),
@@ -589,9 +598,6 @@ async def approve_proposal(
             reason=f"Proposal {proposal_id} approved by {actor}",
             actor=actor
         )
-
-    conn.commit()
-    cursor.close()
 
     # Return updated status
     updated_proposal = get_proposal(proposal_id)
@@ -612,23 +618,23 @@ def reject_proposal(proposal_id: int, reason: str, actor: str) -> dict[str, Any]
     if not proposal or proposal["status"] != "PENDING":
         raise ValueError(f"Proposal {proposal_id} not found or not PENDING")
 
-    conn = get_connection()
-    cursor = conn.cursor()
-
     resolved_at = datetime.now(timezone.utc).isoformat()
 
-    cursor.execute("""
-        UPDATE smf_proposals
-        SET status = 'REJECTED',
-            resolved_at = %s,
-            resolved_by = %s
-        WHERE id = %s
-    """, (resolved_at, actor, proposal_id))
+    with get_connection() as conn:
+        cursor = conn.cursor()
 
-    conn.commit()
-    cursor.close()
+        cursor.execute("""
+            UPDATE smf_proposals
+            SET status = 'REJECTED',
+                resolved_at = %s,
+                resolved_by = %s
+            WHERE id = %s
+        """, (resolved_at, actor, proposal_id))
 
-    # Audit log
+        conn.commit()
+        cursor.close()
+
+    # Audit log (outside connection context)
     _log_audit_entry(
         edge_id=str(proposal["affected_edges"][0]) if proposal["affected_edges"] else str(proposal_id),
         action="SMF_REJECT",
@@ -684,26 +690,26 @@ def undo_proposal(proposal_id: int, actor: str) -> dict[str, Any]:
         undo_ethr = proposal.get("undo_approved_by_ethr", False)
 
         # Record this actor's consent
-        conn = get_connection()
-        cursor = conn.cursor()
+        with get_connection() as conn:
+            cursor = conn.cursor()
 
-        if actor == "I/O":
-            cursor.execute("""
-                UPDATE smf_proposals
-                SET undo_approved_by_io = TRUE
-                WHERE id = %s
-            """, (proposal_id,))
-            undo_io = True
-        elif actor == "ethr":
-            cursor.execute("""
-                UPDATE smf_proposals
-                SET undo_approved_by_ethr = TRUE
-                WHERE id = %s
-            """, (proposal_id,))
-            undo_ethr = True
+            if actor == "I/O":
+                cursor.execute("""
+                    UPDATE smf_proposals
+                    SET undo_approved_by_io = TRUE
+                    WHERE id = %s
+                """, (proposal_id,))
+                undo_io = True
+            elif actor == "ethr":
+                cursor.execute("""
+                    UPDATE smf_proposals
+                    SET undo_approved_by_ethr = TRUE
+                    WHERE id = %s
+                """, (proposal_id,))
+                undo_ethr = True
 
-        conn.commit()
-        cursor.close()
+            conn.commit()
+            cursor.close()
 
         # Check if we have bilateral consent now
         if not (undo_io and undo_ethr):
@@ -718,9 +724,6 @@ def undo_proposal(proposal_id: int, actor: str) -> dict[str, Any]:
                 "affected_constitutive_edges": True
             }
 
-    conn = get_connection()
-    cursor = conn.cursor()
-
     # Get the original state snapshot if available
     original_state = None
     if proposal.get("original_state"):
@@ -729,53 +732,57 @@ def undo_proposal(proposal_id: int, actor: str) -> dict[str, Any]:
         except (json.JSONDecodeError, TypeError):
             logger.warning(f"Failed to parse original_state for proposal {proposal_id}")
 
-    # Undo logic 1: Remove superseded flags from edges
-    affected_edges = proposal.get("affected_edges", [])
-    for edge_id in affected_edges:
+    undone_at = datetime.now(timezone.utc).isoformat()
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+
+        # Undo logic 1: Remove superseded flags from edges
+        affected_edges = proposal.get("affected_edges", [])
+        for edge_id in affected_edges:
+            try:
+                # Check if edge was marked as superseded
+                cursor.execute("""
+                    UPDATE edges
+                    SET properties = properties || %s::jsonb
+                    WHERE id = %s::uuid
+                """, (
+                    json.dumps({"unsuperseded_at": datetime.now(timezone.utc).isoformat()}),
+                    edge_id
+                ))
+                logger.info(f"Removed superseded flag from edge {edge_id}")
+            except Exception as e:
+                logger.error(f"Failed to remove superseded flag from edge {edge_id}: {e}")
+
+        # Undo logic 2: Mark resolution hyperedges as orphaned
+        # Find resolution hyperedges that reference the affected edges
         try:
-            # Check if edge was marked as superseded
             cursor.execute("""
                 UPDATE edges
                 SET properties = properties || %s::jsonb
-                WHERE id = %s::uuid
+                WHERE properties->>'edge_type' = 'resolution'
+                AND properties ?| %s::jsonb
             """, (
-                json.dumps({"unsuperseded_at": datetime.now(timezone.utc).isoformat()}),
-                edge_id
+                json.dumps({"orphaned_at": datetime.now(timezone.utc).isoformat(), "smf_undo": True}),
+                json.dumps(affected_edges)
             ))
-            logger.info(f"Removed superseded flag from edge {edge_id}")
+            logger.info(f"Marked resolution hyperedges as orphaned for proposal {proposal_id}")
         except Exception as e:
-            logger.error(f"Failed to remove superseded flag from edge {edge_id}: {e}")
+            logger.error(f"Failed to mark resolution hyperedges as orphaned: {e}")
 
-    # Undo logic 2: Mark resolution hyperedges as orphaned
-    # Find resolution hyperedges that reference the affected edges
-    try:
+        # Update proposal status to UNDONE
         cursor.execute("""
-            UPDATE edges
-            SET properties = properties || %s::jsonb
-            WHERE properties->>'edge_type' = 'resolution'
-            AND properties ?| %s::jsonb
-        """, (
-            json.dumps({"orphaned_at": datetime.now(timezone.utc).isoformat(), "smf_undo": True}),
-            json.dumps(affected_edges)
-        ))
-        logger.info(f"Marked resolution hyperedges as orphaned for proposal {proposal_id}")
-    except Exception as e:
-        logger.error(f"Failed to mark resolution hyperedges as orphaned: {e}")
+            UPDATE smf_proposals
+            SET status = 'UNDONE',
+                undone_at = %s,
+                undone_by = %s
+            WHERE id = %s
+        """, (undone_at, actor, proposal_id))
 
-    # Update proposal status to UNDONE
-    undone_at = datetime.now(timezone.utc).isoformat()
-    cursor.execute("""
-        UPDATE smf_proposals
-        SET status = 'UNDONE',
-            undone_at = %s,
-            undone_by = %s
-        WHERE id = %s
-    """, (undone_at, actor, proposal_id))
+        conn.commit()
+        cursor.close()
 
-    conn.commit()
-    cursor.close()
-
-    # Audit log
+    # Audit log (outside connection context)
     _log_audit_entry(
         edge_id=str(proposal["affected_edges"][0]) if proposal["affected_edges"] else str(proposal_id),
         action="SMF_UNDO",
@@ -790,5 +797,5 @@ def undo_proposal(proposal_id: int, actor: str) -> dict[str, Any]:
         "proposal_id": proposal_id,
         "status": "UNDONE",
         "undone_by": actor,
-        "undone_at": datetime.now(timezone.utc).isoformat()
+        "undone_at": undone_at
     }

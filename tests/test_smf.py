@@ -8,8 +8,9 @@ Tests für SMF Proposal-System (Story 7.9).
 import pytest
 import json
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone, timedelta
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import Mock, MagicMock, AsyncMock, patch
 
 from mcp_server.analysis.smf import (
     TriggerType, ApprovalLevel, ProposalStatus,
@@ -90,18 +91,28 @@ class TestSMFProposals:
 
     @pytest.fixture
     def mock_db_connection(self):
-        """Mock database connection for testing."""
-        mock_conn = Mock()
-        mock_cursor = Mock()
+        """Mock database connection for testing (context manager compatible)."""
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
         mock_conn.cursor.return_value = mock_cursor
         mock_cursor.fetchone.return_value = (1,)  # proposal_id = 1
-        return mock_conn, mock_cursor
+        mock_cursor.fetchall.return_value = []
+        mock_cursor.description = [("id",), ("trigger_type",), ("proposed_action",),
+                                   ("affected_edges",), ("reasoning",), ("approval_level",),
+                                   ("created_at",)]
+
+        # Create a context manager that yields the connection
+        @contextmanager
+        def get_conn_cm():
+            yield mock_conn
+
+        return get_conn_cm, mock_conn, mock_cursor
 
     def test_proposal_creation_from_dissonance(self, mock_db_connection, sample_dissonance, sample_edges):
         """AC #1: Proposal wird aus Dissonance erstellt."""
-        mock_conn, mock_cursor = mock_db_connection
+        get_conn_cm, mock_conn, mock_cursor = mock_db_connection
 
-        with patch('mcp_server.analysis.smf.get_connection', return_value=mock_conn):
+        with patch('mcp_server.analysis.smf.get_connection', get_conn_cm):
             proposal_id = create_smf_proposal(
                 trigger_type=TriggerType.DISSONANCE,
                 proposed_action={"action": "resolve", "resolution_type": "EVOLUTION"},
@@ -230,7 +241,7 @@ class TestSMFProposals:
         }
 
         with patch('mcp_server.analysis.smf.get_proposal', return_value=recent_proposal):
-            with patch('mcp_server.analysis.smf.get_connection', return_value=mock_db_connection[0]):
+            with patch('mcp_server.analysis.smf.get_connection', mock_db_connection[0]):
                 result = undo_proposal(proposal_id=1, actor="I/O")
 
                 assert result["proposal_id"] == 1
@@ -281,7 +292,7 @@ class TestSMFProposals:
         get_proposal_mock = Mock(side_effect=[proposal_initial, proposal_approved])
 
         with patch('mcp_server.analysis.smf.get_proposal', get_proposal_mock):
-            with patch('mcp_server.analysis.smf.get_connection', return_value=mock_db_connection[0]):
+            with patch('mcp_server.analysis.smf.get_connection', mock_db_connection[0]):
                 with patch('mcp_server.analysis.smf._resolve_smf_dissonance', return_value={"status": "resolved"}):
                     result = await approve_proposal(proposal_id=1, actor="I/O")
 
@@ -329,7 +340,7 @@ class TestSMFProposals:
         ])
 
         with patch('mcp_server.analysis.smf.get_proposal', get_proposal_mock):
-            with patch('mcp_server.analysis.smf.get_connection', return_value=mock_db_connection[0]):
+            with patch('mcp_server.analysis.smf.get_connection', mock_db_connection[0]):
                 with patch('mcp_server.analysis.smf._resolve_smf_dissonance', return_value={"status": "resolved"}):
                     # First approval (I/O)
                     result1 = await approve_proposal(proposal_id=1, actor="I/O")
@@ -351,7 +362,7 @@ class TestSMFProposals:
         }
 
         with patch('mcp_server.analysis.smf.get_proposal', return_value=proposal):
-            with patch('mcp_server.analysis.smf.get_connection', return_value=mock_db_connection[0]):
+            with patch('mcp_server.analysis.smf.get_connection', mock_db_connection[0]):
                 result = reject_proposal(
                     proposal_id=1,
                     reason="Not aligned with current goals",
@@ -377,7 +388,7 @@ class TestSMFProposals:
             }
         ]
 
-        mock_conn, mock_cursor = mock_db_connection
+        get_conn_cm, mock_conn, mock_cursor = mock_db_connection
         mock_cursor.fetchall.return_value = [
             (1, "DISSONANCE", '{"action": "resolve"}', ["edge-1"],
              "Test reasoning", "io", datetime.now(timezone.utc))
@@ -388,7 +399,7 @@ class TestSMFProposals:
             ("created_at", None)
         ]
 
-        with patch('mcp_server.analysis.smf.get_connection', return_value=mock_conn):
+        with patch('mcp_server.analysis.smf.get_connection', get_conn_cm):
             proposals = get_pending_proposals()
 
             assert len(proposals) == 1
@@ -435,9 +446,9 @@ class TestSMFProposals:
         """AC #13: Audit-Log Einträge werden erstellt."""
         # This test would verify that audit log entries are created
         # The actual audit logging is tested via integration with graph.py
-        mock_conn, mock_cursor = mock_db_connection
+        get_conn_cm, mock_conn, mock_cursor = mock_db_connection
 
-        with patch('mcp_server.analysis.smf.get_connection', return_value=mock_conn):
+        with patch('mcp_server.analysis.smf.get_connection', get_conn_cm):
             with patch('mcp_server.analysis.smf._log_audit_entry') as mock_audit:
                 proposal_id = create_smf_proposal(
                     trigger_type=TriggerType.MANUAL,
