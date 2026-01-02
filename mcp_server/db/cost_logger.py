@@ -32,7 +32,7 @@ def insert_cost_log(
         num_calls: Number of API calls (usually 1)
         token_count: Total tokens used (input + output)
         estimated_cost: Cost in EUR
-        log_date: Date for cost entry (defaults to today)
+        log_date: Date for cost entry (defaults to today) - IGNORED, kept for API compat
 
     Returns:
         bool: True if insertion successful, False otherwise
@@ -45,22 +45,28 @@ def insert_cost_log(
         ...     estimated_cost=0.00002
         ... )
         True
+
+    Note:
+        Schema uses migration 002 format (model, prompt_tokens, completion_tokens,
+        total_tokens, estimated_cost_eur) not migration 004 format (date, num_calls).
     """
-    if log_date is None:
-        log_date = date.today()
+    # Note: log_date parameter ignored - table uses created_at timestamp instead
 
     try:
         with get_connection() as conn:
             cursor = conn.cursor()
 
+            # Use actual DB schema (migration 002):
+            # api_name, model, prompt_tokens, completion_tokens, total_tokens, estimated_cost_eur
             cursor.execute(
                 """
                 INSERT INTO api_cost_log (
-                    date, api_name, num_calls, token_count, estimated_cost
+                    api_name, model, prompt_tokens, completion_tokens,
+                    total_tokens, estimated_cost_eur
                 )
-                VALUES (%s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 """,
-                (log_date, api_name, num_calls, token_count, estimated_cost),
+                (api_name, api_name, 0, token_count, token_count, estimated_cost),
             )
 
             conn.commit()
@@ -103,27 +109,33 @@ def get_costs_by_date_range(
         >>> costs = get_costs_by_date_range(start, end)
         >>> len(costs) > 0
         True
+
+    Note:
+        Uses created_at for date filtering (migration 002 schema).
     """
     try:
         with get_connection() as conn:
             cursor = conn.cursor()
 
+            # Use actual DB schema (migration 002): created_at instead of date
             if api_name is not None:
                 query = """
-                    SELECT id, date, api_name, num_calls, token_count,
-                           estimated_cost, created_at
+                    SELECT id, created_at::date as date, api_name, 1 as num_calls,
+                           total_tokens as token_count, estimated_cost_eur as estimated_cost,
+                           created_at
                     FROM api_cost_log
-                    WHERE date >= %s AND date <= %s AND api_name = %s
-                    ORDER BY date DESC, api_name
+                    WHERE created_at::date >= %s AND created_at::date <= %s AND api_name = %s
+                    ORDER BY created_at DESC, api_name
                 """
                 cursor.execute(query, (start_date, end_date, api_name))
             else:
                 query = """
-                    SELECT id, date, api_name, num_calls, token_count,
-                           estimated_cost, created_at
+                    SELECT id, created_at::date as date, api_name, 1 as num_calls,
+                           total_tokens as token_count, estimated_cost_eur as estimated_cost,
+                           created_at
                     FROM api_cost_log
-                    WHERE date >= %s AND date <= %s
-                    ORDER BY date DESC, api_name
+                    WHERE created_at::date >= %s AND created_at::date <= %s
+                    ORDER BY created_at DESC, api_name
                 """
                 cursor.execute(query, (start_date, end_date))
 
@@ -133,13 +145,13 @@ def get_costs_by_date_range(
             for row in rows:
                 results.append(
                     {
-                        "id": row[0],
-                        "date": row[1],
-                        "api_name": row[2],
-                        "num_calls": row[3],
-                        "token_count": row[4],
-                        "estimated_cost": row[5],
-                        "created_at": row[6],
+                        "id": row["id"],
+                        "date": row["date"],
+                        "api_name": row["api_name"],
+                        "num_calls": row["num_calls"],
+                        "token_count": row["token_count"],
+                        "estimated_cost": row["estimated_cost"],
+                        "created_at": row["created_at"],
                     }
                 )
 
@@ -173,6 +185,9 @@ def get_total_cost(days: int = 30) -> float:
         >>> total = get_total_cost(days=7)
         >>> isinstance(total, float)
         True
+
+    Note:
+        Uses created_at for date filtering (migration 002 schema).
     """
     # Input validation (: Prevent invalid day ranges)
     if not isinstance(days, int) or days <= 0 or days > 365:
@@ -185,10 +200,11 @@ def get_total_cost(days: int = 30) -> float:
             # Calculate start_date using Python timedelta (: SQL injection fix)
             start_date = date.today() - timedelta(days=days)
 
+            # Use actual DB schema (migration 002): estimated_cost_eur, created_at
             query = """
-                SELECT COALESCE(SUM(estimated_cost), 0.0)
+                SELECT COALESCE(SUM(estimated_cost_eur), 0.0)
                 FROM api_cost_log
-                WHERE date >= %s
+                WHERE created_at::date >= %s
             """
             cursor.execute(query, (start_date,))
 
@@ -221,6 +237,9 @@ def get_cost_by_api(days: int = 30) -> list[dict[str, Any]]:
         >>> breakdown = get_cost_by_api(days=30)
         >>> isinstance(breakdown, list)
         True
+
+    Note:
+        Uses created_at for date filtering (migration 002 schema).
     """
     # Input validation (: Prevent invalid day ranges)
     if not isinstance(days, int) or days <= 0 or days > 365:
@@ -233,14 +252,15 @@ def get_cost_by_api(days: int = 30) -> list[dict[str, Any]]:
             # Calculate start_date using Python timedelta (: SQL injection fix)
             start_date = date.today() - timedelta(days=days)
 
+            # Use actual DB schema (migration 002): estimated_cost_eur, total_tokens, created_at
             query = """
                 SELECT
                     api_name,
-                    SUM(estimated_cost) as total_cost,
-                    SUM(num_calls) as num_calls,
-                    SUM(token_count) as total_tokens
+                    SUM(estimated_cost_eur) as total_cost,
+                    COUNT(*) as num_calls,
+                    SUM(total_tokens) as total_tokens
                 FROM api_cost_log
-                WHERE date >= %s
+                WHERE created_at::date >= %s
                 GROUP BY api_name
                 ORDER BY total_cost DESC
             """
@@ -252,10 +272,10 @@ def get_cost_by_api(days: int = 30) -> list[dict[str, Any]]:
             for row in rows:
                 results.append(
                     {
-                        "api_name": row[0],
-                        "total_cost": float(row[1]) if row[1] else 0.0,
-                        "num_calls": int(row[2]) if row[2] else 0,
-                        "total_tokens": int(row[3]) if row[3] else 0,
+                        "api_name": row["api_name"],
+                        "total_cost": float(row["total_cost"]) if row["total_cost"] else 0.0,
+                        "num_calls": int(row["num_calls"]) if row["num_calls"] else 0,
+                        "total_tokens": int(row["total_tokens"]) if row["total_tokens"] else 0,
                     }
                 )
 
@@ -289,6 +309,9 @@ def delete_old_costs(days_to_keep: int = 365) -> int:
         >>> deleted = delete_old_costs(days_to_keep=730)
         >>> deleted >= 0
         True
+
+    Note:
+        Uses created_at for date filtering (migration 002 schema).
     """
     try:
         with get_connection() as conn:
@@ -296,10 +319,11 @@ def delete_old_costs(days_to_keep: int = 365) -> int:
 
             cutoff_date = date.today() - timedelta(days=days_to_keep)
 
+            # Use actual DB schema (migration 002): created_at instead of date
             cursor.execute(
                 """
                 DELETE FROM api_cost_log
-                WHERE date < %s
+                WHERE created_at::date < %s
                 """,
                 (cutoff_date,),
             )

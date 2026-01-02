@@ -275,6 +275,7 @@ class DissonanceEngine:
                 # Get session start time (default to 30 days ago if not available)
                 session_start = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
 
+                # NULL-safe UUID cast: only attempt cast if value is valid UUID format
                 query = """
                     SELECT DISTINCT e.*,
                            ns.name as source_name, nt.name as target_name,
@@ -282,8 +283,14 @@ class DissonanceEngine:
                     FROM edges e
                     JOIN nodes ns ON e.source_id = ns.id
                     JOIN nodes nt ON e.target_id = nt.id
-                    LEFT JOIN nodes pns ON (e.properties->>'source_node')::uuid = pns.id
-                    LEFT JOIN nodes pnt ON (e.properties->>'target_node')::uuid = pnt.id
+                    LEFT JOIN nodes pns ON
+                        e.properties->>'source_node' IS NOT NULL
+                        AND e.properties->>'source_node' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                        AND (e.properties->>'source_node')::uuid = pns.id
+                    LEFT JOIN nodes pnt ON
+                        e.properties->>'target_node' IS NOT NULL
+                        AND e.properties->>'target_node' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                        AND (e.properties->>'target_node')::uuid = pnt.id
                     WHERE (ns.name = %s OR nt.name = %s OR ns.id = %s OR nt.id = %s)
                     AND (
                         e.modified_at >= NOW() - INTERVAL '30 days'
@@ -294,6 +301,7 @@ class DissonanceEngine:
                 """
                 cursor.execute(query, (context_node_id, context_node_id, context_node_id, context_node_id, session_start))
             else:  # scope == "full"
+                # NULL-safe UUID cast: only attempt cast if value is valid UUID format
                 query = """
                     SELECT DISTINCT e.*,
                            ns.name as source_name, nt.name as target_name,
@@ -301,8 +309,14 @@ class DissonanceEngine:
                     FROM edges e
                     JOIN nodes ns ON e.source_id = ns.id
                     JOIN nodes nt ON e.target_id = nt.id
-                    LEFT JOIN nodes pns ON (e.properties->>'source_node')::uuid = pns.id
-                    LEFT JOIN nodes pnt ON (e.properties->>'target_node')::uuid = pnt.id
+                    LEFT JOIN nodes pns ON
+                        e.properties->>'source_node' IS NOT NULL
+                        AND e.properties->>'source_node' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                        AND (e.properties->>'source_node')::uuid = pns.id
+                    LEFT JOIN nodes pnt ON
+                        e.properties->>'target_node' IS NOT NULL
+                        AND e.properties->>'target_node' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                        AND (e.properties->>'target_node')::uuid = pnt.id
                     WHERE (ns.name = %s OR nt.name = %s OR ns.id = %s OR nt.id = %s)
                     ORDER BY e.modified_at DESC
                 """
@@ -315,53 +329,15 @@ class DissonanceEngine:
         Get memory strength for an edge from related l2_insights.
 
         LIMITATION (Story 7.4 Review):
-        Currently uses ILIKE search in content which is unreliable since
-        there's no direct FK between edges and l2_insights. This is a
-        best-effort approach for MVP. Future versions should establish
-        proper edge-to-insight mapping via nodes.vector_id or dedicated
-        junction table.
+        Currently l2_insights table does not have memory_strength column.
+        This is a placeholder for future implementation. Always returns None.
 
-        Returns None in most cases - authoritative_source will be None.
+        Returns None - authoritative_source will be None.
         """
-        try:
-            with get_connection() as conn:
-                cursor = conn.cursor()
-
-                # Approach 1: Try via source/target node vector_id linkage
-                # This is more reliable than ILIKE search
-                query = """
-                    SELECT COALESCE(
-                        (SELECT memory_strength FROM l2_insights WHERE id = ns.vector_id),
-                        (SELECT memory_strength FROM l2_insights WHERE id = nt.vector_id)
-                    ) as memory_strength
-                    FROM edges e
-                    JOIN nodes ns ON e.source_id = ns.id
-                    JOIN nodes nt ON e.target_id = nt.id
-                    WHERE e.id = %s::uuid
-                    LIMIT 1
-                """
-                cursor.execute(query, (edge_id,))
-                result = cursor.fetchone()
-
-                if result and result["memory_strength"] is not None:
-                    return float(result["memory_strength"])
-
-                # Fallback: ILIKE search (unreliable but kept for compatibility)
-                query_fallback = """
-                    SELECT memory_strength
-                    FROM l2_insights
-                    WHERE content ILIKE %s
-                    LIMIT 1
-                """
-                edge_id_pattern = f"%{edge_id}%"
-                cursor.execute(query_fallback, (edge_id_pattern,))
-                result = cursor.fetchone()
-
-                return float(result["memory_strength"]) if result and result["memory_strength"] else None
-
-        except Exception as e:
-            logger.debug(f"Could not fetch memory strength for edge {edge_id}: {e}")
-            return None
+        # NOTE: l2_insights schema doesn't include memory_strength column yet.
+        # This feature requires a schema migration to add the column.
+        # For now, return None to avoid DB errors.
+        return None
 
     async def _analyze_dissonance_pair(self, edge_a: dict, edge_b: dict) -> DissonanceResult:
         """Analyze a pair of edges for dissonance using LLM."""
@@ -408,8 +384,16 @@ class DissonanceEngine:
                 max_tokens=500     # Sufficient for JSON response
             )
 
+            # Extract JSON from response (Haiku may include surrounding text)
+            if "{" in response and "}" in response:
+                start = response.find("{")
+                end = response.rfind("}") + 1
+                json_str = response[start:end]
+            else:
+                raise ValueError(f"No JSON found in response: {response[:100]}")
+
             # Parse JSON response
-            result_data = json.loads(response)
+            result_data = json.loads(json_str)
 
             # Normalize dissonance_type to lowercase for enum matching
             raw_type = result_data["dissonance_type"]

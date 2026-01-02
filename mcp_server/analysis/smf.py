@@ -372,11 +372,12 @@ def create_smf_proposal(
     with get_connection() as conn:
         cursor = conn.cursor()
 
+        # Cast affected_edges to UUID[] - PostgreSQL requires explicit type cast
         cursor.execute("""
             INSERT INTO smf_proposals (
                 trigger_type, proposed_action, affected_edges, reasoning,
                 approval_level, status, original_state
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ) VALUES (%s, %s, %s::uuid[], %s, %s, %s, %s)
             RETURNING id
         """, (
             trigger_type.value,
