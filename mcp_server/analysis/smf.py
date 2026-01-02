@@ -127,15 +127,16 @@ async def _resolve_smf_dissonance(
         # CONTRADICTION / NUANCE: both remain active
         base_properties["affected_edges"] = edge_ids
 
-    # Create RESOLVES edges from resolution node to both original edges
-    for edge_id in edge_ids:
-        add_edge(
-            source_id=resolution_node["node_id"],
-            target_id=edge_id,
-            relation="RESOLVES",
-            weight=1.0,
-            properties=json.dumps(base_properties.copy())
-        )
+    # Store resolution via properties (Story 7.6: Hyperedge via Properties)
+    # NOTE: We cannot create edges TO edge_ids because edges.target_id has FK constraint
+    # to nodes table. Instead, we update the resolution node with complete metadata.
+    from mcp_server.db.graph import update_node_properties
+
+    resolution_metadata = {
+        **base_properties,
+        "resolved_edge_ids": edge_ids,  # Store edge references in properties
+    }
+    update_node_properties(resolution_node["node_id"], resolution_metadata)
 
     return {
         "resolution_node_id": resolution_node["node_id"],

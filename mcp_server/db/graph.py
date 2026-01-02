@@ -353,6 +353,60 @@ def get_node_by_name(name: str) -> dict[str, Any] | None:
         raise
 
 
+def update_node_properties(node_id: str, new_properties: dict[str, Any]) -> dict[str, Any]:
+    """
+    Update a node's properties by merging with existing properties.
+
+    Uses PostgreSQL's jsonb_concat (||) to merge properties without overwriting
+    other existing values.
+
+    Args:
+        node_id: UUID string of the node to update
+        new_properties: Dict with properties to add/update
+
+    Returns:
+        Dict with updated node data
+
+    Story 7.6: Hyperedge via Properties (Konvention)
+    """
+    logger = logging.getLogger(__name__)
+
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Merge new properties with existing using jsonb concatenation
+            cursor.execute(
+                """
+                UPDATE nodes
+                SET properties = properties || %s::jsonb
+                WHERE id = %s::uuid
+                RETURNING id, label, name, properties, vector_id, created_at;
+                """,
+                (json.dumps(new_properties), node_id),
+            )
+
+            result = cursor.fetchone()
+            conn.commit()
+
+            if result:
+                logger.debug(f"Updated node properties: id={node_id}")
+                return {
+                    "id": str(result["id"]),
+                    "label": result["label"],
+                    "name": result["name"],
+                    "properties": result["properties"],
+                    "vector_id": result["vector_id"],
+                    "created_at": result["created_at"].isoformat(),
+                }
+
+            raise RuntimeError(f"Node not found: {node_id}")
+
+    except Exception as e:
+        logger.error(f"Failed to update node properties: node_id={node_id}, error={e}")
+        raise
+
+
 def get_default_importance(edge_data: dict) -> str:
     """
     Default-Heuristik für importance Property (Story 7.3, AC Zeile 209-218).
