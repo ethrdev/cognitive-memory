@@ -275,52 +275,110 @@ class DissonanceEngine:
                 # Get session start time (default to 30 days ago if not available)
                 session_start = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
 
-                # NULL-safe UUID cast: only attempt cast if value is valid UUID format
-                query = """
-                    SELECT DISTINCT e.*,
-                           ns.name as source_name, nt.name as target_name,
-                           pns.name as source_node_name, pnt.name as target_node_name
-                    FROM edges e
-                    JOIN nodes ns ON e.source_id = ns.id
-                    JOIN nodes nt ON e.target_id = nt.id
-                    LEFT JOIN nodes pns ON
-                        e.properties->>'source_node' IS NOT NULL
-                        AND e.properties->>'source_node' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-                        AND (e.properties->>'source_node')::uuid = pns.id
-                    LEFT JOIN nodes pnt ON
-                        e.properties->>'target_node' IS NOT NULL
-                        AND e.properties->>'target_node' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-                        AND (e.properties->>'target_node')::uuid = pnt.id
-                    WHERE (ns.name = %s OR nt.name = %s OR ns.id = %s OR nt.id = %s)
-                    AND (
-                        e.modified_at >= NOW() - INTERVAL '30 days'
-                        OR e.last_accessed >= NOW() - INTERVAL '30 days'
-                        OR e.created_at >= %s
-                    )
-                    ORDER BY e.modified_at DESC
-                """
-                cursor.execute(query, (context_node_id, context_node_id, context_node_id, context_node_id, session_start))
+                # Check if context_node_id is a valid UUID format
+                is_uuid = bool(re.match(
+                    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+                    str(context_node_id), re.IGNORECASE
+                ))
+
+                # Query by node name, and optionally by UUID if valid
+                if is_uuid:
+                    query = """
+                        SELECT DISTINCT e.*,
+                               ns.name as source_name, nt.name as target_name,
+                               pns.name as source_node_name, pnt.name as target_node_name
+                        FROM edges e
+                        JOIN nodes ns ON e.source_id = ns.id
+                        JOIN nodes nt ON e.target_id = nt.id
+                        LEFT JOIN nodes pns ON
+                            e.properties->>'source_node' IS NOT NULL
+                            AND e.properties->>'source_node' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                            AND (e.properties->>'source_node')::uuid = pns.id
+                        LEFT JOIN nodes pnt ON
+                            e.properties->>'target_node' IS NOT NULL
+                            AND e.properties->>'target_node' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                            AND (e.properties->>'target_node')::uuid = pnt.id
+                        WHERE (ns.id = %s::uuid OR nt.id = %s::uuid)
+                        AND (
+                            e.modified_at >= NOW() - INTERVAL '30 days'
+                            OR e.last_accessed >= NOW() - INTERVAL '30 days'
+                            OR e.created_at >= %s
+                        )
+                        ORDER BY e.modified_at DESC
+                    """
+                    cursor.execute(query, (str(context_node_id), str(context_node_id), session_start))
+                else:
+                    query = """
+                        SELECT DISTINCT e.*,
+                               ns.name as source_name, nt.name as target_name,
+                               pns.name as source_node_name, pnt.name as target_node_name
+                        FROM edges e
+                        JOIN nodes ns ON e.source_id = ns.id
+                        JOIN nodes nt ON e.target_id = nt.id
+                        LEFT JOIN nodes pns ON
+                            e.properties->>'source_node' IS NOT NULL
+                            AND e.properties->>'source_node' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                            AND (e.properties->>'source_node')::uuid = pns.id
+                        LEFT JOIN nodes pnt ON
+                            e.properties->>'target_node' IS NOT NULL
+                            AND e.properties->>'target_node' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                            AND (e.properties->>'target_node')::uuid = pnt.id
+                        WHERE (ns.name = %s OR nt.name = %s)
+                        AND (
+                            e.modified_at >= NOW() - INTERVAL '30 days'
+                            OR e.last_accessed >= NOW() - INTERVAL '30 days'
+                            OR e.created_at >= %s
+                        )
+                        ORDER BY e.modified_at DESC
+                    """
+                    cursor.execute(query, (context_node_id, context_node_id, session_start))
             else:  # scope == "full"
-                # NULL-safe UUID cast: only attempt cast if value is valid UUID format
-                query = """
-                    SELECT DISTINCT e.*,
-                           ns.name as source_name, nt.name as target_name,
-                           pns.name as source_node_name, pnt.name as target_node_name
-                    FROM edges e
-                    JOIN nodes ns ON e.source_id = ns.id
-                    JOIN nodes nt ON e.target_id = nt.id
-                    LEFT JOIN nodes pns ON
-                        e.properties->>'source_node' IS NOT NULL
-                        AND e.properties->>'source_node' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-                        AND (e.properties->>'source_node')::uuid = pns.id
-                    LEFT JOIN nodes pnt ON
-                        e.properties->>'target_node' IS NOT NULL
-                        AND e.properties->>'target_node' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-                        AND (e.properties->>'target_node')::uuid = pnt.id
-                    WHERE (ns.name = %s OR nt.name = %s OR ns.id = %s OR nt.id = %s)
-                    ORDER BY e.modified_at DESC
-                """
-                cursor.execute(query, (context_node_id, context_node_id, context_node_id, context_node_id))
+                # Check if context_node_id is a valid UUID format
+                is_uuid = bool(re.match(
+                    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+                    str(context_node_id), re.IGNORECASE
+                ))
+
+                if is_uuid:
+                    query = """
+                        SELECT DISTINCT e.*,
+                               ns.name as source_name, nt.name as target_name,
+                               pns.name as source_node_name, pnt.name as target_node_name
+                        FROM edges e
+                        JOIN nodes ns ON e.source_id = ns.id
+                        JOIN nodes nt ON e.target_id = nt.id
+                        LEFT JOIN nodes pns ON
+                            e.properties->>'source_node' IS NOT NULL
+                            AND e.properties->>'source_node' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                            AND (e.properties->>'source_node')::uuid = pns.id
+                        LEFT JOIN nodes pnt ON
+                            e.properties->>'target_node' IS NOT NULL
+                            AND e.properties->>'target_node' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                            AND (e.properties->>'target_node')::uuid = pnt.id
+                        WHERE (ns.id = %s::uuid OR nt.id = %s::uuid)
+                        ORDER BY e.modified_at DESC
+                    """
+                    cursor.execute(query, (str(context_node_id), str(context_node_id)))
+                else:
+                    query = """
+                        SELECT DISTINCT e.*,
+                               ns.name as source_name, nt.name as target_name,
+                               pns.name as source_node_name, pnt.name as target_node_name
+                        FROM edges e
+                        JOIN nodes ns ON e.source_id = ns.id
+                        JOIN nodes nt ON e.target_id = nt.id
+                        LEFT JOIN nodes pns ON
+                            e.properties->>'source_node' IS NOT NULL
+                            AND e.properties->>'source_node' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                            AND (e.properties->>'source_node')::uuid = pns.id
+                        LEFT JOIN nodes pnt ON
+                            e.properties->>'target_node' IS NOT NULL
+                            AND e.properties->>'target_node' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                            AND (e.properties->>'target_node')::uuid = pnt.id
+                        WHERE (ns.name = %s OR nt.name = %s)
+                        ORDER BY e.modified_at DESC
+                    """
+                    cursor.execute(query, (context_node_id, context_node_id))
 
             return [dict(row) for row in cursor.fetchall()]
 
