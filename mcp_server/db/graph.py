@@ -1057,11 +1057,12 @@ def query_neighbors(
                     UNION ALL
                     SELECT * FROM incoming_neighbors WHERE %s = true
                 )
-                -- Final selection: shortest path per node, highest weight on tie
-                SELECT DISTINCT ON (node_id)
+                -- Final selection: all edges, deduplication happens in Python after IEF scoring
+                -- (Story: Edge-Deduplizierung nach IEF-Score statt alphabetisch)
+                SELECT
                     node_id, edge_id, label, name, node_properties, edge_properties, relation, weight, last_accessed, access_count, modified_at, distance, edge_direction
                 FROM combined
-                ORDER BY node_id, distance ASC, weight DESC, name ASC;
+                ORDER BY distance ASC, weight DESC, name ASC;
                 """
 
             # Build parameter tuple with properties filter params repeated for each CTE block
@@ -1162,6 +1163,17 @@ def query_neighbors(
                 neighbors.sort(key=lambda n: n.get("ief_score", 0), reverse=True)
             else:
                 neighbors.sort(key=lambda n: n["relevance_score"], reverse=True)
+
+            # Deduplizierung nach Score-Sortierung: Behalte nur Edge mit höchstem Score pro Node
+            # (Story: Edge-Deduplizierung nach IEF-Score statt alphabetisch)
+            seen_nodes: set[str] = set()
+            deduplicated: list[dict[str, Any]] = []
+            for neighbor in neighbors:
+                neighbor_node_id = neighbor.get("node_id")
+                if neighbor_node_id and neighbor_node_id not in seen_nodes:
+                    seen_nodes.add(neighbor_node_id)
+                    deduplicated.append(neighbor)
+            neighbors = deduplicated
 
             # AUTO-UPDATE after Query-Completion (Story 7.2)
             if edge_ids_for_update:
