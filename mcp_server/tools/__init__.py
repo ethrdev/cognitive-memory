@@ -2,12 +2,12 @@
 MCP Server Tools Registration Module
 
 Provides tool registration and implementation for the Cognitive Memory System.
-Includes 23 tools: store_raw_dialogue, compress_to_l2_insight, hybrid_search,
+Includes 24 tools: store_raw_dialogue, compress_to_l2_insight, hybrid_search,
 update_working_memory, store_episode, store_dual_judge_scores, get_golden_test_results,
 ping, graph_add_node, graph_add_edge, graph_query_neighbors, graph_find_path,
 get_node_by_name, get_edge, count_by_type, list_episodes, get_insight_by_id,
 dissonance_check, resolve_dissonance, smf_pending_proposals, smf_review,
-smf_approve, smf_reject, and smf_undo.
+smf_approve, smf_reject, smf_undo, smf_bulk_approve, and suggest_lateral_edges.
 """
 
 from __future__ import annotations
@@ -51,6 +51,7 @@ from mcp_server.tools.smf_approve import handle_smf_approve
 from mcp_server.tools.smf_reject import handle_smf_reject
 from mcp_server.tools.smf_undo import handle_smf_undo
 from mcp_server.tools.smf_bulk_approve import handle_smf_bulk_approve
+from mcp_server.tools.suggest_lateral_edges import handle_suggest_lateral_edges
 
 
 def rrf_fusion(
@@ -2559,6 +2560,28 @@ def register_tools(server: Server) -> list[Tool]:
                 "required": ["actor"],
             },
         ),
+        Tool(
+            name="suggest_lateral_edges",
+            description="Suggest potential lateral edges for a graph node. Uses semantic search to find nodes that might be related but aren't yet directly connected. Helps break the star-graph pattern by identifying concept-to-concept connections.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "node_name": {
+                        "type": "string",
+                        "description": "Name of the node to find lateral edge suggestions for",
+                        "minLength": 1,
+                    },
+                    "top_k": {
+                        "type": "integer",
+                        "description": "Maximum number of suggestions to return (default: 5)",
+                        "minimum": 1,
+                        "maximum": 10,
+                        "default": 5,
+                    },
+                },
+                "required": ["node_name"],
+            },
+        ),
     ]
 
     # Tool handler mapping
@@ -2588,6 +2611,7 @@ def register_tools(server: Server) -> list[Tool]:
         "smf_reject": handle_smf_reject,
         "smf_undo": handle_smf_undo,
         "smf_bulk_approve": handle_smf_bulk_approve,
+        "suggest_lateral_edges": handle_suggest_lateral_edges,
     }
 
     # Register tool call handler (define once, outside the loop)
