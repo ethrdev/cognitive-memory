@@ -581,8 +581,10 @@ async def approve_proposal(
 
     # Execute resolution and audit outside connection context
     if fully_approved:
-        # Parse proposed_action and execute
-        proposed_action = json.loads(proposal["proposed_action"])
+        # Get proposed_action - may already be dict from JSONB, or string needing parse
+        proposed_action = proposal["proposed_action"]
+        if isinstance(proposed_action, str):
+            proposed_action = json.loads(proposed_action)
         if proposed_action.get("action") == "resolve":
             # SMF uses direct resolution with edge_ids from proposal
             await _resolve_smf_dissonance(

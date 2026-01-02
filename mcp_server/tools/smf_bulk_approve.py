@@ -63,7 +63,20 @@ async def handle_smf_bulk_approve(arguments: dict[str, Any]) -> dict[str, Any]:
         all_proposals = get_pending_proposals()
 
         # Normalize filter for case-insensitive comparison
-        trigger_type_filter_upper = trigger_type_filter.upper() if trigger_type_filter else None
+        # Note: resolution_type is in proposed_action, not trigger_type
+        resolution_type_filter_upper = trigger_type_filter.upper() if trigger_type_filter else None
+
+        # Helper to extract resolution_type from proposal
+        def get_resolution_type(proposal: dict) -> str:
+            """Extract resolution_type from proposed_action (handles dict or string)."""
+            proposed_action = proposal.get("proposed_action", {})
+            if isinstance(proposed_action, str):
+                try:
+                    import json
+                    proposed_action = json.loads(proposed_action)
+                except (json.JSONDecodeError, TypeError):
+                    return ""
+            return (proposed_action.get("resolution_type") or "").upper()
 
         # Apply filters
         filtered_proposals = []
@@ -72,10 +85,10 @@ async def handle_smf_bulk_approve(arguments: dict[str, Any]) -> dict[str, Any]:
             if proposal_ids and p["id"] not in proposal_ids:
                 continue
 
-            # Filter by trigger type (case-insensitive)
-            if trigger_type_filter_upper:
-                proposal_type = (p.get("trigger_type") or "").upper()
-                if proposal_type != trigger_type_filter_upper:
+            # Filter by resolution type (case-insensitive) - stored in proposed_action
+            if resolution_type_filter_upper:
+                proposal_resolution = get_resolution_type(p)
+                if proposal_resolution != resolution_type_filter_upper:
                     continue
 
             # Filter by approval level
@@ -92,9 +105,9 @@ async def handle_smf_bulk_approve(arguments: dict[str, Any]) -> dict[str, Any]:
 
         # Dry run - just report
         if dry_run:
-            # Case-insensitive breakdown counts
+            # Case-insensitive breakdown counts using resolution_type
             def count_by_type(proposals: list, type_name: str) -> int:
-                return len([p for p in proposals if (p.get("trigger_type") or "").upper() == type_name.upper()])
+                return len([p for p in proposals if get_resolution_type(p) == type_name.upper()])
 
             return {
                 "dry_run": True,
