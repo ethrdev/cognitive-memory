@@ -36,6 +36,11 @@ async def handle_smf_pending_proposals(arguments: dict[str, Any]) -> dict[str, A
         # Format response for MCP consumption
         formatted_proposals = []
         for proposal in proposals:
+            # Convert datetime to ISO string for JSON serialization
+            created_at = proposal["created_at"]
+            if hasattr(created_at, 'isoformat'):
+                created_at = created_at.isoformat()
+
             formatted_proposal = {
                 "proposal_id": proposal["id"],
                 "trigger_type": proposal["trigger_type"],
@@ -43,7 +48,7 @@ async def handle_smf_pending_proposals(arguments: dict[str, Any]) -> dict[str, A
                 "affected_edges": proposal["affected_edges"],
                 "reasoning": proposal["reasoning"],
                 "approval_level": proposal["approval_level"],
-                "created_at": proposal["created_at"],
+                "created_at": created_at,
             }
             formatted_proposals.append(formatted_proposal)
 

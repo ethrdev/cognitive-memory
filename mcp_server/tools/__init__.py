@@ -50,6 +50,7 @@ from mcp_server.tools.smf_review import handle_smf_review
 from mcp_server.tools.smf_approve import handle_smf_approve
 from mcp_server.tools.smf_reject import handle_smf_reject
 from mcp_server.tools.smf_undo import handle_smf_undo
+from mcp_server.tools.smf_bulk_approve import handle_smf_bulk_approve
 
 
 def rrf_fusion(
@@ -1863,9 +1864,9 @@ async def handle_dissonance_check(arguments: dict[str, Any]) -> dict[str, Any]:
         arguments: Tool arguments containing context_node and optional scope
 
     Returns:
-        Formatted dissonance check results
+        Formatted dissonance check results including pending_reviews with IDs
     """
-    from mcp.server import Server
+    from mcp_server.analysis.dissonance import DissonanceEngine, _nuance_reviews
 
     # Extract parameters
     context_node = arguments.get("context_node")
@@ -1886,23 +1887,69 @@ async def handle_dissonance_check(arguments: dict[str, Any]) -> dict[str, Any]:
             "tool": "dissonance_check",
         }
 
-    # Create a server instance for the handler
-    server = Server("cognitive-memory")
+    try:
+        # Call the engine directly to get structured data
+        engine = DissonanceEngine()
+        result = await engine.dissonance_check(context_node=context_node, scope=scope)
 
-    # Call the actual handler
-    results = await handle_dissonance_check_impl(server, context_node, scope)
+        # Format dissonances for output
+        dissonances_data = []
+        for diss in result.dissonances:
+            diss_dict = {
+                "edge_a_id": diss.edge_a_id,
+                "edge_b_id": diss.edge_b_id,
+                "dissonance_type": diss.dissonance_type.value,
+                "confidence_score": diss.confidence_score,
+                "description": diss.description,
+                "requires_review": diss.requires_review,
+            }
+            if diss.edge_a_memory_strength is not None:
+                diss_dict["edge_a_memory_strength"] = diss.edge_a_memory_strength
+            if diss.edge_b_memory_strength is not None:
+                diss_dict["edge_b_memory_strength"] = diss.edge_b_memory_strength
+            if diss.authoritative_source:
+                diss_dict["authoritative_source"] = diss.authoritative_source
+            dissonances_data.append(diss_dict)
 
-    # Convert TextContent results to dict format
-    if results and len(results) > 0:
+        # Get pending review IDs from _nuance_reviews
+        # Filter to only PENDING_IO_REVIEW status and match edge IDs from this check
+        edge_ids_in_result = set()
+        for diss in result.dissonances:
+            edge_ids_in_result.add(diss.edge_a_id)
+            edge_ids_in_result.add(diss.edge_b_id)
+
+        pending_review_ids = []
+        for review in _nuance_reviews:
+            if review.get("status") == "PENDING_IO_REVIEW":
+                diss_data = review.get("dissonance", {})
+                # Check if this review matches edges from our check
+                edge_a = diss_data.get("edge_a_id") if isinstance(diss_data, dict) else getattr(diss_data, "edge_a_id", None)
+                edge_b = diss_data.get("edge_b_id") if isinstance(diss_data, dict) else getattr(diss_data, "edge_b_id", None)
+                if edge_a in edge_ids_in_result or edge_b in edge_ids_in_result:
+                    pending_review_ids.append(review.get("id"))
+
         return {
-            "result": results[0].text,
+            "context_node": context_node,
+            "scope": result.scope,
+            "edges_analyzed": result.edges_analyzed,
+            "dissonances_found": result.conflicts_found,
+            "dissonances": dissonances_data,
+            "pending_reviews": pending_review_ids,
+            "fallback": result.fallback,
+            "api_calls": result.api_calls,
+            "estimated_cost_eur": result.estimated_cost_eur,
             "tool": "dissonance_check",
-            "status": "success",
+            "status": result.status,
         }
-    else:
+
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Dissonance check failed: {e}", exc_info=True)
         return {
-            "error": "No results returned",
+            "error": "Dissonance check failed",
+            "details": str(e),
             "tool": "dissonance_check",
+            "status": "error",
         }
 
 
@@ -2477,6 +2524,41 @@ def register_tools(server: Server) -> list[Tool]:
                 "required": ["proposal_id", "actor"],
             },
         ),
+        Tool(
+            name="smf_bulk_approve",
+            description="Bulk-approve SMF proposals with optional filtering by type. Useful for batch-processing trivial NUANCE cases. Supports dry_run mode to preview what would be approved.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "actor": {
+                        "type": "string",
+                        "description": "Who is approving ('I/O' or 'ethr')",
+                        "enum": ["I/O", "ethr"],
+                    },
+                    "trigger_type": {
+                        "type": "string",
+                        "description": "Optional filter by trigger type",
+                        "enum": ["NUANCE", "EVOLUTION", "CONTRADICTION"],
+                    },
+                    "approval_level": {
+                        "type": "string",
+                        "description": "Optional filter by approval level",
+                        "enum": ["io", "bilateral"],
+                    },
+                    "proposal_ids": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "description": "Optional list of specific proposal IDs to approve",
+                    },
+                    "dry_run": {
+                        "type": "boolean",
+                        "description": "If true, only report what would be approved without executing",
+                        "default": False,
+                    },
+                },
+                "required": ["actor"],
+            },
+        ),
     ]
 
     # Tool handler mapping
@@ -2505,6 +2587,7 @@ def register_tools(server: Server) -> list[Tool]:
         "smf_approve": handle_smf_approve,
         "smf_reject": handle_smf_reject,
         "smf_undo": handle_smf_undo,
+        "smf_bulk_approve": handle_smf_bulk_approve,
     }
 
     # Register tool call handler (define once, outside the loop)
