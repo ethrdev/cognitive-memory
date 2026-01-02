@@ -117,6 +117,8 @@ ethr/
 bmad/
 bmad-docs/
 .bmad/
+_bmad/
+_bmad-output/
 
 # IDE-specific configurations (keep local only)
 .claude/
