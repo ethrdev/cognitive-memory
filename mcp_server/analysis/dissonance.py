@@ -282,8 +282,8 @@ class DissonanceEngine:
                     FROM edges e
                     JOIN nodes ns ON e.source_id = ns.id
                     JOIN nodes nt ON e.target_id = nt.id
-                    LEFT JOIN nodes pns ON CAST(e.properties->>'source_node' AS VARCHAR) = pns.id
-                    LEFT JOIN nodes pnt ON CAST(e.properties->>'target_node' AS VARCHAR) = pnt.id
+                    LEFT JOIN nodes pns ON (e.properties->>'source_node')::uuid = pns.id
+                    LEFT JOIN nodes pnt ON (e.properties->>'target_node')::uuid = pnt.id
                     WHERE (ns.name = %s OR nt.name = %s OR ns.id = %s OR nt.id = %s)
                     AND (
                         e.modified_at >= NOW() - INTERVAL '30 days'
@@ -301,8 +301,8 @@ class DissonanceEngine:
                     FROM edges e
                     JOIN nodes ns ON e.source_id = ns.id
                     JOIN nodes nt ON e.target_id = nt.id
-                    LEFT JOIN nodes pns ON CAST(e.properties->>'source_node' AS VARCHAR) = pns.id
-                    LEFT JOIN nodes pnt ON CAST(e.properties->>'target_node' AS VARCHAR) = pnt.id
+                    LEFT JOIN nodes pns ON (e.properties->>'source_node')::uuid = pns.id
+                    LEFT JOIN nodes pnt ON (e.properties->>'target_node')::uuid = pnt.id
                     WHERE (ns.name = %s OR nt.name = %s OR ns.id = %s OR nt.id = %s)
                     ORDER BY e.modified_at DESC
                 """
