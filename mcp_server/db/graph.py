@@ -456,8 +456,12 @@ def calculate_relevance_score(edge_data: dict) -> float:
     Formel: relevance_score = exp(-days_since / S)
     wobei S = S_BASE * (1 + log(1 + access_count))
 
+    WICHTIG: Nutzt last_engaged (aktive Nutzung) statt last_accessed (Query-Rückgabe).
+    Fix für: "Decay wird durch Query-Access zurückgesetzt" (2026-01-07)
+
     Args:
-        edge_data: Dict mit keys: edge_properties, last_accessed, access_count
+        edge_data: Dict mit keys: edge_properties, last_engaged, access_count
+                   (Fallback auf last_accessed für Rückwärtskompatibilität)
 
     Returns:
         float zwischen 0.0 und 1.0
@@ -483,19 +487,20 @@ def calculate_relevance_score(edge_data: dict) -> float:
     if floor:
         S = max(S, floor)
 
-    # Tage seit letztem Zugriff
-    last_accessed = edge_data.get("last_accessed")
-    if not last_accessed:
+    # Tage seit letztem ENGAGEMENT (nicht Query-Access!)
+    # Fallback auf last_accessed für Rückwärtskompatibilität
+    last_engaged = edge_data.get("last_engaged") or edge_data.get("last_accessed")
+    if not last_engaged:
         return 1.0  # Kein Timestamp = keine Decay-Berechnung
 
-    if isinstance(last_accessed, str):
-        last_accessed = datetime.fromisoformat(last_accessed.replace('Z', '+00:00'))
+    if isinstance(last_engaged, str):
+        last_engaged = datetime.fromisoformat(last_engaged.replace('Z', '+00:00'))
 
     # Handle naive datetime (no timezone) - assume UTC
-    if last_accessed.tzinfo is None:
-        last_accessed = last_accessed.replace(tzinfo=timezone.utc)
+    if last_engaged.tzinfo is None:
+        last_engaged = last_engaged.replace(tzinfo=timezone.utc)
 
-    days_since = (datetime.now(timezone.utc) - last_accessed).total_seconds() / 86400
+    days_since = (datetime.now(timezone.utc) - last_engaged).total_seconds() / 86400
 
     # Exponential Decay
     score = max(0.0, min(1.0, math.exp(-days_since / S)))
@@ -506,6 +511,9 @@ def calculate_relevance_score(edge_data: dict) -> float:
 def _update_edge_access_stats(edge_ids: list[str], conn: Any) -> None:
     """
     Update last_accessed and access_count for edges (TGN Minimal Story 7.2).
+
+    NOTE: This updates last_accessed (technical timestamp), NOT last_engaged.
+    last_engaged is only updated by _update_edge_engagement() for active usage.
 
     Uses bulk UPDATE with atomic increment. Fails silently - access stats are non-critical.
 
@@ -533,6 +541,7 @@ def _update_edge_access_stats(edge_ids: list[str], conn: Any) -> None:
     try:
         cursor = conn.cursor()
         # Use atomic increment to prevent race conditions
+        # NOTE: Only updates last_accessed, NOT last_engaged (Decay fix 2026-01-07)
         cursor.execute(
             """
             UPDATE edges
@@ -554,6 +563,68 @@ def _update_edge_access_stats(edge_ids: list[str], conn: Any) -> None:
         else:
             logger.warning(f"Unexpected error updating edge access stats: {e}")
         # Don't re-raise - access stats are non-critical
+
+
+def _update_edge_engagement(edge_ids: list[str], conn: Any) -> None:
+    """
+    Update last_engaged for edges when they are ACTIVELY used.
+
+    This is the semantic timestamp for Ebbinghaus Decay calculation.
+    Only called when an edge is truly "engaged" (written, updated, resolved).
+
+    Active engagement triggers:
+      ✅ Edge created (new)
+      ✅ Edge properties updated
+      ✅ SMF resolution approved
+      ✅ Explicit reference in io-save
+
+    NOT engagement (passive reading):
+      ❌ graph_query_neighbors (Query)
+      ❌ graph_find_path (Pathfinding)
+      ❌ get_edge lookups
+
+    Fix for: "Decay wird durch Query-Access zurückgesetzt" (2026-01-07)
+
+    Args:
+        edge_ids: List of edge UUIDs to update
+        conn: Active database connection (required, not optional)
+    """
+    if not edge_ids:
+        return
+
+    # Validate UUID format to prevent injection
+    uuid_pattern = re.compile(
+        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+    )
+    valid_edge_ids = []
+    for edge_id in edge_ids:
+        if uuid_pattern.match(str(edge_id)):
+            valid_edge_ids.append(str(edge_id))
+        else:
+            logger.warning(f"Invalid UUID format skipped for engagement: {edge_id}")
+
+    if not valid_edge_ids:
+        return
+
+    try:
+        cursor = conn.cursor()
+        # Update last_engaged AND last_accessed (engagement implies access)
+        cursor.execute(
+            """
+            UPDATE edges
+            SET last_engaged = NOW(),
+                last_accessed = NOW(),
+                access_count = GREATEST(COALESCE(access_count, 0), 0) + 1
+            WHERE id = ANY(%s::uuid[])
+            """,
+            (valid_edge_ids,)
+        )
+        conn.commit()
+        logger.debug(f"Updated engagement for {len(valid_edge_ids)} edges")
+
+    except Exception as e:
+        logger.warning(f"Failed to update edge engagement: {e}")
+        # Don't re-raise - engagement stats are non-critical
 
 
 def _filter_superseded_edges(neighbors: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -801,6 +872,7 @@ def add_edge(
 
             # Insert edge with idempotent conflict resolution
             # Use xmax = 0 to detect if row was inserted vs updated
+            # On UPDATE: Also set last_engaged and modified_at (Decay fix 2026-01-07)
             cursor.execute(
                 """
                 INSERT INTO edges (source_id, target_id, relation, weight, properties)
@@ -808,7 +880,11 @@ def add_edge(
                 ON CONFLICT (source_id, target_id, relation)
                 DO UPDATE SET
                     weight = EXCLUDED.weight,
-                    properties = EXCLUDED.properties
+                    properties = EXCLUDED.properties,
+                    modified_at = NOW(),
+                    last_engaged = NOW(),
+                    last_accessed = NOW(),
+                    access_count = GREATEST(COALESCE(edges.access_count, 0), 0) + 1
                 RETURNING id, source_id, target_id, relation, weight, created_at,
                     (xmax = 0) AS was_inserted;
                 """,
@@ -1175,9 +1251,14 @@ def query_neighbors(
                     deduplicated.append(neighbor)
             neighbors = deduplicated
 
-            # AUTO-UPDATE after Query-Completion (Story 7.2)
-            if edge_ids_for_update:
-                _update_edge_access_stats(edge_ids_for_update, conn)
+            # DISABLED: Auto-update removed to fix Decay reset issue (2026-01-07)
+            # Query-Access should NOT reset Ebbinghaus Decay.
+            # last_accessed is still useful for debugging, but calculate_relevance_score
+            # now uses last_engaged which is only updated by _update_edge_engagement().
+            # See: "Decay wird durch Query-Access zurückgesetzt" bug report
+            #
+            # if edge_ids_for_update:
+            #     _update_edge_access_stats(edge_ids_for_update, conn)
 
             logger.debug(
                 f"Found {len(neighbors)} neighbors for node {node_id} "
@@ -1412,16 +1493,16 @@ def find_path(
                 # Sortierung nach path_ief_score wenn ICAI aktiviert
                 paths.sort(key=lambda p: p.get("path_ief_score", 0), reverse=True)
 
-            # Edge-IDs sammeln für Auto-Update (Story 7.2)
-            all_edge_ids: set[str] = set()
-            for path in paths:
-                for edge in path["edges"]:
-                    # Key ist "edge_id", nicht "id"!
-                    all_edge_ids.add(edge["edge_id"])
-
-            # AUTO-UPDATE after Path-Finding
-            if all_edge_ids:
-                _update_edge_access_stats(list(all_edge_ids), conn)
+            # DISABLED: Auto-update removed to fix Decay reset issue (2026-01-07)
+            # Path-finding Query should NOT reset Ebbinghaus Decay.
+            # See: "Decay wird durch Query-Access zurückgesetzt" bug report
+            #
+            # all_edge_ids: set[str] = set()
+            # for path in paths:
+            #     for edge in path["edges"]:
+            #         all_edge_ids.add(edge["edge_id"])
+            # if all_edge_ids:
+            #     _update_edge_access_stats(list(all_edge_ids), conn)
 
             logger.debug(f"Found {len(paths)} paths from '{start_node_name}' to '{end_node_name}' with max_depth={max_depth}")
 

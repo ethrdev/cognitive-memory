@@ -2,11 +2,17 @@
 TGN (Temporal Graph Network) Tests for Stories 7.2 & 7.3
 
 Tests for:
-- Auto-update functionality of edge access statistics (Story 7.2)
+- Engagement-based access statistics (2026-01-07 Decay Fix)
 - Memory Strength and relevance_score calculation (Story 7.3)
+- Separation of last_accessed (technical) vs last_engaged (semantic)
 
 Story 7.2: TGN Minimal - Auto-Update bei Lese-Operationen
 Story 7.3: TGN Minimal - Decay mit Memory Strength
+
+2026-01-07 UPDATE:
+- Query operations (query_neighbors, find_path) NO LONGER update access stats
+- Decay calculation now uses last_engaged (active usage) instead of last_accessed
+- This fixes: "Decay wird durch Query-Access zurückgesetzt" bug
 """
 
 import pytest
@@ -125,8 +131,12 @@ class TestTGNAutoUpdate:
             assert updated["access_count"] == initial_count + 1
             assert updated["last_accessed"] > initial_time
 
-    def test_query_neighbors_updates_all_edge_access_counts(self):
-        """Test 2: query_neighbors updates all edges in result (AC: #2)."""
+    def test_query_neighbors_does_not_update_access_counts(self):
+        """Test 2: query_neighbors does NOT update access stats (2026-01-07 Decay Fix).
+
+        CHANGE: Query operations no longer reset Ebbinghaus Decay.
+        last_accessed/access_count remain unchanged after query.
+        """
         # Get initial access counts for all edges connected to test_node_A
         with get_connection() as conn:
             cursor = conn.cursor()
@@ -142,7 +152,7 @@ class TestTGNAutoUpdate:
             initial_stats = {str(row["id"]): (row["access_count"], row["last_accessed"])
                            for row in cursor.fetchall()}
 
-        # Wait a bit to ensure timestamp difference
+        # Wait a bit to ensure timestamp difference would be visible
         time.sleep(0.01)
 
         # Call query_neighbors
@@ -153,7 +163,7 @@ class TestTGNAutoUpdate:
         assert "test_node_B" in neighbor_names
         assert "test_node_C" in neighbor_names
 
-        # Verify all edges from A were updated
+        # Verify edges were NOT updated (2026-01-07 Decay Fix)
         with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -165,18 +175,23 @@ class TestTGNAutoUpdate:
                 AND e.relation LIKE 'TEST_%';
                 """
             )
-            updated_stats = {str(row["id"]): (row["access_count"], row["last_accessed"])
+            after_stats = {str(row["id"]): (row["access_count"], row["last_accessed"])
                            for row in cursor.fetchall()}
 
             for edge_id, (initial_count, initial_time) in initial_stats.items():
-                updated_count, updated_time = updated_stats[edge_id]
-                assert updated_count == initial_count + 1
-                assert updated_time > initial_time
+                after_count, after_time = after_stats[edge_id]
+                # Access stats should NOT have changed
+                assert after_count == initial_count, \
+                    f"Query should not increment access_count (was {initial_count}, now {after_count})"
+                assert after_time == initial_time, \
+                    "Query should not update last_accessed"
 
-    def test_find_path_updates_all_edge_access_counts(self):
-        """Test 3: find_path updates all edges in path (AC: #3)."""
+    def test_find_path_does_not_update_access_counts(self):
+        """Test 3: find_path does NOT update access stats (2026-01-07 Decay Fix).
+
+        CHANGE: Path-finding operations no longer reset Ebbinghaus Decay.
+        """
         # Use the direct path: A -> C (TEST_BIDIRECTIONAL)
-        # find_path will find the shortest path, which is the direct edge
         edge_key = "test_node_A_test_node_C_TEST_BIDIRECTIONAL"
         edge_id = self.test_edges[edge_key]
 
@@ -195,7 +210,7 @@ class TestTGNAutoUpdate:
             initial_count = initial["access_count"]
             initial_time = initial["last_accessed"]
 
-        # Wait a bit to ensure timestamp difference
+        # Wait a bit to ensure timestamp difference would be visible
         time.sleep(0.01)
 
         # Call find_path - should find A -> C direct path
@@ -204,7 +219,7 @@ class TestTGNAutoUpdate:
         assert result["path_found"] is True
         assert len(result["paths"]) > 0
 
-        # Verify the edge in the path was updated
+        # Verify the edge was NOT updated (2026-01-07 Decay Fix)
         with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -215,10 +230,12 @@ class TestTGNAutoUpdate:
                 """,
                 (edge_id,)
             )
-            updated = cursor.fetchone()
+            after = cursor.fetchone()
 
-            assert updated["access_count"] == initial_count + 1
-            assert updated["last_accessed"] > initial_time
+            assert after["access_count"] == initial_count, \
+                "find_path should not increment access_count"
+            assert after["last_accessed"] == initial_time, \
+                "find_path should not update last_accessed"
 
     def test_update_edge_access_stats_bulk_operation(self):
         """Test 4: Bulk operation efficiency."""
@@ -309,8 +326,8 @@ class TestTGNAutoUpdate:
                 )
                 conn.commit()
 
-    def test_direction_filtering_with_auto_update(self):
-        """Test 8: query_neighbors with direction filtering still updates edges."""
+    def test_direction_filtering_does_not_update_stats(self):
+        """Test 8: query_neighbors with direction filtering does NOT update stats (2026-01-07)."""
         # Get initial stats for outgoing edges from A
         with get_connection() as conn:
             cursor = conn.cursor()
@@ -336,7 +353,7 @@ class TestTGNAutoUpdate:
         assert "test_node_B" in neighbor_names
         assert "test_node_C" in neighbor_names
 
-        # Verify outgoing edges were updated
+        # Verify outgoing edges were NOT updated (2026-01-07 Decay Fix)
         with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -348,10 +365,11 @@ class TestTGNAutoUpdate:
                 AND e.relation LIKE 'TEST_%';
                 """
             )
-            updated_outgoing = {str(row["id"]): row["access_count"] for row in cursor.fetchall()}
+            after_outgoing = {str(row["id"]): row["access_count"] for row in cursor.fetchall()}
 
             for edge_id, initial_count in initial_outgoing.items():
-                assert updated_outgoing[edge_id] == initial_count + 1
+                assert after_outgoing[edge_id] == initial_count, \
+                    "Query with direction filter should not update access_count"
 
 
 class TestTGNDecayWithMemoryStrength:
@@ -385,21 +403,23 @@ class TestTGNDecayWithMemoryStrength:
     def test_relevance_score_new_edge(self):
         """Test: Frische Edge hat hohe Relevanz."""
         # Edge mit aktuellem Timestamp und access_count = 0
+        # 2026-01-07: Now uses last_engaged instead of last_accessed
         edge_data = {
             "edge_properties": {},
-            "last_accessed": datetime.now(timezone.utc) - timedelta(minutes=1),
+            "last_engaged": datetime.now(timezone.utc) - timedelta(minutes=1),
             "access_count": 0
         }
 
         score = calculate_relevance_score(edge_data)
         assert 0.99 <= score <= 1.0
 
-    def test_relevance_score_100_days_no_access(self):
-        """Test 1: AC #1 - Edge mit 100 Tagen und keinem Zugriff."""
-        # Given: Edge mit last_accessed vor 100 Tagen, access_count = 0
+    def test_relevance_score_100_days_no_engagement(self):
+        """Test 1: AC #1 - Edge mit 100 Tagen ohne Engagement."""
+        # Given: Edge mit last_engaged vor 100 Tagen, access_count = 0
+        # 2026-01-07: Changed from last_accessed to last_engaged
         edge_data = {
             "edge_properties": {},
-            "last_accessed": datetime.now(timezone.utc) - timedelta(days=100),
+            "last_engaged": datetime.now(timezone.utc) - timedelta(days=100),
             "access_count": 0
         }
 
@@ -410,11 +430,12 @@ class TestTGNDecayWithMemoryStrength:
         assert 0.35 <= score <= 0.40
 
     def test_relevance_score_100_days_high_access(self):
-        """Test 2: AC #2 - Edge mit 100 Tagen und hohem Zugriff."""
-        # Given: Edge mit last_accessed vor 100 Tagen, access_count = 10
+        """Test 2: AC #2 - Edge mit 100 Tagen und hohem access_count."""
+        # Given: Edge mit last_engaged vor 100 Tagen, access_count = 10
+        # 2026-01-07: Changed from last_accessed to last_engaged
         edge_data = {
             "edge_properties": {},
-            "last_accessed": datetime.now(timezone.utc) - timedelta(days=100),
+            "last_engaged": datetime.now(timezone.utc) - timedelta(days=100),
             "access_count": 10
         }
 
@@ -426,10 +447,10 @@ class TestTGNDecayWithMemoryStrength:
 
     def test_relevance_score_constitutive(self):
         """Test 3: AC #3 - Konstitutive Edge hat immer Score 1.0."""
-        # Given: Konstitutive Edge
+        # Given: Konstitutive Edge (age doesn't matter for constitutive)
         edge_data = {
             "edge_properties": {"edge_type": "constitutive"},
-            "last_accessed": datetime.now(timezone.utc) - timedelta(days=1000),  # Sehr alt
+            "last_engaged": datetime.now(timezone.utc) - timedelta(days=1000),  # Sehr alt
             "access_count": 0
         }
 
@@ -444,7 +465,7 @@ class TestTGNDecayWithMemoryStrength:
         # Given: Edge mit importance = "high" (S-Floor = 200)
         edge_data = {
             "edge_properties": {"importance": "high"},
-            "last_accessed": datetime.now(timezone.utc) - timedelta(days=100),
+            "last_engaged": datetime.now(timezone.utc) - timedelta(days=100),
             "access_count": 0
         }
 
@@ -459,7 +480,7 @@ class TestTGNDecayWithMemoryStrength:
         # Test mit geringem access_count (würde S < 100 ergeben), aber Medium importance setzt Floor
         edge_data = {
             "edge_properties": {"importance": "medium"},
-            "last_accessed": datetime.now(timezone.utc) - timedelta(days=50),
+            "last_engaged": datetime.now(timezone.utc) - timedelta(days=50),
             "access_count": 0  # S = 100, floor = 100
         }
 
@@ -472,7 +493,7 @@ class TestTGNDecayWithMemoryStrength:
         # Low importance sollte kein Floor haben
         edge_data = {
             "edge_properties": {"importance": "low"},
-            "last_accessed": datetime.now(timezone.utc) - timedelta(days=100),
+            "last_engaged": datetime.now(timezone.utc) - timedelta(days=100),
             "access_count": 0
         }
 
@@ -481,10 +502,10 @@ class TestTGNDecayWithMemoryStrength:
         assert 0.35 <= score <= 0.40
 
     def test_relevance_score_no_timestamp(self):
-        """Test: Edge ohne last_accessed hat Score 1.0."""
+        """Test: Edge ohne last_engaged hat Score 1.0."""
         edge_data = {
             "edge_properties": {},
-            "last_accessed": None,  # Kein Timestamp
+            "last_engaged": None,  # Kein Timestamp
             "access_count": 5
         }
 
@@ -503,13 +524,13 @@ class TestTGNDecayWithMemoryStrength:
         )
         edge_id = result["edge_id"]
 
-        # Setze last_accessed und access_count manuell
+        # Setze last_engaged und access_count manuell (2026-01-07: changed from last_accessed)
         with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
                 UPDATE edges
-                SET last_accessed = %s,
+                SET last_engaged = %s,
                     access_count = %s
                 WHERE id = %s;
                 """,
@@ -539,13 +560,13 @@ class TestTGNDecayWithMemoryStrength:
         )
         edge_id = result["edge_id"]
 
-        # Setze last_accessed für reproduzierbare Ergebnisse
+        # Setze last_engaged für reproduzierbare Ergebnisse (2026-01-07: changed from last_accessed)
         with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
                 UPDATE edges
-                SET last_accessed = %s,
+                SET last_engaged = %s,
                     access_count = %s
                 WHERE id = %s;
                 """,
@@ -587,13 +608,13 @@ class TestTGNDecayWithMemoryStrength:
         )
         edge_id = result["edge_id"]
 
-        # Setze last_accessed und access_count
+        # Setze last_engaged und access_count (2026-01-07: changed from last_accessed)
         with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
                 UPDATE edges
-                SET last_accessed = %s,
+                SET last_engaged = %s,
                     access_count = %s
                 WHERE id = %s;
                 """,
@@ -615,9 +636,10 @@ class TestTGNDecayWithMemoryStrength:
     def test_relevance_score_naive_datetime(self):
         """Test: Naive datetime (no timezone) wird korrekt behandelt."""
         # Edge mit naive datetime (könnte von manchen DB-Konfigurationen kommen)
+        # 2026-01-07: Now uses last_engaged
         edge_data = {
             "edge_properties": {},
-            "last_accessed": datetime(2025, 1, 1),  # Naive datetime - no timezone!
+            "last_engaged": datetime(2025, 1, 1),  # Naive datetime - no timezone!
             "access_count": 0
         }
 
@@ -625,6 +647,20 @@ class TestTGNDecayWithMemoryStrength:
         score = calculate_relevance_score(edge_data)
         assert isinstance(score, float)
         assert 0.0 <= score <= 1.0
+
+    def test_relevance_score_fallback_to_last_accessed(self):
+        """Test: Fallback to last_accessed when last_engaged is missing (backwards compat)."""
+        # Edge with only last_accessed (pre-migration data)
+        edge_data = {
+            "edge_properties": {},
+            "last_accessed": datetime.now(timezone.utc) - timedelta(days=50),
+            # No last_engaged - should fallback to last_accessed
+            "access_count": 0
+        }
+
+        score = calculate_relevance_score(edge_data)
+        # exp(-50/100) ≈ 0.607
+        assert 0.58 <= score <= 0.65
 
     def test_query_neighbors_sorted_by_relevance(self):
         """Test: query_neighbors sortiert nach relevance_score."""
@@ -648,13 +684,13 @@ class TestTGNDecayWithMemoryStrength:
         )
         edge_id = result["edge_id"]
 
-        # Setze Edge 2 als alt
+        # Setze Edge 2 als alt (2026-01-07: changed from last_accessed)
         with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
                 UPDATE edges
-                SET last_accessed = %s,
+                SET last_engaged = %s,
                     access_count = 0
                 WHERE id = %s;
                 """,
