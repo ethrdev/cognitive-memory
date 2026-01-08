@@ -1,0 +1,25 @@
+# Decay Configuration for Memory Sectors
+# This file configures sector-specific memory decay parameters
+#
+# S_base: Base memory strength - higher values = slower decay
+# S_floor: Minimum memory strength (null = can decay to zero)
+#
+# Load via: get_decay_config() from mcp_server/utils/decay_config.py
+# Location: config/decay_config.yaml
+
+decay_config:
+  emotional:
+    S_base: 200      # Higher = slower decay (emotional memories linger ~2x longer)
+    S_floor: 150     # Minimum memory strength (never forgets completely)
+  semantic:
+    S_base: 100      # Baseline decay rate
+    S_floor: null    # Can decay to zero
+  episodic:
+    S_base: 150      # Medium decay rate
+    S_floor: 100     # Minimum memory strength
+  procedural:
+    S_base: 120      # Slightly above baseline
+    S_floor: null    # Can decay to zero
+  reflective:
+    S_base: 180      # Slow decay (important self-reflections)
+    S_floor: 120     # Minimum memory strength
