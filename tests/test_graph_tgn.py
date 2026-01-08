@@ -461,10 +461,11 @@ class TestTGNDecayWithMemoryStrength:
         assert score == 1.0
 
     def test_relevance_score_high_importance(self):
-        """Test 5: AC #5 - Edge mit high importance nach 100 Tagen."""
-        # Given: Edge mit importance = "high" (S-Floor = 200)
+        """Test 5: AC #5 - Edge mit emotional sector nach 100 Tagen (Story 9-2)."""
+        # Given: Edge mit memory_sector = "emotional" (S_base = 200, S_floor = 150)
+        # Story 9-2: importance-based S_floor removed, now sector-specific
         edge_data = {
-            "edge_properties": {"importance": "high"},
+            "memory_sector": "emotional",  # High persistence sector
             "last_engaged": datetime.now(timezone.utc) - timedelta(days=100),
             "access_count": 0
         }
@@ -473,15 +474,17 @@ class TestTGNDecayWithMemoryStrength:
         score = calculate_relevance_score(edge_data)
 
         # Then: Score ~0.61 (exp(-100/200) ≈ 0.606)
+        # S_base = 200 für emotional memories
         assert 0.58 <= score <= 0.65
 
     def test_relevance_score_medium_importance_floor(self):
-        """Test: Medium importance S-Floor = 100."""
-        # Test mit geringem access_count (würde S < 100 ergeben), aber Medium importance setzt Floor
+        """Test: Semantic sector mit S_floor enforcement (Story 9-2)."""
+        # Story 9-2: importance-based S_floor removed, now sector-specific
+        # Semantic sector has S_base = 100 (default, no S_floor configured)
         edge_data = {
-            "edge_properties": {"importance": "medium"},
+            "memory_sector": "semantic",  # Default sector
             "last_engaged": datetime.now(timezone.utc) - timedelta(days=50),
-            "access_count": 0  # S = 100, floor = 100
+            "access_count": 0  # S = 100
         }
 
         score = calculate_relevance_score(edge_data)
@@ -489,17 +492,17 @@ class TestTGNDecayWithMemoryStrength:
         assert 0.60 <= score <= 0.62
 
     def test_relevance_score_low_importance_no_floor(self):
-        """Test: Low importance hat keinen S-Floor."""
-        # Low importance sollte kein Floor haben
+        """Test: Procedural sector mit schnellerem decay (Story 9-2)."""
+        # Story 9-2: Procedural sector has S_base = 120 (faster decay than emotional)
         edge_data = {
-            "edge_properties": {"importance": "low"},
+            "memory_sector": "procedural",  # Lower persistence sector
             "last_engaged": datetime.now(timezone.utc) - timedelta(days=100),
             "access_count": 0
         }
 
         score = calculate_relevance_score(edge_data)
-        # exp(-100/100) = exp(-1) ≈ 0.368
-        assert 0.35 <= score <= 0.40
+        # exp(-100/120) = exp(-0.833) ≈ 0.435
+        assert 0.42 <= score <= 0.45
 
     def test_relevance_score_no_timestamp(self):
         """Test: Edge ohne last_engaged hat Score 1.0."""

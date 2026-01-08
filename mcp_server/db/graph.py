@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from mcp_server.db.connection import get_connection
+from mcp_server.utils.relevance import calculate_relevance_score
 from mcp_server.utils.sector_classifier import MemorySector
 from psycopg2.extras import Json
 
@@ -449,66 +450,6 @@ def get_default_importance(edge_data: dict) -> str:
     return "medium"
 
 
-def calculate_relevance_score(edge_data: dict) -> float:
-    """
-    Berechnet relevance_score basierend auf Ebbinghaus Forgetting Curve
-    mit logarithmischem Memory Strength Faktor.
-
-    Formel: relevance_score = exp(-days_since / S)
-    wobei S = S_BASE * (1 + log(1 + access_count))
-
-    WICHTIG: Nutzt last_engaged (aktive Nutzung) statt last_accessed (Query-Rückgabe).
-    Fix für: "Decay wird durch Query-Access zurückgesetzt" (2026-01-07)
-
-    Args:
-        edge_data: Dict mit keys: edge_properties, last_engaged, access_count
-                   (Fallback auf last_accessed für Rückwärtskompatibilität)
-
-    Returns:
-        float zwischen 0.0 und 1.0
-    """
-    properties = edge_data.get("edge_properties") or edge_data.get("properties") or {}
-
-    # Konstitutive Edges: IMMER 1.0
-    if properties.get("edge_type") == "constitutive":
-        return 1.0
-
-    # Memory Strength berechnen
-    S_BASE = 100  # Basis-Stärke in Tagen
-
-    access_count = edge_data.get("access_count", 0) or 0
-    S = S_BASE * (1 + math.log(1 + access_count))
-    # access_count=0  → S = 100 * 1.0   = 100
-    # access_count=10 → S = 100 * 3.4   = 340
-
-    # S-Floor basierend auf importance
-    S_FLOOR = {"low": None, "medium": 100, "high": 200}
-    importance = properties.get("importance", "medium")  # Default: medium
-    floor = S_FLOOR.get(importance)
-    if floor:
-        S = max(S, floor)
-
-    # Tage seit letztem ENGAGEMENT (nicht Query-Access!)
-    # Fallback auf last_accessed für Rückwärtskompatibilität
-    last_engaged = edge_data.get("last_engaged") or edge_data.get("last_accessed")
-    if not last_engaged:
-        return 1.0  # Kein Timestamp = keine Decay-Berechnung
-
-    if isinstance(last_engaged, str):
-        last_engaged = datetime.fromisoformat(last_engaged.replace('Z', '+00:00'))
-
-    # Handle naive datetime (no timezone) - assume UTC
-    if last_engaged.tzinfo is None:
-        last_engaged = last_engaged.replace(tzinfo=timezone.utc)
-
-    days_since = (datetime.now(timezone.utc) - last_engaged).total_seconds() / 86400
-
-    # Exponential Decay
-    score = max(0.0, min(1.0, math.exp(-days_since / S)))
-    logger.debug(f"Calculated relevance_score={score:.4f} for edge data: access_count={access_count}, S={S:.1f}, days_since={days_since:.1f}")
-    return score
-
-
 def _update_edge_access_stats(edge_ids: list[str], conn: Any) -> None:
     """
     Update last_accessed and access_count for edges (TGN Minimal Story 7.2).
@@ -753,7 +694,7 @@ def get_edge_by_names(
             cursor.execute(
                 """
                 SELECT e.id, e.source_id, e.target_id, e.relation, e.weight,
-                       e.properties, e.created_at
+                       e.properties, e.memory_sector, e.created_at
                 FROM edges e
                 JOIN nodes ns ON e.source_id = ns.id
                 JOIN nodes nt ON e.target_id = nt.id
@@ -777,6 +718,7 @@ def get_edge_by_names(
                     "relation": result["relation"],
                     "weight": float(result["weight"]),
                     "properties": result["properties"],
+                    "memory_sector": result["memory_sector"],  # Story 8-5: FR26
                     "created_at": result["created_at"].isoformat(),
                 }
 
@@ -1042,6 +984,7 @@ def query_neighbors(
                         n.name,
                         n.properties AS node_properties,
                         e.properties AS edge_properties,
+                        e.memory_sector,
                         e.relation,
                         e.weight,
                         e.last_accessed,
@@ -1066,6 +1009,7 @@ def query_neighbors(
                         n.name,
                         n.properties AS node_properties,
                         e.properties AS edge_properties,
+                        e.memory_sector,
                         e.relation,
                         e.weight,
                         e.last_accessed,
@@ -1094,6 +1038,7 @@ def query_neighbors(
                         n.name,
                         n.properties AS node_properties,
                         e.properties AS edge_properties,
+                        e.memory_sector,
                         e.relation,
                         e.weight,
                         e.last_accessed,
@@ -1118,6 +1063,7 @@ def query_neighbors(
                         n.name,
                         n.properties AS node_properties,
                         e.properties AS edge_properties,
+                        e.memory_sector,
                         e.relation,
                         e.weight,
                         e.last_accessed,
@@ -1145,7 +1091,7 @@ def query_neighbors(
                 -- Final selection: all edges, deduplication happens in Python after IEF scoring
                 -- (Story: Edge-Deduplizierung nach IEF-Score statt alphabetisch)
                 SELECT
-                    node_id, edge_id, label, name, node_properties, edge_properties, relation, weight, last_accessed, access_count, modified_at, distance, edge_direction
+                    node_id, edge_id, label, name, node_properties, edge_properties, memory_sector, relation, weight, last_accessed, access_count, modified_at, distance, edge_direction
                 FROM combined
                 ORDER BY distance ASC, weight DESC, name ASC;
                 """
@@ -1192,6 +1138,7 @@ def query_neighbors(
                     "name": row["name"],
                     "properties": row["node_properties"],      # Umbenannt
                     "edge_properties": row["edge_properties"], # NEU
+                    "memory_sector": row["memory_sector"],     # Story 8-5: FR26
                     "relation": row["relation"],
                     "weight": float(row["weight"]),
                     "distance": int(row["distance"]),
@@ -1438,7 +1385,7 @@ def find_path(
                 for edge_id in edge_path:
                     cursor.execute(
                         """
-                        SELECT id, source_id, target_id, relation, weight, properties
+                        SELECT id, source_id, target_id, relation, weight, properties, memory_sector
                         FROM edges
                         WHERE id = %s::uuid;
                         """,
@@ -1450,6 +1397,7 @@ def find_path(
                             "edge_id": str(edge_result["id"]),
                             "relation": edge_result["relation"],
                             "weight": float(edge_result["weight"]),
+                            "memory_sector": edge_result["memory_sector"],  # Story 8-5: FR26
                         })
 
                 paths.append({

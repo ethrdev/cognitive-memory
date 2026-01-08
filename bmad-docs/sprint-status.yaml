@@ -131,18 +131,18 @@ development_status:
   epic-7-retrospective: completed
 
   # Epic 8: Memory Sector Foundation (OpenMemory Integration)
-  epic-8: in-progress
+  epic-8: done
   8-1-schema-migration-data-classification: done
   8-2-sector-classification-logic: done
   8-3-auto-classification-on-edge-insert: done
   8-4-auto-classification-on-node-insert: done
-  8-5-sector-in-query-responses: backlog
-  epic-8-retrospective: optional
+  8-5-sector-in-query-responses: done
+  epic-8-retrospective: done
 
   # Epic 9: Sector-Aware Retrieval
-  epic-9: backlog
-  9-1-decay-configuration-module: backlog
-  9-2-sector-specific-relevance-scoring: backlog
+  epic-9: in-progress
+  9-1-decay-configuration-module: done
+  9-2-sector-specific-relevance-scoring: done
   9-3-sector-filter-for-query-neighbors: backlog
   9-4-sector-filter-for-hybrid-search: backlog
   epic-9-retrospective: optional
