@@ -82,7 +82,7 @@ def calculate_ief_score(
 
     # Component 1: Relevance Score (from Story 7.3)
     # Import here to avoid circular imports
-    from mcp_server.db.graph import calculate_relevance_score
+    from mcp_server.utils.relevance import calculate_relevance_score
     relevance_score = calculate_relevance_score(edge_data)
 
     # Component 2: Semantic Similarity

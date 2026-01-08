@@ -34,6 +34,7 @@ class TestGetEdgeTool:
                 "relation": "USES",
                 "weight": 0.85,
                 "properties": {"context": "development"},
+                "memory_sector": "semantic",  # Story 8-5: FR26
                 "created_at": "2025-12-06T14:30:00Z",
             }
 
@@ -312,6 +313,7 @@ class TestGetEdgeTool:
                 "relation": "RELATED_TO",
                 "weight": 1.0,
                 "properties": {},  # Empty properties
+                "memory_sector": "semantic",  # Story 8-5: FR26
                 "created_at": "2025-12-06T10:00:00Z",
             }
 
@@ -337,6 +339,7 @@ class TestGetEdgeTool:
                 "relation": "DEPENDS_ON",
                 "weight": 1.0,  # Default weight
                 "properties": {},
+                "memory_sector": "semantic",  # Story 8-5: FR26
                 "created_at": "2025-12-06T11:00:00Z",
             }
 
@@ -463,6 +466,7 @@ class TestWriteThenVerifyEdgeWorkflow:
                 "target_id": "target-uuid",
                 "relation": "USES",
                 "weight": 1.0,
+                "memory_sector": "semantic",  # Story 8-5: FR26 (Story 8-3 added this to graph_add_edge response)
             }
 
             write_result = await handle_graph_add_edge({
@@ -483,6 +487,7 @@ class TestWriteThenVerifyEdgeWorkflow:
                 "relation": "USES",
                 "weight": 1.0,
                 "properties": {},
+                "memory_sector": "semantic",  # Story 8-5: FR26
                 "created_at": "2025-12-06T14:30:00Z",
             }
 

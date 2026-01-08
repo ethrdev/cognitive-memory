@@ -143,7 +143,7 @@ development_status:
   epic-9: in-progress
   9-1-decay-configuration-module: done
   9-2-sector-specific-relevance-scoring: done
-  9-3-sector-filter-for-query-neighbors: backlog
+  9-3-sector-filter-for-query-neighbors: ready-for-dev
   9-4-sector-filter-for-hybrid-search: backlog
   epic-9-retrospective: optional
 

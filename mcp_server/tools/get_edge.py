@@ -76,6 +76,7 @@ async def handle_get_edge(arguments: dict[str, Any]) -> dict[str, Any]:
                     "relation": edge["relation"],
                     "weight": edge["weight"],
                     "properties": edge["properties"],
+                    "memory_sector": edge["memory_sector"],  # Story 8-5: FR26
                     "created_at": edge["created_at"],
                     "status": "success",
                 }

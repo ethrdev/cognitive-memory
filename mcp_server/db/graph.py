@@ -904,6 +904,7 @@ def query_neighbors(
     direction: str = "both",
     include_superseded: bool = False,
     properties_filter: dict[str, Any] | None = None,
+    sector_filter: list[str] | None = None,  # Story 9-3
     use_ief: bool = False,
     query_embedding: list[float] | None = None
 ) -> list[dict[str, Any]]:
@@ -926,6 +927,7 @@ def query_neighbors(
                           - "participants_contains_all": list[str] - Filter where participants has ALL values
                           - Other keys: Standard JSONB containment filter (@> operator)
                           Story 7.6: Hyperedge via Properties (Konvention)
+        sector_filter: Optional list of memory sector names to filter edges. Story 9-3.
 
         use_ief: If true, calculates IEF (Integrative Evaluation Function) scores and sorts
                  by ief_score instead of relevance_score. Enables ICAI (Integrative Context
@@ -943,6 +945,10 @@ def query_neighbors(
     valid_directions = ("both", "outgoing", "incoming")
     if direction not in valid_directions:
         raise ValueError(f"Invalid direction '{direction}'. Must be one of: {valid_directions}")
+
+    # Story 9-3: Early return for empty sector_filter (AC #4)
+    if sector_filter is not None and len(sector_filter) == 0:
+        return []
 
     try:
         with get_connection() as conn:
@@ -963,6 +969,13 @@ def query_neighbors(
                         props_params = filter_params
                 except ValueError as e:
                     raise ValueError(f"Invalid properties_filter: {e}") from e
+
+            # Story 9-3: Build sector filter SQL clause
+            sector_where_sql = ""
+            sector_params: list[Any] = []
+            if sector_filter is not None:
+                sector_where_sql = " AND e.memory_sector = ANY(%s::text[])"
+                sector_params = [sector_filter]
 
             # Use two separate recursive CTEs for bidirectional traversal
             # PostgreSQL requires that recursive references only appear in the recursive term,
@@ -998,6 +1011,7 @@ def query_neighbors(
                     WHERE e.source_id = %s::uuid
                         AND (%s IS NULL OR e.relation = %s)
                         {props_where_sql}
+                        {sector_where_sql}
 
                     UNION ALL
 
@@ -1025,6 +1039,7 @@ def query_neighbors(
                         AND NOT (n.id = ANY(ob.path))  -- Cycle detection
                         AND (%s IS NULL OR e.relation = %s)
                         {props_where_sql}
+                        {sector_where_sql}
                 ),
                 -- ═══════════════════════════════════════════════════════════════
                 -- CTE 2: Incoming edges traversal (target ← source)
@@ -1052,6 +1067,7 @@ def query_neighbors(
                     WHERE e.target_id = %s::uuid
                         AND (%s IS NULL OR e.relation = %s)
                         {props_where_sql}
+                        {sector_where_sql}
 
                     UNION ALL
 
@@ -1079,6 +1095,7 @@ def query_neighbors(
                         AND NOT (n.id = ANY(ib.path))  -- Cycle detection
                         AND (%s IS NULL OR e.relation = %s)
                         {props_where_sql}
+                        {sector_where_sql}
                 ),
                 -- ═══════════════════════════════════════════════════════════════
                 -- Combine results based on direction parameter
@@ -1097,20 +1114,20 @@ def query_neighbors(
                 """
 
             # Build parameter tuple with properties filter params repeated for each CTE block
-            # Pattern: base_params + props_params (4 times: outgoing base, outgoing rec, incoming base, incoming rec)
+            # Pattern: base_params + props_params + sector_params (4 times: outgoing base, outgoing rec, incoming base, incoming rec)
             params: tuple[Any, ...] = (
                 # Outgoing CTE: base case
                 node_id, node_id, relation_type, relation_type,
-                *props_params,  # Properties filter for outgoing base
+                *props_params, *sector_params,  # Properties + sector filter for outgoing base
                 # Outgoing CTE: recursive case
                 max_depth, relation_type, relation_type,
-                *props_params,  # Properties filter for outgoing recursive
+                *props_params, *sector_params,  # Properties + sector filter for outgoing recursive
                 # Incoming CTE: base case
                 node_id, node_id, relation_type, relation_type,
-                *props_params,  # Properties filter for incoming base
+                *props_params, *sector_params,  # Properties + sector filter for incoming base
                 # Incoming CTE: recursive case
                 max_depth, relation_type, relation_type,
-                *props_params,  # Properties filter for incoming recursive
+                *props_params, *sector_params,  # Properties + sector filter for incoming recursive
                 # Combined: direction filters
                 include_outgoing, include_incoming,
             )

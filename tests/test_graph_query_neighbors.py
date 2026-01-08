@@ -23,6 +23,7 @@ Default Parameter Values (for mock assertions):
 - direction: "both" (bidirectional traversal)
 - include_superseded: False (Story 7.5 - hide superseded edges)
 - properties_filter: None (Story 7.6 - no JSONB filtering)
+- sector_filter: None (Story 9-3 - all sectors)
 """
 
 from __future__ import annotations
@@ -91,6 +92,7 @@ class TestGraphQueryNeighborsTool:
             assert result["start_node"]["name"] == "TestProject"
             assert result["query_params"]["depth"] == 1
             assert result["query_params"]["relation_type"] is None
+            assert result["query_params"]["sector_filter"] is None
             assert "execution_time_ms" in result
             assert "neighbors" in result
 
@@ -98,6 +100,19 @@ class TestGraphQueryNeighborsTool:
             neighbors = result["neighbors"]
             assert len(neighbors) == 2
             assert neighbors[0]["name"] == "Python"
+
+            # Verify DB call with sector_filter=None
+            mock_query.assert_called_once_with(
+                node_id="start-node-id",
+                relation_type=None,
+                max_depth=1,
+                direction="both",
+                include_superseded=False,
+                properties_filter=None,
+                sector_filter=None,
+                use_ief=False,
+                query_embedding=None
+            )
             assert neighbors[0]["distance"] == 1
             assert neighbors[0]["relation"] == "USES"
 
@@ -109,7 +124,10 @@ class TestGraphQueryNeighborsTool:
                 max_depth=1,
                 direction="both",  # Default direction
                 include_superseded=False,  # Story 7.5 default
-                properties_filter=None  # Story 7.6 default
+                properties_filter=None,  # Story 7.6 default
+                sector_filter=None,  # Story 9-3 default
+                use_ief=False,  # Story 7.7 default
+                query_embedding=None  # Story 7.7 default
             )
 
     @pytest.mark.asyncio
@@ -225,7 +243,10 @@ class TestGraphQueryNeighborsTool:
                 max_depth=1,
                 direction="both",  # Default direction
                 include_superseded=False,  # Story 7.5 default
-                properties_filter=None  # Story 7.6 default
+                properties_filter=None,  # Story 7.6 default
+                sector_filter=None,  # Story 9-3 default
+                use_ief=False,  # Story 7.7 default
+                query_embedding=None  # Story 7.7 default
             )
 
     @pytest.mark.asyncio
@@ -383,7 +404,10 @@ class TestGraphQueryNeighborsTool:
                 max_depth=1,  # Default depth
                 direction="both",  # Default direction
                 include_superseded=False,  # Story 7.5 default
-                properties_filter=None  # Story 7.6 default
+                properties_filter=None,  # Story 7.6 default
+                sector_filter=None,  # Story 9-3 default
+                use_ief=False,  # Story 7.7 default
+                query_embedding=None  # Story 7.7 default
             )
 
     @pytest.mark.asyncio
@@ -569,7 +593,10 @@ class TestBidirectionalTraversal:
                 max_depth=1,
                 direction="both",
                 include_superseded=False,  # Story 7.5 default
-                properties_filter=None  # Story 7.6 default
+                properties_filter=None,  # Story 7.6 default
+                sector_filter=None,  # Story 9-3 default
+                use_ief=False,  # Story 7.7 default
+                query_embedding=None  # Story 7.7 default
             )
 
     @pytest.mark.asyncio
@@ -598,7 +625,10 @@ class TestBidirectionalTraversal:
                 max_depth=1,
                 direction="outgoing",
                 include_superseded=False,  # Story 7.5 default
-                properties_filter=None  # Story 7.6 default
+                properties_filter=None,  # Story 7.6 default
+                sector_filter=None,  # Story 9-3 default
+                use_ief=False,  # Story 7.7 default
+                query_embedding=None  # Story 7.7 default
             )
 
     @pytest.mark.asyncio
@@ -643,7 +673,10 @@ class TestBidirectionalTraversal:
                 max_depth=1,
                 direction="incoming",
                 include_superseded=False,  # Story 7.5 default
-                properties_filter=None  # Story 7.6 default
+                properties_filter=None,  # Story 7.6 default
+                sector_filter=None,  # Story 9-3 default
+                use_ief=False,  # Story 7.7 default
+                query_embedding=None  # Story 7.7 default
             )
 
     @pytest.mark.asyncio
@@ -793,3 +826,198 @@ class TestDirectionValidationInDBLayer:
 
         # Verify default is "both"
         assert sig.parameters["direction"].default == "both"
+
+
+class TestSectorFilter:
+    """Test sector_filter parameter (Story 9-3)."""
+
+    @pytest.mark.asyncio
+    async def test_sector_filter_single_sector(self):
+        """Test filtering by single memory sector (AC #1)."""
+        with patch('mcp_server.tools.graph_query_neighbors.get_node_by_name') as mock_get_node, \
+             patch('mcp_server.tools.graph_query_neighbors.query_neighbors') as mock_query:
+
+            mock_get_node.return_value = {
+                "id": "node-id",
+                "name": "TestNode",
+                "label": "Entity"
+            }
+            mock_query.return_value = [
+                {
+                    "node_id": "1",
+                    "name": "EmotionalNeighbor",
+                    "memory_sector": "emotional",
+                    "relation": "FEELS",
+                    "weight": 0.9,
+                    "distance": 1
+                }
+            ]
+
+            arguments = {
+                "node_name": "TestNode",
+                "sector_filter": ["emotional"]
+            }
+
+            result = await handle_graph_query_neighbors(arguments)
+
+            assert result["status"] == "success"
+            mock_query.assert_called_once_with(
+                node_id="node-id",
+                relation_type=None,
+                max_depth=1,
+                direction="both",
+                include_superseded=False,
+                properties_filter=None,
+                sector_filter=["emotional"],
+                use_ief=False,
+                query_embedding=None
+            )
+
+    @pytest.mark.asyncio
+    async def test_sector_filter_multiple_sectors(self):
+        """Test filtering by multiple memory sectors (AC #2)."""
+        with patch('mcp_server.tools.graph_query_neighbors.get_node_by_name') as mock_get_node, \
+             patch('mcp_server.tools.graph_query_neighbors.query_neighbors') as mock_query:
+
+            mock_get_node.return_value = {"id": "node-id", "name": "TestNode", "label": "Entity"}
+            mock_query.return_value = []
+
+            arguments = {
+                "node_name": "TestNode",
+                "sector_filter": ["emotional", "episodic"]
+            }
+
+            result = await handle_graph_query_neighbors(arguments)
+
+            assert result["status"] == "success"
+            mock_query.assert_called_once_with(
+                node_id="node-id",
+                relation_type=None,
+                max_depth=1,
+                direction="both",
+                include_superseded=False,
+                properties_filter=None,
+                sector_filter=["emotional", "episodic"],
+                use_ief=False,
+                query_embedding=None
+            )
+
+    @pytest.mark.asyncio
+    async def test_sector_filter_none_means_all_sectors(self):
+        """Test that sector_filter=None returns all sectors (AC #3)."""
+        with patch('mcp_server.tools.graph_query_neighbors.get_node_by_name') as mock_get_node, \
+             patch('mcp_server.tools.graph_query_neighbors.query_neighbors') as mock_query:
+
+            mock_get_node.return_value = {"id": "node-id", "name": "TestNode", "label": "Entity"}
+            mock_query.return_value = []
+
+            arguments = {
+                "node_name": "TestNode",
+                "sector_filter": None
+            }
+
+            result = await handle_graph_query_neighbors(arguments)
+
+            assert result["status"] == "success"
+            mock_query.assert_called_once_with(
+                node_id="node-id",
+                relation_type=None,
+                max_depth=1,
+                direction="both",
+                include_superseded=False,
+                properties_filter=None,
+                sector_filter=None,
+                use_ief=False,
+                query_embedding=None
+            )
+
+    @pytest.mark.asyncio
+    async def test_sector_filter_empty_list_returns_empty(self):
+        """Test that sector_filter=[] returns empty results (AC #4)."""
+        from mcp_server.db.graph import query_neighbors
+
+        # Empty list should return immediately without DB query
+        result = query_neighbors(
+            node_id="some-id",
+            sector_filter=[]
+        )
+
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_sector_filter_invalid_sector_validation_error(self):
+        """Test validation error for invalid sector values (AC #7)."""
+        with patch('mcp_server.tools.graph_query_neighbors.get_node_by_name') as mock_get_node:
+
+            mock_get_node.return_value = {"id": "node-id", "name": "TestNode", "label": "Entity"}
+
+            arguments = {
+                "node_name": "TestNode",
+                "sector_filter": ["invalid_sector"]
+            }
+
+            result = await handle_graph_query_neighbors(arguments)
+
+            assert "error" in result
+            assert "Invalid sector(s)" in result["details"]
+            assert "invalid_sector" in result["details"]
+
+    @pytest.mark.asyncio
+    async def test_sector_filter_in_query_params_response(self):
+        """Test that sector_filter appears in query_params response (AC #1)."""
+        with patch('mcp_server.tools.graph_query_neighbors.get_node_by_name') as mock_get_node, \
+             patch('mcp_server.tools.graph_query_neighbors.query_neighbors') as mock_query:
+
+            mock_get_node.return_value = {"id": "node-id", "name": "TestNode", "label": "Entity"}
+            mock_query.return_value = []
+
+            arguments = {
+                "node_name": "TestNode",
+                "sector_filter": ["emotional"]
+            }
+
+            result = await handle_graph_query_neighbors(arguments)
+
+            assert result["status"] == "success"
+            assert result["query_params"]["sector_filter"] == ["emotional"]
+
+    @pytest.mark.asyncio
+    async def test_sector_filter_not_list_validation_error(self):
+        """Test validation error when sector_filter is not a list."""
+        with patch('mcp_server.tools.graph_query_neighbors.get_node_by_name') as mock_get_node:
+
+            mock_get_node.return_value = {"id": "node-id", "name": "TestNode", "label": "Entity"}
+
+            arguments = {
+                "node_name": "TestNode",
+                "sector_filter": "emotional"  # String, not list
+            }
+
+            result = await handle_graph_query_neighbors(arguments)
+
+            assert "error" in result
+            assert "must be array of sector names" in result["details"]
+
+    @pytest.mark.asyncio
+    async def test_sector_filter_combined_with_properties_filter(self):
+        """Test combined sector_filter AND properties_filter (AC #8)."""
+        with patch('mcp_server.tools.graph_query_neighbors.get_node_by_name') as mock_get_node, \
+             patch('mcp_server.tools.graph_query_neighbors.query_neighbors') as mock_query:
+
+            mock_get_node.return_value = {"id": "node-id", "name": "TestNode", "label": "Entity"}
+            mock_query.return_value = []
+
+            arguments = {
+                "node_name": "TestNode",
+                "sector_filter": ["emotional"],
+                "properties_filter": {"participants": "I/O"}
+            }
+
+            result = await handle_graph_query_neighbors(arguments)
+
+            assert result["status"] == "success"
+            # Verify both filters are passed to DB
+            mock_query.assert_called_once()
+            call_kwargs = mock_query.call_args.kwargs
+            assert call_kwargs["sector_filter"] == ["emotional"]
+            assert call_kwargs["properties_filter"] == {"participants": "I/O"}

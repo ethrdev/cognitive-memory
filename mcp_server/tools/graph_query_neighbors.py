@@ -44,7 +44,8 @@ async def handle_graph_query_neighbors(arguments: dict[str, Any]) -> dict[str, A
         direction = arguments.get("direction", "both")  # Optional, default "both"
         include_superseded = arguments.get("include_superseded", False)  # Optional, default False
         properties_filter = arguments.get("properties_filter")  # Optional, Story 7.6
-        use_ief = arguments.get("use_ief", False)  # Optional, default False
+        sector_filter = arguments.get("sector_filter")  # Optional, Story 9-3
+        use_ief = arguments.get("use_ief", False)  # Optional, Story 7.7
         query_embedding = arguments.get("query_embedding")  # Optional
 
         # Parameter validation
@@ -104,6 +105,23 @@ async def handle_graph_query_neighbors(arguments: dict[str, Any]) -> dict[str, A
                     "tool": "graph_query_neighbors",
                 }
 
+        # Story 9-3: sector_filter validation (must be list of valid MemorySector values or None)
+        if sector_filter is not None:
+            if not isinstance(sector_filter, list):
+                return {
+                    "error": "Parameter validation failed",
+                    "details": "Invalid 'sector_filter' parameter (must be array of sector names)",
+                    "tool": "graph_query_neighbors",
+                }
+            valid_sectors = {"emotional", "episodic", "semantic", "procedural", "reflective"}
+            invalid_sectors = set(sector_filter) - valid_sectors
+            if invalid_sectors:
+                return {
+                    "error": "Parameter validation failed",
+                    "details": f"Invalid sector(s): {invalid_sectors}. Must be one of: {valid_sectors}",
+                    "tool": "graph_query_neighbors",
+                }
+
         # use_ief validation (must be boolean)
         if not isinstance(use_ief, bool):
             return {
@@ -143,6 +161,7 @@ async def handle_graph_query_neighbors(arguments: dict[str, Any]) -> dict[str, A
 
             # Query neighbors with the specified parameters
             # Story 7.6: Added properties_filter parameter
+            # Story 9-3: Added sector_filter parameter
             result = query_neighbors(
                 node_id=start_node["id"],
                 relation_type=relation_type,
@@ -150,6 +169,7 @@ async def handle_graph_query_neighbors(arguments: dict[str, Any]) -> dict[str, A
                 direction=direction,
                 include_superseded=include_superseded,
                 properties_filter=properties_filter,
+                sector_filter=sector_filter,
                 use_ief=use_ief,
                 query_embedding=query_embedding
             )
@@ -184,6 +204,7 @@ async def handle_graph_query_neighbors(arguments: dict[str, Any]) -> dict[str, A
                     "direction": direction,
                     "include_superseded": include_superseded,
                     "properties_filter": properties_filter,  # Story 7.6
+                    "sector_filter": sector_filter,  # Story 9-3
                     "use_ief": use_ief,  # Story 7.7: ICAI parameter
                 },
                 "execution_time_ms": round(execution_time, 2),
