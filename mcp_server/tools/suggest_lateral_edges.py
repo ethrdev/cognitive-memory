@@ -10,10 +10,58 @@ Story: Phase 3b - Lateral Edge Suggestions (Graph-Nutzung-Request 2026-01-02)
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
 from typing import Any
 
+from openai import APIConnectionError, OpenAI, RateLimitError
+
 from mcp_server.db.graph import get_node_by_name, query_neighbors
+
+
+async def _get_embedding(text: str) -> list[float] | None:
+    """
+    Generate embedding for text using OpenAI API with retry logic.
+
+    Returns None if embedding generation fails.
+    """
+    logger = logging.getLogger(__name__)
+    api_key = os.environ.get("OPENAI_API_KEY")
+
+    if not api_key:
+        logger.error("OPENAI_API_KEY not set")
+        return None
+
+    client = OpenAI(api_key=api_key)
+    delays = [1, 2, 4]
+    max_retries = 3
+
+    for attempt in range(max_retries):
+        try:
+            response = client.embeddings.create(
+                model="text-embedding-3-small",
+                input=text,
+                encoding_format="float"
+            )
+            return response.data[0].embedding
+        except RateLimitError:
+            if attempt < max_retries - 1:
+                await asyncio.sleep(delays[attempt])
+            else:
+                logger.error(f"Rate limit after {max_retries} attempts")
+                return None
+        except APIConnectionError:
+            if attempt < max_retries - 1:
+                await asyncio.sleep(delays[attempt])
+            else:
+                logger.error(f"API connection error after {max_retries} attempts")
+                return None
+        except Exception as e:
+            logger.error(f"Embedding error: {e}")
+            return None
+
+    return None
 
 
 async def handle_suggest_lateral_edges(arguments: dict[str, Any]) -> dict[str, Any]:
@@ -70,10 +118,9 @@ async def handle_suggest_lateral_edges(arguments: dict[str, Any]) -> dict[str, A
         # 3. Perform semantic search for related nodes
         # We use hybrid_search via direct DB query for graph nodes only
         from mcp_server.db.connection import get_connection
-        from mcp_server.analysis.embedding import get_embedding
 
         # Get embedding for the node name
-        query_embedding = get_embedding(node_name)
+        query_embedding = await _get_embedding(node_name)
 
         if query_embedding is None:
             return {
