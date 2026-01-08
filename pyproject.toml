@@ -138,7 +138,6 @@ markers = [
     "integration: marks tests as integration tests requiring real database",
 ]
 asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "function"
 
 [tool.bandit]
 exclude_dirs = ["tests", "venv", ".venv", "scripts/migration"]
