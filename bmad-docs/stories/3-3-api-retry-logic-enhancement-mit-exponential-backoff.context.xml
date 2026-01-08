@@ -1,0 +1,271 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>3</epicId>
+    <storyId>3</storyId>
+    <title>API Retry-Logic Enhancement mit Exponential Backoff</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-18</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>bmad-docs/stories/3-3-api-retry-logic-enhancement-mit-exponential-backoff.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>MCP Server</asA>
+    <iWant>robuste Retry-Logic für alle externen APIs (OpenAI, Anthropic) haben</iWant>
+    <soThat>transiente Fehler (Rate Limits, Network Glitches) automatisch recovered werden</soThat>
+    <tasks>
+      ### Task 1: Database Schema Migration für api_retry_log (AC: 3.3.6)
+      - Subtask 1.1: Create migration file `008_api_retry_log.sql`
+      - Subtask 1.2: Define table schema mit allen required columns
+      - Subtask 1.3: Add indexes für Performance
+      - Subtask 1.4: Execute migration on PostgreSQL database
+
+      ### Task 2: Implement Core Retry Logic Utility (AC: 3.3.1)
+      - Subtask 2.1-2.9: Enhance existing retry_logic.py with database logging
+
+      ### Task 3: Enhance OpenAI Embeddings Client mit Retry (AC: 3.3.2)
+      - Apply decorator to create_embedding() function (FILE NEEDS TO BE CREATED)
+
+      ### Task 4: Enhance Anthropic Haiku Evaluation Client mit Retry (AC: 3.3.3)
+      - Decorator already applied (line 77), enhance with fallback behavior
+
+      ### Task 5: Enhance Anthropic Haiku Reflexion Client mit Retry (AC: 3.3.4)
+      - Decorator already applied (line 227), enhance with skip behavior
+
+      ### Task 6: Enhance Dual Judge Clients mit Retry (AC: 3.3.5)
+      - Add decorator to dual_judge.py methods
+
+      ### Task 7: Testing and Validation (All ACs)
+      - Manual testing with retry simulations
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    ### AC-3.3.1: Exponential Backoff Implementation
+    - Delays: 1s, 2s, 4s, 8s (4 Retries total)
+    - Jitter: ±20% Random Delay
+    - Formula: delay = base_delay * (2 ** retry_count) * (1 + jitter)
+    - Total Max Time: ~15s
+
+    ### AC-3.3.2: OpenAI Embeddings API Retry
+    - Retry Conditions: 429, 503, 408/504
+    - Max Retries: 4 Attempts
+    - Failure: Error zurückgeben an Claude Code
+
+    ### AC-3.3.3: Anthropic Haiku Evaluation API Retry
+    - Max Retries: 4 Attempts
+    - Fallback: Claude Code Evaluation nach 4 failures
+
+    ### AC-3.3.4: Anthropic Haiku Reflexion API Retry
+    - Max Retries: 4 Attempts
+    - Failure: Skip Reflexion (return None)
+
+    ### AC-3.3.5: Dual Judge APIs Retry
+    - Independent retry for GPT-4o and Haiku
+    - Failure: Log error, raise Exception
+
+    ### AC-3.3.6: Retry Statistics Logging
+    - Table: api_retry_log
+    - Columns: timestamp, api_name, error_type, retry_count, success
+    - Enable analysis of API stability
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>bmad-docs/epics.md</path>
+        <title>Epic 3 Story Breakdown</title>
+        <section>Story 3.3 (lines 964-1008)</section>
+        <snippet>Story 3.3 implements robuste Retry-Logic mit Exponential Backoff für alle externen API Calls. Retry bei Rate Limits (429), Service Unavailable (503), Timeout. Max 4 Retries mit Delays 1s, 2s, 4s, 8s. Jitter ±20% verhindert Thundering Herd.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/architecture.md</path>
+        <title>System Architecture</title>
+        <section>Error Handling Strategy (lines 378-388)</section>
+        <snippet>Retry-Logic: Exponential Backoff (1s, 2s, 4s, 8s, max 4 retries). Fallback: Haiku API Ausfall → Claude Code Evaluation (degraded mode). No Fallback: OpenAI Embeddings (kritisch, kein Fallback möglich).</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/architecture.md</path>
+        <title>Database Schema</title>
+        <section>api_retry_log Table (lines 318-329)</section>
+        <snippet>Table api_retry_log stores retry statistics: timestamp, api_name, error_type, retry_count, success. Indexes on timestamp DESC, api_name. Enables analysis of API instability patterns.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/architecture.md</path>
+        <title>API Integration</title>
+        <section>External APIs (lines 437-476)</section>
+        <snippet>OpenAI Embeddings: text-embedding-3-small, 1536 dims. Haiku Evaluation: claude-3-5-haiku-20241022, Temperature 0.0, deterministic. Haiku Reflexion: Temperature 0.7, creative. All APIs require retry logic.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/stories/3-2-model-drift-detection-mit-daily-golden-test-mcp-tool-get-golden-test-results.md</path>
+        <title>Previous Story 3.2 Learnings</title>
+        <section>Dev Notes - Learnings from Previous Story</section>
+        <snippet>Story 3.2 Senior Developer Review identified incomplete error handling in core function. Lesson: Retry-Logic muss im core function implementiert werden (via decorator). External API clients already exist: openai_client.py, anthropic_client.py.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>mcp_server/utils/retry_logic.py</path>
+        <kind>utility</kind>
+        <symbol>retry_with_backoff</symbol>
+        <lines>27-140</lines>
+        <reason>EXISTING decorator with exponential backoff and jitter. Already implements retry logic for Haiku API. Needs enhancement: Add actual database logging to api_retry_log table (currently placeholder logger.info/error calls on lines 210-261).</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/external/anthropic_client.py</path>
+        <kind>api_client</kind>
+        <symbol>HaikuClient</symbol>
+        <lines>1-415</lines>
+        <reason>EXISTING client with @retry_with_backoff decorator already applied to evaluate_answer() (line 77) and generate_reflection() (line 227). Already imports from mcp_server.utils.retry_logic. Needs modification: Add fallback_on_failure parameter for evaluation, skip behavior for reflexion.</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/db/connection.py</path>
+        <kind>database</kind>
+        <symbol>get_connection</symbol>
+        <lines>96-151</lines>
+        <reason>REUSE connection pool pattern for api_retry_log database queries. Context manager pattern ensures safe database operations. Will be used by enhanced _log_retry_attempt and _log_retry_failure functions.</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/tools/dual_judge.py</path>
+        <kind>tool</kind>
+        <symbol>DualJudgeEvaluator</symbol>
+        <lines>26-100</lines>
+        <reason>MODIFY to add @retry_with_backoff decorator to _call_gpt4o_judge() and _call_haiku_judge() methods. Currently has manual retry logic with delays=[1,2,4,8] on line 100. Should replace manual logic with decorator for DRY compliance.</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/db/migrations/007_model_drift_log.sql</path>
+        <kind>migration</kind>
+        <symbol>N/A</symbol>
+        <lines>1-102</lines>
+        <reason>REFERENCE for migration pattern. Migration 008 will follow same structure: CREATE TABLE, indexes, comments. Pattern: PRIMARY KEY on date, indexes on DESC columns, CHECK constraints for validation.</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <python>
+        <package name="python" version="^3.11"/>
+        <package name="anthropic" version="^0.25.0"/>
+        <package name="openai" version="^1.0.0"/>
+        <package name="psycopg2-binary" version="^2.9.0"/>
+        <package name="mcp" version="^1.0.0"/>
+        <package name="python-dotenv" version="^1.0.0"/>
+        <package name="asyncio" version="builtin"/>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    - All API calls must be async functions (use AsyncAnthropic, AsyncOpenAI)
+    - Retry decorator only works with async functions
+    - Max 4 retries enforced (no more, no less)
+    - Exponential backoff delays: [1, 2, 4, 8] seconds (configurable via parameter)
+    - Jitter must be ±20% randomization using random.uniform(0.8, 1.2)
+    - Retryable HTTP status codes: 429 (Rate Limit), 503 (Service Unavailable), 408/504 (Timeout)
+    - Non-retryable errors must fail immediately (400, 401, 403, etc.)
+    - Database logging to api_retry_log table is REQUIRED (not optional)
+    - OpenAI Embeddings: NO fallback possible (critical dependency)
+    - Haiku Evaluation: Fallback to Claude Code Evaluation after 4 failures
+    - Haiku Reflexion: Skip reflexion after 4 failures (return None)
+    - Dual Judge: Independent retry logic for each judge (failures don't cascade)
+    - All file paths must be relative to project root: mcp_server/*, not /home/user/i-o/mcp_server/*
+    - Migration naming: 008_api_retry_log.sql (sequential numbering after 007)
+    - Async/await pattern required throughout (no synchronous blocking calls)
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>retry_with_backoff</name>
+      <kind>decorator</kind>
+      <signature>
+def retry_with_backoff(
+    max_retries: int = 4,
+    base_delays: List[float] | None = None,
+    jitter: bool = True,
+) -> Callable[[F], F]:
+    """Decorator for exponential backoff retry logic with jitter."""
+      </signature>
+      <path>mcp_server/utils/retry_logic.py</path>
+    </interface>
+    <interface>
+      <name>api_retry_log</name>
+      <kind>database_table</kind>
+      <signature>
+CREATE TABLE api_retry_log (
+    id SERIAL PRIMARY KEY,
+    timestamp TIMESTAMPTZ DEFAULT NOW(),
+    api_name VARCHAR(50) NOT NULL,
+    error_type VARCHAR(100),
+    retry_count INTEGER NOT NULL,
+    success BOOLEAN NOT NULL
+);
+CREATE INDEX idx_retry_timestamp ON api_retry_log(timestamp DESC);
+CREATE INDEX idx_retry_api ON api_retry_log(api_name);
+CREATE INDEX idx_retry_failure ON api_retry_log(success) WHERE success = FALSE;
+      </signature>
+      <path>mcp_server/db/migrations/008_api_retry_log.sql</path>
+    </interface>
+    <interface>
+      <name>get_connection</name>
+      <kind>context_manager</kind>
+      <signature>
+@contextmanager
+def get_connection() -> Iterator[connection]:
+    """Get a database connection from the pool."""
+      </signature>
+      <path>mcp_server/db/connection.py</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+Story 3.3 follows manual testing approach (from architecture.md Testing Strategy). No automated unit tests required for personal use project. Testing focuses on:
+1. Database migration validation (SQL syntax, constraints, indexes)
+2. Decorator application testing (verify no code breakage)
+3. Retry simulation (mock API failures with 429, 503, 408 errors)
+4. Jitter validation (verify delays vary ±20%)
+5. Database logging verification (query api_retry_log after test runs)
+6. Edge case testing (immediate success, all retries fail, non-retryable errors)
+
+Success criteria: Retry logic correctly handles transient failures, logs all attempts to database, applies jitter to prevent thundering herd, respects max 4 retries limit.
+    </standards>
+    <locations>
+      - Manual tests executed via psql CLI for database migration
+      - Python interpreter for decorator testing with mocked API clients
+      - Database queries: SELECT * FROM api_retry_log ORDER BY timestamp DESC
+      - Log monitoring: tail -f /var/log/cognitive-memory/mcp.log
+    </locations>
+    <ideas>
+      <test ac="AC-3.3.1">
+        <description>Test exponential backoff delays with jitter</description>
+        <approach>Mock API client that fails 3 times, measure actual delays between retries, verify they fall within ±20% of expected values [1s, 2s, 4s]</approach>
+      </test>
+      <test ac="AC-3.3.2">
+        <description>Test OpenAI Embeddings retry on 429 Rate Limit</description>
+        <approach>Mock OpenAI API to return 429 error twice then succeed. Verify decorator retries twice, logs to api_retry_log, returns result on 3rd attempt.</approach>
+      </test>
+      <test ac="AC-3.3.3">
+        <description>Test Haiku Evaluation fallback after 4 failures</description>
+        <approach>Mock Haiku API to fail all 4 retries with 503. Verify FallbackRequiredException raised, all 4 attempts logged to database with success=FALSE.</approach>
+      </test>
+      <test ac="AC-3.3.4">
+        <description>Test Haiku Reflexion skip behavior</description>
+        <approach>Mock Haiku API to timeout all retries. Verify function returns None instead of raising exception, Warning logged about skipped reflexion.</approach>
+      </test>
+      <test ac="AC-3.3.5">
+        <description>Test Dual Judge independent retry</description>
+        <approach>Mock GPT-4o to succeed on retry #2, Haiku to succeed on retry #3. Verify each judge retries independently, both eventually succeed.</approach>
+      </test>
+      <test ac="AC-3.3.6">
+        <description>Test api_retry_log database logging</description>
+        <approach>Run multiple retry scenarios, query database for all logged entries. Verify timestamp, api_name, error_type, retry_count, success columns populated correctly.</approach>
+      </test>
+      <test edge="Non-retryable error">
+        <description>Test immediate failure on 401 Unauthorized</description>
+        <approach>Mock API to return 401 error. Verify decorator does not retry (not retryable), exception raised immediately, only 1 log entry created.</approach>
+      </test>
+      <test edge="Immediate success">
+        <description>Test no retry when API succeeds first time</description>
+        <approach>Mock API to succeed on first call. Verify no retries triggered, no entries in api_retry_log (only log successful operations if attempt > 0).</approach>
+      </test>
+    </ideas>
+  </tests>
+</story-context>

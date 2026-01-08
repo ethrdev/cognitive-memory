@@ -1,0 +1,175 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>4</epicId>
+    <storyId>3</storyId>
+    <title>graph_add_edge Tool Implementation</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-30</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>/home/ethr/01-projects/ai-experiments/cognitive-memory/bmad-docs/stories/4-3-graph-add-edge-tool-implementation.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Claude Code</asA>
+    <iWant>Kanten zwischen Graph-Knoten erstellen</iWant>
+    <soThat>Beziehungen (USES, SOLVES, CREATED_BY) gespeichert werden</soThat>
+    <tasks>### Task 1: MCP Tool Grundstruktur (AC: 4.3.1, 4.3.2)
+
+- [ ] Subtask 1.1: Erstelle `mcp_server/tools/graph_add_edge.py`
+  - MCP Tool Definition mit Pydantic Schema
+  - Input-Parameter: source_name (str), target_name (str), relation (str), source_label (str, optional, default="Entity"), target_label (str, optional, default="Entity"), weight (float, optional, default=1.0), properties (dict, optional)
+  - Folge bestehendes Tool-Pattern aus `mcp_server/tools/graph_add_node.py`
+- [ ] Subtask 1.2: Integriere Tool in `mcp_server/tools/__init__.py`
+  - Import und Registrierung analog zu `graph_add_node`
+  - Füge zu Tool-Liste hinzu
+  - Tool Definition mit korrekter JSON Schema Beschreibung
+- [ ] Subtask 1.3: Erstelle Tool-Tests
+  - Unit-Test für Parameter-Validierung
+  - Integration-Test für DB-Operationen
+  - Test für Auto-Upsert Verhalten
+
+### Task 2: Database Layer Erweiterung (AC: 4.3.1)
+
+- [ ] Subtask 2.1: Erweitere `mcp_server/db/graph.py` um `add_edge` Funktion
+  - Funktion: `add_edge(source_id, target_id, relation, weight, properties) -> dict`
+  - SQL: `INSERT ... ON CONFLICT (source_id, target_id, relation) DO UPDATE SET weight = EXCLUDED.weight, properties = EXCLUDED.properties RETURNING id`
+  - Bei Conflict: UPDATE und existing Edge zurückgeben mit `created: false`
+- [ ] Subtask 2.2: Implementiere `get_or_create_node` Helper
+  - Nutzt `add_node` intern für Auto-Upsert
+  - Gibt Node-ID zurück (entweder neu erstellt oder existierend)
+- [ ] Subtask 2.3: Implementiere transaktionale Operation
+  - Beide Node Upserts + Edge Insert in einer Transaktion
+  - Rollback bei Fehler
+  - Nutze `get_connection()` Context Manager
+
+### Task 3: Response und Error Handling (AC: 4.3.2, 4.3.3)
+
+- [ ] Subtask 3.1: Implementiere Response Format
+  - `edge_id` als UUID String
+  - `created` als Boolean
+  - `source_id`, `target_id`, `relation` als Bestätigung
+- [ ] Subtask 3.2: Implementiere Parameter-Validierung
+  - source_name muss nicht-leer sein
+  - target_name muss nicht-leer sein
+  - relation muss nicht-leer sein
+  - weight muss Float zwischen 0.0 und 1.0 sein (wenn vorhanden)
+  - properties muss dict sein (wenn vorhanden)
+- [ ] Subtask 3.3: Implementiere Retry-Logic Pattern
+  - Nutze Error Handling Pattern aus `graph_add_node.py`
+  - Structured Error Responses für verschiedene Fehlertypen
+
+### Task 4: Relation-Standardisierung (AC: 4.3.3)
+
+- [ ] Subtask 4.1: Definiere Standard-Relations
+  - "USES" - Projekt nutzt Technologie
+  - "SOLVES" - Lösung behebt Problem
+  - "CREATED_BY" - Entität wurde von Agent erstellt
+  - "RELATED_TO" - Allgemeine Verknüpfung
+  - "DEPENDS_ON" - Abhängigkeit
+- [ ] Subtask 4.2: Optionale Relation-Validierung
+  - Warning bei nicht-Standard Relations (nicht blockierend)
+  - Logging für unbekannte Relations
+
+### Task 5: Testing und Dokumentation (AC: 4.3.1, 4.3.2, 4.3.3)
+
+- [ ] Subtask 5.1: Erstelle `tests/test_graph_add_edge.py`
+  - Test: Neue Edge erstellen (beide Nodes existieren)
+  - Test: Neue Edge erstellen mit Auto-Upsert (Nodes werden erstellt)
+  - Test: Idempotenz (zweimal gleiche Daten → Update)
+  - Test: Mit optionalen Feldern (weight, properties)
+  - Test: Fehlerbehandlung bei ungültigen Parametern
+  - Test: Weight-Range Validierung (0.0-1.0)
+- [ ] Subtask 5.2: Manuelles Testing in Claude Code
+  - Tool über MCP aufrufen
+  - Response validieren
+  - Edge Cases testen (Self-Loop, Weight Boundaries)
+- [ ] Subtask 5.3: Dokumentation vorbereiten
+  - API-Referenz für Story 4.8 vorbereiten
+  - Code-Kommentare für Usage Patterns</tasks>
+  </story>
+
+  <acceptanceCriteria>### AC-4.3.1: graph_add_edge Tool erstellen mit Auto-Upsert
+
+**Given** Nodes existieren (oder werden automatisch erstellt)
+**When** Claude Code `graph_add_edge` aufruft mit (source_name, target_name, relation, source_label, target_label, weight, properties)
+**Then** wird die Kante erstellt:
+
+- Source und Target Nodes werden automatisch erstellt falls nicht vorhanden (Upsert via `add_node`)
+- Edge wird eingefügt mit Relation und optionalem Weight (default 1.0)
+- Idempotent: Wenn Edge source+target+relation existiert → Update weight/properties
+- Transaktional: Beide Node Upserts + Edge Insert/Update in einer Transaktion
+
+### AC-4.3.2: Response Format
+
+**Given** graph_add_edge wurde aufgerufen
+**When** die Operation erfolgreich ist
+**Then** enthält die Response:
+
+- `edge_id` (UUID)
+- `created` (boolean: true wenn neu, false wenn Update)
+- `source_id`, `target_id` zur Bestätigung
+- `relation` zur Bestätigung
+
+### AC-4.3.3: Standardisierte Relations und Fehlerbehandlung
+
+**Given** graph_add_edge wird aufgerufen
+**When** die Relation angegeben wird
+**Then** werden Standardisierte Relations unterstützt:
+
+- "USES" - Projekt nutzt Technologie
+- "SOLVES" - Lösung behebt Problem
+- "CREATED_BY" - Entität wurde von Agent erstellt
+- "RELATED_TO" - Allgemeine Verknüpfung
+- "DEPENDS_ON" - Abhängigkeit
+
+**And** bei ungültigen Parametern: Klare Error-Message
+**And** bei DB-Connection-Fehler: Retry-Logic (wie andere Tools)
+**And** Weight muss im Bereich 0.0-1.0 liegen</acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="bmad-docs/epics.md" title="Epic 4: GraphRAG Integration (v3.2-GraphRAG)" section="Story 4.3: graph_add_edge Tool Implementation" snippet="Story 4.3 is the second Tool-Implementation of Epic 4 (GraphRAG Integration) and builds directly on the graph_add_node Tool from Story 4.2. The graph_add_edge Tool enables Claude Code to store relationships between entities in the Knowledge Graph." />
+      <doc path="bmad-docs/architecture.md" title="MCP Tools & Resources" section="11 MCP Tools (Actions)" snippet="graph_add_edge: Graph Edge erstellen - Input: source_name, target_name, relation, source_label, target_label, weight - Output: {edge_id, created} - Epic: 4.3" />
+      <doc path="bmad-docs/architecture.md" title="ADR-006: PostgreSQL Adjacency List für GraphRAG" section="Entscheidung und Rationale" snippet="Graph-Speicherung via PostgreSQL Adjacency List Pattern (nodes + edges Tabellen) - Graph-Traversal via WITH RECURSIVE CTEs - Keine neue Dependency, nutzt natives PostgreSQL" />
+    </docs>
+    <code>
+      <code path="mcp_server/tools/graph_add_node.py" kind="tool" symbol="handle_graph_add_node" lines="26-116" reason="Reference implementation for MCP tool pattern - parameter validation, error handling, database calls" />
+      <code path="mcp_server/tools/graph_add_node.py" kind="constants" symbol="STANDARD_LABELS" lines="20-23" reason="Standard labels pattern for graph_add_edge relations" />
+      <code path="mcp_server/db/graph.py" kind="database" symbol="add_node" lines="21-110" reason="Database pattern for idempotent operations with INSERT ON CONFLICT - reuse for get_or_create_node helper" />
+      <code path="mcp_server/db/migrations/012_add_graph_tables.sql" kind="schema" symbol="edges table" lines="41-52" reason="Edge table schema with UNIQUE(source_id, target_id, relation) constraint for idempotency" />
+      <code path="mcp_server/tools/__init__.py" kind="registration" symbol="Tool registration" lines="1577-1615" reason="Tool registration pattern for MCP server - import, Tool() definition, handler mapping" />
+      <code path="tests/test_graph_add_node.py" kind="test" symbol="TestGraphAddNodeTool" lines="24-272" reason="Comprehensive test pattern - parameter validation, success cases, error handling" />
+    </code>
+    <dependencies>
+      <ecosystem name="python">
+        <package name="mcp" version=">=1.0.0" purpose="MCP protocol implementation for tool server" />
+        <package name="psycopg2-binary" version=">=2.9.0" purpose="PostgreSQL database connector for graph operations" />
+        <package name="pgvector" version=">=0.2.0" purpose="PostgreSQL vector extension (already used by existing graph functionality)" />
+        <package name="pytest" version=">=7.4.0" purpose="Testing framework for tool and database tests" />
+        <package name="pytest-asyncio" version=">=0.21.0" purpose="Async testing support for MCP tool handlers" />
+      </ecosystem>
+      <framework name="PostgreSQL" version="14+" purpose="Graph storage with adjacency list pattern, JSONB support, UUID generation" />
+      <framework name="MCP" version="1.0+" purpose="Model Context Protocol for tool integration with Claude Code" />
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+      <constraint type="pattern" description="Use existing MCP tool pattern from graph_add_node - parameter validation, structured error responses, logging levels" />
+      <constraint type="database" description="Idempotent operations using INSERT ... ON CONFLICT (source_id, target_id, relation) DO UPDATE SET weight = EXCLUDED.weight, properties = EXCLUDED.properties" />
+      <constraint type="transaction" description="Both Node Upserts + Edge Insert/Update must be in single transaction - rollback on any error" />
+      <constraint type="validation" description="Parameter validation: source_name, target_name, relation required; weight 0.0-1.0 range; properties dict type" />
+      <constraint type="relations" description="Standard relations: USES, SOLVES, CREATED_BY, RELATED_TO, DEPENDS_ON - non-standard relations generate warning but don't block" />
+      <constraint type="response" description="Response format must include: edge_id (UUID), created (boolean), source_id, target_id, relation for confirmation" />
+      <constraint type="performance" description="<50ms for single edge operation per ADR-006 requirements" />
+    </constraints>
+    <interfaces>
+      <interface name="graph_add_edge" kind="MCP Tool" signature="handle_graph_add_edge(arguments: dict[str, Any]) -> dict[str, Any]" path="mcp_server/tools/graph_add_edge.py" />
+      <interface name="add_edge" kind="Database Function" signature="add_edge(source_id: UUID, target_id: UUID, relation: str, weight: float, properties: str) -> dict[str, Any]" path="mcp_server/db/graph.py" />
+      <interface name="get_or_create_node" kind="Database Helper" signature="get_or_create_node(name: str, label: str) -> dict[str, Any]" path="mcp_server/db/graph.py" />
+    </interfaces>
+  <tests>
+    <standards>Testing follows established patterns from graph_add_node: pytest with async support, comprehensive parameter validation, database mocking, error handling verification. Tests include unit tests for tool logic and integration tests for database operations. Manual testing in Claude Code interface required for MCP tool validation.</standards>
+    <locations>tests/test_graph_add_edge.py (new file), tests/ directory for all tool tests, follow pytest naming conventions (test_*.py), use AsyncMock for mocking database operations and MCP tool handlers.</locations>
+    <ideas>Test for AC-4.3.1: Auto-upsert creates missing nodes via add_node calls; Test for AC-4.3.2: Response format validation (edge_id, created, source_id, target_id, relation); Test for AC-4.3.3: Standard relations validation and weight range (0.0-1.0); Test transaction rollback on errors; Test idempotency with duplicate edges; Test parameter validation for missing required fields.</ideas>
+  </tests>
+</story-context>

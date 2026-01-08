@@ -1,0 +1,268 @@
+<story-context id="4-6-hybrid-search-erweiterung-vector-keyword-graph-rrf" v="1.0">
+  <metadata>
+    <epicId>4</epicId>
+    <storyId>6</storyId>
+    <title>Hybrid Search Erweiterung (Vector + Keyword + Graph RRF)</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-30</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>bmad-docs/stories/4-6-hybrid-search-erweiterung-vector-keyword-graph-rrf.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Claude Code</asA>
+    <iWant>Graph-Ergebnisse in Hybrid Search integrieren</iWant>
+    <soThat>strukturelle Beziehungen das Retrieval verbessern</soThat>
+    <tasks>
+      <task id="1" title="RRF Fusion Erweiterung" ac="4.6.3">
+        <subtask id="1.1">Erweitere rrf_fusion() in mcp_server/tools/__init__.py - Füge graph_results Parameter hinzu</subtask>
+        <subtask id="1.2">Implementiere Weight-Normalisierung - Validiere: semantic + keyword + graph = 1.0</subtask>
+        <subtask id="1.3">Unit Tests für erweiterte RRF Fusion</subtask>
+      </task>
+      <task id="2" title="Graph-Search Funktion" ac="4.6.2">
+        <subtask id="2.1">Implementiere graph_search() Funktion - Entity Extraction via Pattern Matching</subtask>
+        <subtask id="2.2">Implementiere L2 Insight Lookup via vector_id</subtask>
+        <subtask id="2.3">Implementiere Graph-Ranking für RRF</subtask>
+        <subtask id="2.4">Unit Tests für Graph-Search</subtask>
+      </task>
+      <task id="3" title="Query-Routing Logik" ac="4.6.1">
+        <subtask id="3.1">Implementiere detect_relational_query() Funktion</subtask>
+        <subtask id="3.2">Implementiere Weight-Adjustment basierend auf Query-Type</subtask>
+        <subtask id="3.3">Unit Tests für Query-Routing</subtask>
+      </task>
+      <task id="4" title="handle_hybrid_search Erweiterung" ac="4.6.3, 4.6.5">
+        <subtask id="4.1">Erweitere handle_hybrid_search() um Graph-Search Integration</subtask>
+        <subtask id="4.2">Erweitere Response-Format (graph_results_count, query_type, applied_weights)</subtask>
+        <subtask id="4.3">Backwards-Kompatibilität sicherstellen</subtask>
+        <subtask id="4.4">Integration Tests für erweiterte Hybrid Search</subtask>
+      </task>
+      <task id="5" title="Config-Integration" ac="4.6.4">
+        <subtask id="5.1">Erweitere config.yaml Schema - hybrid_search_weights, query_routing</subtask>
+        <subtask id="5.2">Implementiere Config-Loader in mcp_server/config.py</subtask>
+        <subtask id="5.3">Unit Tests für Config-Loading</subtask>
+      </task>
+      <task id="6" title="Testing und Dokumentation" ac="4.6.1-4.6.5">
+        <subtask id="6.1">Erstelle tests/test_hybrid_search_graph.py</subtask>
+        <subtask id="6.2">Integration Tests mit Real Data</subtask>
+        <subtask id="6.3">Manuelles Testing in Claude Code</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-4.6.1" title="Query-Routing Logik für relationale vs. semantische Queries">
+      <given>hybrid_search Tool existiert mit Semantic + Keyword Search (Story 1.6)</given>
+      <when>eine Query relationale Keywords enthält (z.B. "nutzt", "verwendet", "verbunden")</when>
+      <then>
+        - Erkennung relationaler Patterns via Keyword-Matching (Deutsch + Englisch)
+        - Bei Match: weight_graph=0.4, weight_semantic=0.4, weight_keyword=0.2
+        - Ohne Match: Default 60/20/20 (Semantic/Keyword/Graph)
+        - Keyword-Liste konfigurierbar in config.yaml
+      </then>
+    </criterion>
+    <criterion id="AC-4.6.2" title="Graph-Search Integration">
+      <given>Query-Routing hat relationale Keywords erkannt</given>
+      <when>Graph-Search ausgeführt wird</when>
+      <then>
+        - Entity Extraction aus Query (via Simple Pattern Matching)
+        - Suche nach Nodes mit extrahierten Entities (via get_node_by_name())
+        - Für gefundene Nodes: graph_query_neighbors(depth=1) ausführen
+        - Hole L2 Insights via nodes.vector_id Referenz
+        - Return: Liste von L2 Insight IDs mit Graph-basiertem Relevanz-Score
+      </then>
+    </criterion>
+    <criterion id="AC-4.6.3" title="RRF Fusion auf 3 Quellen erweitert">
+      <given>Semantic, Keyword und Graph Search Results vorhanden</given>
+      <when>RRF Fusion ausgeführt wird</when>
+      <then>
+        - Erweitertes Format: score = w_s/(k+rank_s) + w_k/(k+rank_k) + w_g/(k+rank_g)
+        - Default-Weights: semantic=0.6, keyword=0.2, graph=0.2
+        - Bei relationalem Query: semantic=0.4, keyword=0.2, graph=0.4
+        - Docs nur in 1-2 Sources → nur diese Terms im Score
+      </then>
+    </criterion>
+    <criterion id="AC-4.6.4" title="Konfiguration in config.yaml">
+      <given>Hybrid Search Weights sollen konfigurierbar sein</given>
+      <when>config.yaml geladen wird</when>
+      <then>
+        hybrid_search_weights: semantic 0.6, keyword 0.2, graph 0.2
+        query_routing.relational_keywords: de/en Listen
+        query_routing.relational_weights: semantic 0.4, keyword 0.2, graph 0.4
+      </then>
+    </criterion>
+    <criterion id="AC-4.6.5" title="Backwards-kompatible API">
+      <given>bestehende hybrid_search Tool-Aufrufe</given>
+      <when>Clients ohne Graph-Parameter aufrufen</when>
+      <then>
+        - weights Parameter akzeptiert nun optional graph key
+        - Ohne graph key: Default 0.2 (aus config.yaml)
+        - Response-Format erweitert um graph_results_count
+        - Bestehende Tests passieren weiterhin
+      </then>
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="bmad-docs/architecture.md" title="System Architecture" section="MCP Tools">
+        hybrid_search Tool Definition (Zeilen 386-402): Beschreibt RAG Retrieval mit 60/20/20 Weights.
+      </doc>
+      <doc path="bmad-docs/architecture.md" title="System Architecture" section="Datenbank-Schema">
+        nodes + l2_insights Schema (Zeilen 337-380): Definiert nodes.vector_id FK zu l2_insights.id.
+      </doc>
+      <doc path="bmad-docs/architecture.md" title="System Architecture" section="ADR-006">
+        PostgreSQL Adjacency List Decision: Hybrid Search Erweiterung auf 60/20/20.
+      </doc>
+      <doc path="bmad-docs/stories/4-5-graph-find-path-tool-implementation.md" title="Story 4.5" section="Dev Agent Record">
+        Predecessor Story mit Code-Patterns: get_node_by_name(), query_neighbors() bereits implementiert.
+      </doc>
+      <doc path="config/config.yaml" title="System Configuration" section="memory">
+        Bestehende Search-Konfiguration: semantic_weight 0.7, keyword_weight 0.3, RRF k=60.
+      </doc>
+    </docs>
+    <code>
+      <artifact path="mcp_server/tools/__init__.py" kind="module" symbol="rrf_fusion" lines="40-94" reason="Bestehende RRF Fusion - muss um graph_results Parameter erweitert werden">
+        def rrf_fusion(semantic_results, keyword_results, weights, k=60): Reciprocal Rank Fusion mit 2 Quellen.
+      </artifact>
+      <artifact path="mcp_server/tools/__init__.py" kind="module" symbol="handle_hybrid_search" lines="689-799" reason="Bestehender Hybrid Search Handler - muss um Graph-Search Integration erweitert werden">
+        async def handle_hybrid_search(arguments): Führt Semantic + Keyword Search aus und kombiniert via RRF.
+      </artifact>
+      <artifact path="mcp_server/tools/__init__.py" kind="module" symbol="semantic_search" lines="125-179" reason="Pattern für graph_search Implementation">
+        async def semantic_search(query_embedding, top_k, conn, filter_params): pgvector cosine distance query.
+      </artifact>
+      <artifact path="mcp_server/tools/__init__.py" kind="module" symbol="keyword_search" lines="182-237" reason="Pattern für graph_search Implementation">
+        async def keyword_search(query_text, top_k, conn, filter_params): Full-Text Search via ts_rank.
+      </artifact>
+      <artifact path="mcp_server/db/graph.py" kind="module" symbol="get_node_by_name" lines="199-240" reason="WIEDERVERWENDBAR für Entity Lookup in Graph-Search">
+        def get_node_by_name(name): Sucht Node nach Name - direkt nutzbar für Entity-to-Node Mapping.
+      </artifact>
+      <artifact path="mcp_server/db/graph.py" kind="module" symbol="query_neighbors" lines="373-461" reason="WIEDERVERWENDBAR für Graph Traversal">
+        def query_neighbors(node_id, relation_type, max_depth): CTE-basierte Neighbor Discovery mit Cycle Detection.
+      </artifact>
+      <artifact path="mcp_server/db/graph.py" kind="module" symbol="add_node" lines="21-109" reason="Referenz für Node-Struktur und Idempotenz-Pattern">
+        def add_node(label, name, properties, vector_id): Zeigt nodes.vector_id FK zu l2_insights.
+      </artifact>
+      <artifact path="tests/test_graph_query_neighbors.py" kind="test" symbol="TestGraphQueryNeighborsTool" lines="27-425" reason="Test-Pattern für Graph-Integration Tests">
+        Mock-basierte Tests mit DictCursor: Muster für test_hybrid_search_graph.py.
+      </artifact>
+    </code>
+    <dependencies>
+      <python>
+        <package name="mcp" version="^1.0.0" reason="MCP Server Framework"/>
+        <package name="psycopg2-binary" version="^2.9.0" reason="PostgreSQL Database Driver"/>
+        <package name="pgvector" version="^0.2.0" reason="Vector Extension Support"/>
+        <package name="openai" version="^1.0.0" reason="Embedding API"/>
+        <package name="pyyaml" version="^6.0" reason="Config Loading"/>
+        <package name="pytest" version="^7.4.0" reason="Testing Framework" dev="true"/>
+        <package name="pytest-asyncio" version="^0.21.0" reason="Async Test Support" dev="true"/>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint source="architecture" type="pattern">
+      Python Naming Conventions: snake_case für Funktionen/Variablen, PascalCase für Klassen.
+    </constraint>
+    <constraint source="architecture" type="pattern">
+      Error Handling: Alle Exceptions → Structured JSON Response {error, details, tool}.
+    </constraint>
+    <constraint source="architecture" type="pattern">
+      MCP Tool Names: snake_case (z.B. hybrid_search, graph_query_neighbors).
+    </constraint>
+    <constraint source="dev-notes" type="performance">
+      Hybrid Search Performance: &lt;1s End-to-End, Graph-Search &lt;200ms (depth=1).
+    </constraint>
+    <constraint source="dev-notes" type="backwards-compat">
+      Bestehende hybrid_search Clients müssen ohne Änderung funktionieren.
+    </constraint>
+    <constraint source="architecture" type="database">
+      nodes.vector_id ist FK zu l2_insights.id - ermöglicht Graph→L2 Insight Lookup.
+    </constraint>
+    <constraint source="architecture" type="weights">
+      Hybrid Weights müssen zu 1.0 summieren: semantic + keyword + graph = 1.0.
+    </constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="rrf_fusion (erweitert)" kind="function" path="mcp_server/tools/__init__.py">
+      <signature>
+        def rrf_fusion(
+            semantic_results: list[dict],
+            keyword_results: list[dict],
+            graph_results: list[dict],  # NEU: Optional, default []
+            weights: dict,  # {"semantic": 0.6, "keyword": 0.2, "graph": 0.2}
+            k: int = 60
+        ) -> list[dict]
+      </signature>
+    </interface>
+    <interface name="graph_search (neu)" kind="function" path="mcp_server/tools/__init__.py">
+      <signature>
+        async def graph_search(
+            query_text: str,
+            top_k: int,
+            conn: Any
+        ) -> list[dict]
+        # Returns: [{id, content, source_ids, metadata, graph_score, graph_distance, rank}]
+      </signature>
+    </interface>
+    <interface name="detect_relational_query (neu)" kind="function" path="mcp_server/tools/__init__.py">
+      <signature>
+        def detect_relational_query(query_text: str) -> tuple[bool, list[str]]
+        # Returns: (is_relational, matched_keywords)
+      </signature>
+    </interface>
+    <interface name="extract_entities_from_query (neu)" kind="function" path="mcp_server/tools/__init__.py">
+      <signature>
+        def extract_entities_from_query(query_text: str) -> list[str]
+        # Returns: Extracted entities (capitalized words, quoted strings)
+      </signature>
+    </interface>
+    <interface name="get_node_by_name (bestehend)" kind="function" path="mcp_server/db/graph.py">
+      <signature>
+        def get_node_by_name(name: str) -> dict[str, Any] | None
+        # Returns: {id, label, name, properties, vector_id, created_at} or None
+      </signature>
+    </interface>
+    <interface name="query_neighbors (bestehend)" kind="function" path="mcp_server/db/graph.py">
+      <signature>
+        def query_neighbors(
+            node_id: str,
+            relation_type: str | None = None,
+            max_depth: int = 1
+        ) -> list[dict[str, Any]]
+        # Returns: [{node_id, label, name, properties, relation, weight, distance}]
+      </signature>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Tests verwenden pytest mit pytest-asyncio für async Funktionen. Mock-Pattern mit unittest.mock für
+      Datenbank-Isolation (kein echter DB-Zugriff in Unit Tests). DictCursor-Mocking für PostgreSQL Queries.
+      Testfälle sollten AC-IDs referenzieren. Performance-Assertions für Timing-kritische Operationen.
+    </standards>
+    <locations>
+      <location>tests/test_hybrid_search_graph.py (NEU)</location>
+      <location>tests/test_graph_query_neighbors.py (Referenz)</location>
+      <location>tests/test_graph_find_path.py (Referenz)</location>
+    </locations>
+    <ideas>
+      <idea ac="4.6.1">Test: detect_relational_query() erkennt deutsche Keywords ("nutzt", "verwendet")</idea>
+      <idea ac="4.6.1">Test: detect_relational_query() erkennt englische Keywords ("uses", "connected")</idea>
+      <idea ac="4.6.1">Test: Nicht-relationale Query → Default Weights 60/20/20</idea>
+      <idea ac="4.6.2">Test: extract_entities_from_query() extrahiert Capitalized Words</idea>
+      <idea ac="4.6.2">Test: extract_entities_from_query() extrahiert Quoted Strings</idea>
+      <idea ac="4.6.2">Test: graph_search() führt Node Lookup + Neighbor Query aus</idea>
+      <idea ac="4.6.2">Test: graph_search() holt L2 Insights via vector_id</idea>
+      <idea ac="4.6.3">Test: rrf_fusion() mit 3 Sources (semantic, keyword, graph)</idea>
+      <idea ac="4.6.3">Test: rrf_fusion() mit 2 Sources (graph missing)</idea>
+      <idea ac="4.6.3">Test: Weight-Normalisierung validiert sum = 1.0</idea>
+      <idea ac="4.6.4">Test: Config-Loader lädt hybrid_search_weights korrekt</idea>
+      <idea ac="4.6.4">Test: Config-Loader lädt query_routing.relational_keywords korrekt</idea>
+      <idea ac="4.6.5">Test: Backwards-Kompatibilität - altes weights Format funktioniert</idea>
+      <idea ac="4.6.5">Test: Response enthält graph_results_count, query_type, applied_weights</idea>
+      <idea ac="ALL">Integration Test: End-to-End Hybrid Search mit Graph-Nodes</idea>
+      <idea ac="ALL">Performance Test: Hybrid Search &lt;1s, Graph-Search &lt;200ms</idea>
+    </ideas>
+  </tests>
+</story-context>

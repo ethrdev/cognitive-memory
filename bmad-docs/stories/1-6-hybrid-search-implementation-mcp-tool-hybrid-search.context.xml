@@ -1,0 +1,335 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>6</storyId>
+    <title>Hybrid Search Implementation (MCP Tool: hybrid_search)</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-12</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>/home/ethr/01-projects/ai-experiments/i-o/bmad-docs/stories/1-6-hybrid-search-implementation-mcp-tool-hybrid-search.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Claude Code</asA>
+    <iWant>semantische und Keyword-basierte Suche mit RRF Fusion kombinieren</iWant>
+    <soThat>ich präzise Top-K Retrieval über meine komprimierten Insights erhalte</soThat>
+    <tasks>- [ ] RRF Fusion Helper Function Implementation (AC: 3, 4)
+  - [ ] Create `def rrf_fusion(semantic_results: list[dict], keyword_results: list[dict], weights: dict, k: int = 60) -> list[dict]`
+  - [ ] **Empty Result Handling:** If both result sets empty → return `[]` immediately
+  - [ ] Für jedes Doc in semantic_results: Calculate score = weights["semantic"] / (k + semantic_rank)
+  - [ ] Für jedes Doc in keyword_results: Calculate score = weights["keyword"] / (k + keyword_rank)
+  - [ ] Merge beide result sets: Aggregate scores für Docs in beiden Sets (deduplizierung)
+  - [ ] Single-strategy fallback: If only one result set non-empty → use only that strategy's scores
+  - [ ] Sort by final RRF score (descending)
+  - [ ] Return merged list
+
+- [ ] Semantic Search Function (AC: 1)
+  - [ ] Create `async def semantic_search(query_embedding: list[float], top_k: int, conn) -> list[dict]`
+  - [ ] Register pgvector: `register_vector(conn)`
+  - [ ] SQL Query: `SELECT id, content, source_ids, embedding <=> %s::vector AS distance FROM l2_insights ORDER BY distance LIMIT %s`
+  - [ ] Execute mit parameterized query: (query_embedding, top_k)
+  - [ ] Return: [{"id": int, "content": str, "source_ids": list[int], "distance": float, "rank": int}]
+  - [ ] rank = position in result set (1-indexed)
+
+- [ ] Keyword Search Function (AC: 2)
+  - [ ] Create `async def keyword_search(query_text: str, top_k: int, conn) -> list[dict]`
+  - [ ] SQL Query: `SELECT id, content, source_ids, ts_rank(to_tsvector('english', content), plainto_tsquery('english', %s)) AS rank FROM l2_insights WHERE to_tsvector('english', content) @@ plainto_tsquery('english', %s) ORDER BY rank DESC LIMIT %s`
+  - [ ] Execute mit parameterized query: (query_text, query_text, top_k)
+  - [ ] Return: [{"id": int, "content": str, "source_ids": list[int], "rank": float, "rank_position": int}]
+  - [ ] rank_position = position in result set (1-indexed)
+
+- [ ] hybrid_search Tool Implementation (AC: 1, 2, 3, 4, 5)
+  - [ ] Locate stub in `mcp_server/tools/__init__.py`
+  - [ ] Replace stub implementation:
+    - [ ] Parameter extraction: query_embedding (list[float]), query_text (string), top_k (int, default 5), weights (dict, default {"semantic": 0.7, "keyword": 0.3})
+    - [ ] Validate weights: `abs((semantic + keyword) - 1.0) < 1e-9` (floating point tolerance)
+    - [ ] Validate top_k: Positive integer, ≤100 (reasonable upper limit)
+    - [ ] Validate query_embedding: Check length = 1536 (OpenAI text-embedding-3-small)
+    - [ ] Execute semantic_search(query_embedding, top_k, conn)
+    - [ ] Execute keyword_search(query_text, top_k, conn)
+    - [ ] Call rrf_fusion(semantic_results, keyword_results, weights, k=60)
+    - [ ] Select Top-K from merged results
+    - [ ] Return response
+  - [ ] Response Format:
+    ```json
+    [
+      {
+        "id": 123,
+        "content": "Compressed insight content...",
+        "score": 0.856,
+        "source_ids": [45, 46, 47]
+      }
+    ]
+    ```
+  - [ ] Error handling: DB errors, parameter validation, empty result sets
+
+- [ ] JSON Schema Update für hybrid_search (AC: 1, 5)
+  - [ ] Verify existing JSON Schema in `tools/__init__.py`
+  - [ ] Ensure schema has:
+    - [ ] query_embedding: type array of floats (1536-dim), required
+    - [ ] query_text: type string, required
+    - [ ] top_k: type integer, optional (default: 5)
+    - [ ] weights: type object with semantic/keyword keys, optional (default: {"semantic": 0.7, "keyword": 0.3})
+  - [ ] Test validation with invalid params (wrong embedding dimension, weights sum != 1.0)
+
+- [ ] Unit Tests für hybrid_search (AC: 1, 2, 3, 4, 5)
+  - [ ] Test-File: `tests/test_hybrid_search.py` erstellen
+  - [ ] Test 1: Valid hybrid search - verify Top-5 results returned
+  - [ ] Test 2: RRF Fusion Logic - mock both result sets, verify score calculation
+  - [ ] Test 3: Semantic-only results - keyword returns empty, verify semantic results returned
+  - [ ] Test 4: Keyword-only results - semantic returns empty, verify keyword results returned
+  - [ ] Test 5: Deduplication - same Doc in both sets, verify scores merged
+  - [ ] Test 6: Custom weights - weights {"semantic": 0.8, "keyword": 0.2}, verify scores recalculated
+  - [ ] Test 7: Invalid weights - weights sum != 1.0, verify error returned
+  - [ ] Test 8: Invalid embedding dimension - 512-dim instead of 1536, verify error
+  - [ ] Test 9: Empty query - query_text empty, verify error handling
+  - [ ] Test 10: Top-K selection - verify exactly top_k results returned (or less if fewer matches)
+  - [ ] Test 11: German content - seed DB with German text, verify FTS works (AC: 2)
+  - [ ] Test 12: top_k validation - test top_k=0, top_k=-5, top_k=200, verify errors (AC: 5)
+  - [ ] Test 13: Empty result sets - both searches return empty, verify `[]` returned (NOT error) (AC: 4)
+  - [ ] Test 14: Weight validation precision - test weights sum=1.0001, verify error due to tight tolerance (AC: 5)
+  - [ ] Helper: Seed test DB with 20 L2 insights (varied content + embeddings)
+  - [ ] **Note:** German content test demonstrates issue, Epic 2 will add language detection for 'german' vs 'english' config
+
+- [ ] Integration Test: MCP Tool Call End-to-End (AC: 1, 2, 3, 4)
+  - [ ] Update `tests/test_mcp_server.py`
+  - [ ] Seed test DB: 10 L2 insights about philosophy (e.g., "consciousness", "autonomy", "free will")
+  - [ ] Test: call_tool("hybrid_search", {"query_embedding": [...], "query_text": "consciousness", "top_k": 5})
+  - [ ] Verify: Response contains 5 results
+  - [ ] Verify: Results sorted by score (descending)
+  - [ ] Verify: Each result has id, content, score, source_ids
+  - [ ] Test semantic relevance: Top result should contain "consciousness" or related terms
+  - [ ] Cleanup: DELETE test data after test
+
+- [ ] Performance Testing (AC: NFR001 - <1s latency)
+  - [ ] Seed test DB with 100 L2 insights
+  - [ ] Execute hybrid_search 10 times
+  - [ ] Measure p95 latency
+  - [ ] Target: <1s for p95
+  - [ ] If >1s: Investigate (IVFFlat index built? FTS index exists?)
+
+- [ ] Documentation Updates (AC: all)
+  - [ ] README.md: Add usage example for hybrid_search tool
+  - [ ] README.md: Explain RRF Fusion Formula und Gewichtungs-Strategie
+  - [ ] API Reference: Document parameters, response format, default weights
+  - [ ] Document calibration plan: Weights werden in Epic 2 via Grid Search optimiert</tasks>
+  </story>
+
+  <acceptanceCriteria>**Given** der MCP Server läuft und L2 Insights mit Embeddings existieren
+**When** Claude Code das Tool `hybrid_search` aufruft mit (query_embedding, query_text, top_k, weights)
+**Then** werden beide Suchstrategien parallel ausgeführt:
+
+1. **Semantic Search via pgvector**
+   - Cosine Similarity Search auf l2_insights.embedding
+   - Query: `SELECT id, content, source_ids, embedding <=> %s AS distance FROM l2_insights ORDER BY distance LIMIT %s`
+   - Gewichtung via weights.semantic (default: 0.7)
+   - Ergebnisse sortiert nach Cosine Distance (niedrigste zuerst)
+   - **Performance**: Explizite Column-Selection vermeidet Transfer von embedding vector (6KB/row) bei reinen Metadata-Queries
+
+2. **Keyword Search via Full-Text Search**
+   - PostgreSQL Full-Text Search auf l2_insights.content
+   - Query: `SELECT id, content, source_ids, ts_rank(to_tsvector('english', content), plainto_tsquery('english', %s)) AS rank FROM l2_insights WHERE to_tsvector('english', content) @@ plainto_tsquery('english', %s) ORDER BY rank DESC LIMIT %s`
+   - Gewichtung via weights.keyword (default: 0.3)
+   - Ergebnisse sortiert nach ts_rank (höchste zuerst)
+   - **Performance**: Explizite Column-Selection spart ~60KB bei Top-10 results (kein embedding vector transfer)
+
+3. **Reciprocal Rank Fusion (RRF)**
+   - Beide Result-Sets werden merged
+   - RRF Formula: `score(doc) = weight_semantic / (k + rank_semantic(doc)) + weight_keyword / (k + rank_keyword(doc))` mit k=60
+   - Wenn Doc nur in einem result set: nur der entsprechende Term wird verwendet
+   - Deduplizierung nach L2 ID (falls Doc in beiden Sets): Scores werden addiert
+   - Finale Sortierung nach RRF Score (höchste zuerst)
+
+4. **Top-K Selection und Empty Result Handling**
+   - Return Top-K Ergebnisse (default: top_k=5)
+   - Response Format: `[{"id": int, "content": str, "score": float, "source_ids": list[int]}]`
+   - Sortiert nach finaler RRF-Score (absteigend)
+   - **Empty Result Handling:**
+     - Beide searches 0 results → Return empty list `[]` (NOT an error)
+     - Nur semantic search 0 results → Return keyword results mit keyword weights
+     - Nur keyword search 0 results → Return semantic results mit semantic weights
+     - RRF degeneriert zu single-strategy search wenn nur eine Strategy results liefert
+
+5. **Configurable Weights und Parameter Validation**
+   - Default: {"semantic": 0.7, "keyword": 0.3}
+   - Validierung: `abs((semantic + keyword) - 1.0) < 1e-9` (floating point tolerance)
+   - top_k Validierung: Positive integer, reasonable upper limit (≤100)
+   - Bei ungültigen Weights oder top_k: Error zurückgeben mit Details</acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>bmad-docs/tech-spec-epic-1.md</path>
+        <title>Epic Technical Specification: MCP Server Foundation & Ground Truth Collection</title>
+        <section>Workflow 2: Hybrid Search mit RRF Fusion</section>
+        <snippet>Hybrid Search Service: Semantic + Keyword Retrieval mit RRF | (query_embedding, query_text, weights) | Top-K L2 Insights | Story 1.6. Implements parallel semantic search via pgvector, keyword search via Full-Text Search, and Reciprocal Rank Fusion with configurable weights (default: semantic 0.7, keyword 0.3).</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/architecture.md</path>
+        <title>Cognitive Memory System v3.1.0-Hybrid - Architektur</title>
+        <section>Hybrid Search Performance & Architecture</section>
+        <snippet>Hybrid Search (Retrieval): &lt;1s (p95) | Story 1.6. System uses PostgreSQL + pgvector for native SQL hybrid search with IVFFlat index for vector operations and RRF Fusion: Parallel Semantic + Keyword Search with configurable weights for domain-specific optimization.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/epics.md</path>
+        <title>Epic Breakdown und Story Details</title>
+        <section>Story 1.6: Hybrid Search Implementation</section>
+        <snippet>Story 1.6 implements hybrid_search MCP tool with both pgvector Cosine Similarity and PostgreSQL Full-Text Search. Uses Reciprocal Rank Fusion (RRF) formula: score = Σ 1/(60 + rank_i) with configurable weights. Performance target: &lt;1s for Hybrid Search (NFR001).</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/stories/1-2-postgresql-pgvector-setup.md</path>
+        <title>Story 1.2: PostgreSQL + pgvector Setup</title>
+        <section>Database Schema and Index Strategy</section>
+        <snippet>l2_insights table with embedding vector(1536) and IVFFlat index (lists=100) for semantic search, plus GIN Full-Text Search index on content for keyword search. pgvector uses vector_cosine_ops and cosine distance operator &lt;=&gt; for similarity queries.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>mcp_server/tools/__init__.py</path>
+        <kind>tool implementation</kind>
+        <symbol>handle_hybrid_search</symbol>
+        <lines>372-388</lines>
+        <reason>Current stub implementation that needs to be replaced with full hybrid search functionality including pgvector semantic search, Full-Text Search, and RRF fusion</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/tools/__init__.py</path>
+        <kind>tool registration</kind>
+        <symbol>register_tools</symbol>
+        <lines>521-546</lines>
+        <reason>Contains outdated JSON schema for hybrid_search stub (query, top_k, semantic_weight). Story 1.6 requires NEW schema: query_embedding (array[1536]), query_text (string), top_k (integer), weights (object with semantic/keyword keys).</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/tools/__init__.py</path>
+        <kind>import pattern</kind>
+        <symbol>pgvector import</symbol>
+        <lines>25</lines>
+        <reason>Shows existing pgvector import pattern: from pgvector.psycopg2 import register_vector for vector type support in PostgreSQL</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/db/connection.py</path>
+        <kind>database utility</kind>
+        <symbol>get_connection</symbol>
+        <lines>93-131</lines>
+        <reason>Context manager pattern for database connections with health checks and connection pooling that should be used for hybrid search database operations</reason>
+      </artifact>
+      <artifact>
+        <path>tests/test_compress_to_l2_insight.py</path>
+        <kind>test pattern</kind>
+        <symbol>cleanup_test_data</symbol>
+        <lines>17-28</lines>
+        <reason>Shows test data cleanup pattern using fixtures and automatic cleanup after each test - should be applied to hybrid_search tests</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/tools/__init__.py</path>
+        <kind>helper function</kind>
+        <symbol>rrf_fusion</symbol>
+        <lines>NEW FUNCTION (to be created above handle_hybrid_search)</lines>
+        <reason>RRF Fusion algorithm implementation - merges semantic and keyword results with weighted scoring: score(doc) = weight_semantic/(k+rank_s) + weight_keyword/(k+rank_k)</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <ecosystem name="python">
+        <package name="psycopg2-binary" version="^2.9.0" purpose="PostgreSQL database connector with connection pooling and DictCursor support"/>
+        <package name="pgvector" version="^0.2.0" purpose="PostgreSQL vector extension support with register_vector function and vector type handling"/>
+        <package name="numpy" version="^1.24.0" purpose="Numerical operations and array handling for embedding processing"/>
+        <package name="pytest" version="^7.4.0" purpose="Testing framework for unit and integration tests"/>
+        <package name="openai" version="^1.0.0" purpose="OpenAI API client for embeddings (used by existing tools)"/>
+      </ecosystem>
+      <ecosystem name="database">
+        <package name="PostgreSQL" version="15+" purpose="Primary database with pgvector extension for vector similarity search"/>
+        <package name="pgvector" version="0.5.0+" purpose="Vector similarity search with IVFFlat indexing and cosine distance operations"/>
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint source="Dev Notes" type="development pattern">
+      <description>PostgreSQL + pgvector Pattern: Use register_vector(conn) once per connection, parameterized queries with %s placeholders, cosine distance operator &lt;=&gt;</description>
+      <reference>Story 1-5 Learnings from Previous Story</reference>
+    </constraint>
+    <constraint source="Dev Notes" type="error handling">
+      <description>Error Handling Pattern: try/except with psycopg2.Error and generic Exception, return structured error with error, details, and tool fields</description>
+      <reference>Story 1-5 Learnings from Previous Story</reference>
+    </constraint>
+    <constraint source="Dev Notes" type="code quality">
+      <description>Code Quality Standards: Type hints REQUIRED (mypy --strict), all imports at file top, Black + Ruff for linting, no duplicate imports</description>
+      <reference>Story 1-5 Learnings from Previous Story</reference>
+    </constraint>
+    <constraint source="Dev Notes" type="performance">
+      <description>Performance Target: Hybrid Search latency &lt;1s (p95) as specified in NFR001</description>
+      <reference>Architecture.md Performance Targets</reference>
+    </constraint>
+    <constraint source="Dev Notes" type="testing">
+      <description>Testing Pattern: Unit tests with real PostgreSQL database, integration tests via MCP stdio transport, cleanup test data in teardown</description>
+      <reference>Story 1-5 Learnings from Previous Story</reference>
+    </constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="hybrid_search tool signature" kind="MCP tool">
+      <signature>def hybrid_search(query_embedding: list[float], query_text: str, top_k: int = 5, weights: dict = {"semantic": 0.7, "keyword": 0.3}) -> list[dict]</signature>
+      <path>mcp_server/tools/__init__.py:handle_hybrid_search</path>
+      <description>Main MCP tool interface implementing semantic + keyword search with RRF fusion</description>
+    </interface>
+    <interface name="pgvector semantic search" kind="database query">
+      <signature>SELECT id, content, source_ids, embedding <=> %s::vector AS distance FROM l2_insights ORDER BY distance LIMIT %s</signature>
+      <path>Story 1.6 Acceptance Criteria</path>
+      <description>Cosine similarity search using pgvector extension with vector distance operator</description>
+    </interface>
+    <interface name="PostgreSQL Full-Text Search" kind="database query">
+      <signature>SELECT id, content, source_ids, ts_rank(to_tsvector('english', content), plainto_tsquery('english', %s)) AS rank FROM l2_insights WHERE to_tsvector('english', content) @@ plainto_tsquery('english', %s) ORDER BY rank DESC LIMIT %s</signature>
+      <path>Story 1.6 Acceptance Criteria</path>
+      <description>Full-text search with relevance ranking using ts_rank function</description>
+    </interface>
+    <interface name="database connection" kind="utility function">
+      <signature>with get_connection() as conn: cursor = conn.cursor(); cursor.execute(...)</signature>
+      <path>mcp_server/db/connection.py:get_connection</path>
+      <description>Context manager for database connections with automatic connection pooling and health checks</description>
+    </interface>
+  </interfaces>
+  <tests>
+    <standards>Unit tests with real PostgreSQL database, integration tests via MCP stdio transport, test data cleanup in teardown/finally. Mock external APIs when applicable. Performance tests with 100 L2 insights for latency measurement &lt;1s p95 target.</standards>
+    <locations>tests/test_hybrid_search.py (new file to create), tests/test_mcp_server.py (update for integration tests)</locations>
+    <ideas>
+      <test mapping="AC1">
+        <description>Valid hybrid search - verify Top-5 results returned with correct structure (id, content, score, source_ids)</description>
+      </test>
+      <test mapping="AC3">
+        <description>RRF Fusion Logic - mock both semantic and keyword result sets, verify score calculation with k=60 constant and proper weight application</description>
+      </test>
+      <test mapping="AC3, AC4">
+        <description>Semantic-only results - mock keyword search returning empty, verify semantic results returned with semantic weights only</description>
+      </test>
+      <test mapping="AC3, AC4">
+        <description>Keyword-only results - mock semantic search returning empty, verify keyword results returned with keyword weights only</description>
+      </test>
+      <test mapping="AC3">
+        <description>Deduplication - same document appears in both result sets, verify scores are properly merged/added</description>
+      </test>
+      <test mapping="AC5">
+        <description>Custom weights test - use weights {"semantic": 0.8, "keyword": 0.2}, verify scores recalculated correctly</description>
+      </test>
+      <test mapping="AC5">
+        <description>Invalid weights validation - test weights sum != 1.0, verify error returned with tight tolerance (abs(sum-1.0) &lt; 1e-9)</description>
+      </test>
+      <test mapping="AC1">
+        <description>Invalid embedding dimension - test with 512-dim instead of 1536, verify error returned</description>
+      </test>
+      <test mapping="AC5">
+        <description>Empty query validation - test query_text empty string, verify error returned</description>
+      </test>
+      <test mapping="AC5">
+        <description>Top-K validation - test top_k=0, top_k=-5, top_k=200, verify appropriate errors for invalid values</description>
+      </test>
+      <test mapping="AC4">
+        <description>Empty result handling - both searches return empty, verify empty list [] returned (NOT an error)</description>
+      </test>
+      <test mapping="AC2">
+        <description>German content test - seed DB with German text, verify Full-Text Search works (demonstrates language config issue for Epic 2)</description>
+      </test>
+      <test mapping="NFR001">
+        <description>Performance test - seed DB with 100 L2 insights, execute hybrid_search 10 times, measure p95 latency target &lt;1s</description>
+      </test>
+    </ideas>
+  </tests>
+</story-context>

@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>4</epicId>
+    <storyId>4</storyId>
+    <title>graph_query_neighbors Tool Implementation</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-30</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>/home/ethr/01-projects/ai-experiments/cognitive-memory/bmad-docs/stories/4-4-graph-query-neighbors-tool-implementation.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Als Claude Code,</asA>
+    <iWant>möchte ich Nachbar-Knoten eines Nodes abfragen,</iWant>
+    <soThat>sodass ich strukturierte Queries wie "Welche Technologien nutzt Projekt X?" beantworten kann.</soThat>
+    <tasks>### Task 1: MCP Tool Grundstruktur (AC: 4.4.1, 4.4.2)
+
+- [ ] Subtask 1.1: Erstelle `mcp_server/tools/graph_query_neighbors.py`
+  - MCP Tool Definition mit Pydantic Schema
+  - Input-Parameter: node_name (str), relation_type (str, optional), depth (int, default=1, max=5)
+  - Folge bestehendes Tool-Pattern aus `mcp_server/tools/graph_add_node.py`
+- [ ] Subtask 1.2: Integriere Tool in `mcp_server/tools/__init__.py`
+  - Import und Registrierung analog zu `graph_add_node`/`graph_add_edge`
+  - Tool Definition mit korrekter JSON Schema Beschreibung
+  - Handler zu tool_handlers mapping hinzufügen
+- [ ] Subtask 1.3: Parameter-Validierung implementieren
+  - node_name muss nicht-leer sein
+  - depth muss Integer zwischen 1 und 5 sein
+  - relation_type ist optional, muss String sein wenn vorhanden
+
+### Task 2: Database Layer - Single-Hop Query (AC: 4.4.1, 4.4.2)
+
+- [ ] Subtask 2.1: Erweitere `mcp_server/db/graph.py` um `get_node_by_name` Funktion
+  - Funktion: `get_node_by_name(name: str) -> dict | None`
+  - SQL: `SELECT id, label, name, properties FROM nodes WHERE name = %s LIMIT 1`
+  - Gibt Node-Daten oder None zurück
+- [ ] Subtask 2.2: Implementiere `query_neighbors_single_hop` Funktion
+  - Funktion: `query_neighbors_single_hop(node_id: str, relation_type: str | None) -> list[dict]`
+  - SQL mit JOIN auf edges und nodes Tabellen
+  - Optionaler Filter auf relation_type
+  - Gibt Liste von Nachbar-Nodes mit Relation und Weight zurück
+
+### Task 3: Database Layer - Multi-Hop CTE Query (AC: 4.4.1, 4.4.4)
+
+- [ ] Subtask 3.1: Implementiere `query_neighbors_multi_hop` Funktion
+  - Funktion: `query_neighbors_multi_hop(node_id: str, relation_type: str | None, max_depth: int) -> list[dict]`
+  - WITH RECURSIVE CTE für Graph-Traversal in PostgreSQL
+  - Cycle Detection: Track visited nodes in CTE
+- [ ] Subtask 3.2: Implementiere Cycle Detection in CTE
+  - `path` Array zum Tracking besuchter Nodes
+  - `NOT (n.id = ANY(path))` für Cycle Prevention
+  - DISTINCT on node_id für deduplizierte Ergebnisse
+
+### Task 4: Response und Sortierung (AC: 4.4.2, 4.4.3)
+
+- [ ] Subtask 4.1: Implementiere Response Format
+  - `node_id` als UUID String
+  - `label`, `name`, `properties` vom Nachbar-Node
+  - `relation` als String (Kanten-Typ)
+  - `distance` als Integer (Anzahl Hops)
+  - `weight` als Float (Kanten-Gewichtung)
+- [ ] Subtask 4.2: Implementiere Sortierung
+  - ORDER BY distance ASC, weight DESC
+  - Primary: Nähere Nodes zuerst
+  - Secondary: Stärkere Verbindungen zuerst
+- [ ] Subtask 4.3: Implementiere Error Handling
+  - Start-Node nicht gefunden: Structured Error Response
+  - Ungültige depth (außerhalb 1-5): Structured Error Response
+  - DB-Connection Fehler: Error Pattern wie in graph_add_edge.py
+
+### Task 5: Testing und Dokumentation (AC: 4.4.1-4.4.4)
+
+- [ ] Subtask 5.1: Erstelle `tests/test_graph_query_neighbors.py`
+  - Test: Nachbarn eines existierenden Nodes (depth=1)
+  - Test: Multi-Hop Query (depth=2, depth=3)
+  - Test: Filter nach relation_type
+  - Test: Sortierung nach distance und weight
+  - Test: Cycle Detection (keine Duplikate)
+  - Test: Fehlerbehandlung bei nicht-existierendem Node
+  - Test: Fehlerbehandlung bei ungültiger depth
+  - Test: Leeres Ergebnis bei Node ohne Nachbarn
+- [ ] Subtask 5.2: Performance Testing
+  - Verifiziere <50ms für depth=1-3
+  - Verifiziere <200ms für depth=4-5
+  - Logging für Query-Timing
+- [ ] Subtask 5.3: Manuelles Testing in Claude Code
+  - Tool über MCP aufrufen
+  - Response validieren
+  - Multi-Hop Traversal testen</tasks>
+  </story>
+
+  <acceptanceCriteria>### AC-4.4.1: graph_query_neighbors Tool erstellen mit Single-Hop und Multi-Hop Traversal
+
+**Given** Graph mit Nodes und Edges existiert (Stories 4.1-4.3)
+**When** Claude Code `graph_query_neighbors` aufruft mit (node_name, relation_type, depth)
+**Then** werden verbundene Nodes gefunden:
+
+- Bei depth=1: Direkte Nachbarn
+- Bei depth>1: WITH RECURSIVE CTE für Multi-Hop Traversal
+- Optional: Filterung nach relation_type (z.B. nur "USES" Kanten)
+- Max depth: 5 (Performance-Limit, default=1)
+
+### AC-4.4.2: Response Format
+
+**Given** graph_query_neighbors wurde aufgerufen
+**When** die Operation erfolgreich ist
+**Then** enthält die Response Array von:
+
+- `node_id`, `label`, `name`, `properties`
+- `relation` (die Verbindungs-Relation)
+- `distance` (Anzahl Hops vom Start-Node)
+- `weight` (Kanten-Gewichtung)
+
+### AC-4.4.3: Sortierung und Fehlerbehandlung
+
+**Given** graph_query_neighbors wird aufgerufen
+**When** die Query erfolgreich ist
+**Then** Sortierung:
+
+- Primär nach distance (nähere Nodes zuerst)
+- Sekundär nach weight (stärkere Verbindungen zuerst)
+
+**And** Fehlerbehandlung:
+
+- Bei nicht gefundenem Start-Node: Klare Error-Message
+- Bei ungültigen Parametern (depth <1 oder >5): Klare Error-Message
+- Bei DB-Connection-Fehler: Retry-Logic Pattern
+
+### AC-4.4.4: Cycle Detection und Performance
+
+**Given** Graph mit potenziellen Zyklen existiert
+**When** graph_query_neighbors ausgeführt wird
+**Then**:
+
+- Cycle Detection: Bereits besuchte Nodes werden ausgeschlossen (keine Duplikate im Result)
+- Performance: <50ms für depth=1-3, <200ms für depth=4-5</acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="bmad-docs/epics.md" title="Epic 4: GraphRAG Integration (v3.2-GraphRAG)" section="Story 4.4" snippet="Story 4.4: graph_query_neighbors Tool Implementation - Als Claude Code, möchte ich Nachbar-Knoten eines Nodes abfragen, sodass ich strukturierte Queries wie 'Welche Technologien nutzt Projekt X?' beantworten kann." />
+      <doc path="bmad-docs/architecture.md" title="Cognitive Memory System v3.1.0-Hybrid - Architektur" section="Datenbank-Schema" snippet="nodes table: id UUID PRIMARY KEY, label VARCHAR(100), name VARCHAR(255), properties JSONB, vector_id INTEGER REFERENCES l2_insights(id), UNIQUE(label, name)" />
+      <doc path="bmad-docs/architecture.md" title="Cognitive Memory System v3.1.0-Hybrid - Architektur" section="Datenbank-Schema" snippet="edges table: id UUID PRIMARY KEY, source_id UUID REFERENCES nodes(id), target_id UUID REFERENCES nodes(id), relation VARCHAR(100), weight FLOAT CHECK (weight >= 0 AND weight <= 1), UNIQUE(source_id, target_id, relation)" />
+      <doc path="bmad-docs/architecture.md" title="Cognitive Memory System v3.1.0-Hybrid - Architektur" section="ADR-006" snippet="Graph-Speicherung via PostgreSQL Adjacency List Pattern (nodes + edges Tabellen), Graph-Traversal via WITH RECURSIVE CTEs, Kein Apache AGE, kein Neo4j" />
+      <doc path="bmad-docs/architecture.md" title="Cognitive Memory System v3.1.0-Hybrid - Architektur" section="MCP Tools" snippet="graph_query_neighbors: Nachbar-Nodes finden - Input: node_name, relation_type, depth - Output: [{node, relation, distance}] - Story: 4.4" />
+      <doc path="bmad-docs/architecture.md" title="Cognitive Memory System v3.1.0-Hybrid - Architektur" section="Testing Strategy" snippet="Manual Testing: Manuelles Testing in Claude Code Interface, No automated unit tests (Personal Use, Single Developer), Integration Testing: End-to-End RAG Pipeline Test" />
+    </docs>
+    <code>
+      <artifact path="mcp_server/tools/graph_add_node.py" kind="tool" symbol="handle_graph_add_node" lines="26-100" reason="Tool pattern reference for MCP tool structure, parameter validation, error handling" />
+      <artifact path="mcp_server/tools/graph_add_edge.py" kind="tool" symbol="handle_graph_add_edge" lines="26-120" reason="Tool pattern reference for MCP tool structure, parameter validation, error handling, database integration" />
+      <artifact path="mcp_server/db/graph.py" kind="database" symbol="add_node" lines="21-111" reason="Database function pattern for PostgreSQL operations, connection handling, result formatting" />
+      <artifact path="mcp_server/db/graph.py" kind="database" symbol="get_node_by_id" lines="112-154" reason="Reference for node lookup functions, error handling patterns" />
+      <artifact path="mcp_server/db/graph.py" kind="database" symbol="get_or_create_node" lines="199-225" reason="Reference for idempotent node operations, upsert patterns" />
+      <artifact path="mcp_server/tools/__init__.py" kind="registration" symbol="tool_handlers" lines="1650-1660" reason="Tool registration pattern for adding graph_query_neighbors to the 11-tool system" />
+      <artifact path="mcp_server/tools/__init__.py" kind="registration" symbol="Tool" lines="1578-1635" reason="JSON Schema definition pattern for MCP tool input parameters" />
+      <artifact path="tests/test_graph_add_edge.py" kind="test" symbol="TestGraphAddEdgeTool" lines="25-50" reason="Testing pattern reference for MCP tools, mocking database functions, parameter validation tests" />
+    </code>
+    <dependencies>
+      <ecosystem name="python">
+        <package name="mcp" version="^1.0.0" description="MCP SDK for tool development" />
+        <package name="psycopg2-binary" version="^2.9.0" description="PostgreSQL database driver for connection handling" />
+        <package name="pgvector" version="^0.2.0" description="PostgreSQL vector extension support" />
+        <package name="pytest" version="^7.4.0" description="Testing framework for unit and integration tests" />
+        <package name="pytest-asyncio" version="^0.21.0" description="Async testing support for MCP tool handlers" />
+      </ecosystem>
+      <ecosystem name="database">
+        <package name="postgresql" version="15+" description="Primary database with pgvector extension for graph storage" />
+        <package name="pgvector" version="latest" description="Vector similarity search capability (linked via nodes.vector_id)" />
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint name="ADR-006 Compliance" description="Must use PostgreSQL Adjacency List Pattern, WITH RECURSIVE CTEs for traversal, no Neo4j/Apache AGE" />
+    <constraint name="Performance Requirements" description="&lt;50ms for depth=1-3 queries, &lt;200ms for depth=4-5 queries, max depth=5 limit" />
+    <constraint name="Schema Compliance" description="Use existing nodes/edges tables from migration 012_add_graph_tables.sql, respect UNIQUE constraints" />
+    <constraint name="Tool Pattern" description="Follow existing MCP tool structure: async handler, parameter validation, structured error responses" />
+    <constraint name="Cycle Detection" description="Implement path array tracking in CTE to prevent duplicate nodes in results" />
+    <constraint name="Idempotency" description="Query operations should be deterministic, same inputs produce same outputs" />
+    <constraint name="Connection Pool" description="Use get_connection() context manager for database operations" />
+    <constraint name="Code Quality" description="Follow ruff compliance, full type hints, comprehensive docstrings, logging levels" />
+  </constraints>
+  <interfaces>
+    <interface name="MCP Tool Interface" kind="JSON Schema" signature="graph_query_neighbors(node_name: string, relation_type?: string, depth: integer = 1)" path="mcp_server/tools/__init__.py" />
+    <interface name="Database Query Function" kind="Python Function" signature="query_neighbors(node_id: str, relation_type: str | None, max_depth: int) -> list[dict]" path="mcp_server/db/graph.py" />
+    <interface name="Node Lookup Function" kind="Python Function" signature="get_node_by_name(name: str) -> dict[str, Any] | None" path="mcp_server/db/graph.py" />
+    <interface name="PostgreSQL CTE Pattern" kind="SQL" signature="WITH RECURSIVE neighbors AS (SELECT ... UNION ALL SELECT ...) SELECT DISTINCT ON (id) ..." path="mcp_server/db/graph.py" />
+  </interfaces>
+  <tests>
+    <standards>Manual Testing priority for personal use project. Unit tests with pytest for parameter validation and database mocking. Integration testing in Claude Code interface. Performance testing with timing validation (&lt;50ms depth 1-3, &lt;200ms depth 4-5). Error handling validation for edge cases.</standards>
+    <locations>tests/test_graph_query_neighbors.py for unit tests. Manual testing in Claude Code MCP interface. Performance benchmarks via Python time measurements.</locations>
+    <ideas>
+      <test idea="Parameter validation tests" ac="AC-4.4.3" description="Test invalid depth values (&lt;1, &gt;5), empty node_name, invalid relation_type" />
+      <test idea="Single-hop query functionality" ac="AC-4.4.1" description="Verify direct neighbor retrieval with depth=1, correct node/edge data" />
+      <test idea="Multi-hop CTE traversal" ac="AC-4.4.1, AC-4.4.4" description="Test depth=2,3,4,5 queries, verify recursive expansion works correctly" />
+      <test idea="Relation type filtering" ac="AC-4.4.1" description="Test with and without relation_type filter, verify only matching edges returned" />
+      <test idea="Sorting validation" ac="AC-4.4.3" description="Verify results sorted by distance ASC, then weight DESC" />
+      <test idea="Cycle detection" ac="AC-4.4.4" description="Create graph cycles, verify no duplicate nodes in results" />
+      <test idea="Error handling" ac="AC-4.4.3" description="Test non-existent node lookup, database connection failures" />
+      <test idea="Performance benchmarks" ac="AC-4.4.4" description="Time measurement for various depth levels, ensure &lt;50ms (1-3) and &lt;200ms (4-5)" />
+      <test idea="Empty results" ac="AC-4.4.2" description="Test node with no neighbors returns empty array correctly" />
+      <test idea="Manual Claude Code testing" ac="AC-4.4.1-4.4.4" description="Verify tool discovery, parameter input, response format in Claude Code" />
+    </ideas>
+  </tests>
+</story-context>

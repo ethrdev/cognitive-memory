@@ -1,0 +1,212 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>5</epicId>
+    <storyId>4</storyId>
+    <title>L2 Insight Storage Library API</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-30</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>bmad-docs/stories/5-4-l2-insight-storage-library-api.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>i-o-system Entwickler</asA>
+    <iWant>`store.store_insight(content, source_ids)` aufzurufen</iWant>
+    <soThat>ich Semantic Memory ohne MCP speichern kann</soThat>
+    <tasks>Task 1: Implement `store_insight()` method in `cognitive_memory/store.py` (AC: 1, 4)
+- Task 1.1: Import `handle_compress_to_l2_insight` Logik aus `mcp_server/tools/__init__.py`
+- Task 1.2: Wrapper-Methode `store_insight(content, source_ids, metadata=None)` erstellen
+- Task 1.3: MCP-Tool Logik extrahieren und als synchrone Funktion wrappen
+- Task 1.4: InsightResult dataclass zurückgeben
+
+Task 2: Verify InsightResult dataclass in `cognitive_memory/models.py` (AC: 1)
+- Task 2.1: Sicherstellen dass InsightResult mit `id`, `embedding_status`, `fidelity_score`, `created_at` existiert
+- Task 2.2: Type hints prüfen (id: int, embedding_status: str, fidelity_score: float, created_at: datetime)
+
+Task 3: Implement content validation (AC: 5)
+- Task 3.1: Validierung für leeren Content (empty string)
+- Task 3.2: Validierung für whitespace-only Content
+- Task 3.3: `ValidationError` bei ungültigem Content werfen
+
+Task 4: Implement metadata handling (AC: 6)
+- Task 4.1: Optionalen `metadata` Parameter implementieren
+- Task 4.2: Metadata an DB-Insert Operation übergeben
+
+Task 5: Verify OpenAI Embedding Integration (AC: 2)
+- Task 5.1: Sicherstellen dass `get_embedding_with_retry` aus `mcp_server/external/openai_client.py` genutzt wird
+- Task 5.2: Embedding status Tracking (`success`/`failed`)
+
+Task 6: Verify Semantic Fidelity Check (AC: 3)
+- Task 6.1: Fidelity Score Berechnung aus MCP-Tool übernehmen
+- Task 6.2: Score Range validieren (0.0-1.0)
+
+Task 7: Test Suite Implementation (AC: alle)
+- Task 7.1: `tests/library/test_store_insight.py` auf GREEN bringen
+- Task 7.2: Bestehende ATDD Tests verifizieren (11 Tests in RED Phase)
+- Task 7.3: Contract Test: Vergleich Library vs MCP Tool Ergebnisse
+
+Task 8: Integration Test mit PostgreSQL (AC: 4)
+- Task 8.1: DB-Integration testen mit echtem INSERT
+- Task 8.2: Verify `l2_insights` Tabellen-Schema Kompatibilität</tasks>
+  </story>
+
+  <acceptanceCriteria>AC-1: InsightResult Return Type - GIVEN: MemoryStore ist instanziiert - WHEN: `store.store_insight(content, source_ids, metadata=None)` wird aufgerufen - THEN: Rückgabe ist `InsightResult` dataclass mit Feldern: `id`, `embedding_status`, `fidelity_score`, `created_at`
+
+AC-2: Automatic Embedding Generation - GIVEN: MemoryStore mit gültiger OpenAI API Key - WHEN: Insight gespeichert wird - THEN: Embedding wird automatisch via OpenAI `text-embedding-3-small` API generiert - AND: `embedding_status` ist "success" bei Erfolg
+
+AC-3: Semantic Fidelity Check - GIVEN: Insight wird gespeichert - WHEN: Embedding erfolgreich generiert - THEN: Semantic Fidelity Check (E2 Enhancement) wird ausgeführt - AND: `fidelity_score` liegt zwischen 0.0 und 1.0
+
+AC-4: L2 Insights Table Storage - GIVEN: Gültiger Content und Source IDs - WHEN: `store.store_insight()` aufgerufen wird - THEN: Insight wird in `l2_insights` Tabelle gespeichert - AND: `id` ist positive Integer (autoincrement) - AND: `created_at` ist datetime Objekt
+
+AC-5: Content Validation - GIVEN: MemoryStore instanziiert - WHEN: `store.store_insight(content="", source_ids=[1])` aufgerufen wird - THEN: `ValidationError` wird geworfen - AND: Whitespace-only Content wird ebenfalls abgelehnt
+
+AC-6: Optional Metadata Support - GIVEN: MemoryStore instanziiert - WHEN: `store.store_insight(content, source_ids, metadata={"key": "value"})` aufgerufen - THEN: Metadata wird mit dem Insight gespeichert - AND: Ohne metadata-Parameter funktioniert der Aufruf ebenfalls
+
+AC-7: Empty Source IDs Accepted - GIVEN: MemoryStore instanziiert - WHEN: `store.store_insight(content, source_ids=[])` aufgerufen - THEN: Insight wird erstellt (source_ids ist optional/kann leer sein)</acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>bmad-docs/epic-5-tech-context.md</path>
+        <title>Epic 5 Technical Context: Library API for Ecosystem Integration</title>
+        <section>Story 5.4 Implementation Details</section>
+        <snippet>Story 5.4: L2 Insight Storage Library API - 1. Implement `MemoryStore.store_insight()` 2. Import from `mcp_server/tools/compress_to_l2_insight.py` 3. Return `InsightResult` 4. Run `test_store_insight.py` → GREEN</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/epics/epic-5-library-api-for-ecosystem-integration.md</path>
+        <title>Epic 5: Library API for Ecosystem Integration</title>
+        <section>Story 5.4: L2 Insight Storage Library API</section>
+        <snippet>When ich `store.store_insight(content, source_ids, metadata=None)` aufrufe Then wird L2 Insight erstellt: Embedding wird automatisch via OpenAI API generiert, Semantic Fidelity Check (E2 Enhancement) wird ausgeführt, Insight wird in `l2_insights` Tabelle gespeichert</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/architecture.md</path>
+        <title>Cognitive Memory System v3.1.0-Hybrid - Architektur</title>
+        <section>Wrapper Pattern (ADR-007)</section>
+        <snippet>Primary Language Python 3.11+, Embedding API OpenAI text-embedding-3-small 1536 dimensions, PostgreSQL + pgvector PostgreSQL 15+, pgvector latest</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/test-design-epic-5.md</path>
+        <title>Test Design: Epic 5 - Library API for Ecosystem Integration</title>
+        <section>Risk Mitigation</section>
+        <snippet>R-001: Import-Zyklus zwischen `cognitive_memory/` und `mcp_server/` - Lazy Imports in `__init__.py`, klare Dependency Direction (cognitive_memory → mcp_server, nie umgekehrt)</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>mcp_server/tools/__init__.py</path>
+        <kind>function</kind>
+        <symbol>handle_compress_to_l2_insight</symbol>
+        <lines>801-931</lines>
+        <reason>Main function to wrap for library API - handles parameter validation, embedding generation, and database storage</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/tools/__init__.py</path>
+        <kind>function</kind>
+        <symbol>get_embedding_with_retry</symbol>
+        <lines>669-729</lines>
+        <reason>Core embedding generation with retry logic using OpenAI text-embedding-3-small model</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/db/connection.py</path>
+        <kind>function</kind>
+        <symbol>get_connection</symbol>
+        <lines>97-125</lines>
+        <reason>Database connection management with connection pooling and health checks</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/external/openai_client.py</path>
+        <kind>class</kind>
+        <symbol>OpenAIEmbeddingsClient</symbol>
+        <lines>23-80</lines>
+        <reason>Alternative OpenAI client with retry logic for embeddings (may be used instead of direct function)</reason>
+      </artifact>
+      <artifact>
+        <path>tests/library/test_store_insight.py</path>
+        <kind>test</kind>
+        <symbol>TestStoreInsightBasic</symbol>
+        <lines>22-110</lines>
+        <reason>ATDD tests that validate library API behavior - currently in RED phase</reason>
+      </artifact>
+    </code>
+    <dependencies>
+    <ecosystem name="python">
+      <package name="python" version="^3.11"/>
+      <package name="mcp" version="^1.0.0"/>
+      <package name="psycopg2-binary" version="^2.9.0"/>
+      <package name="pgvector" version="^2.0.0"/>
+      <package name="openai" version="^1.0.0"/>
+      <package name="numpy" version="^1.24.0"/>
+      <package name="python-dotenv" version="^1.0.0"/>
+    </ecosystem>
+    <ecosystem name="dev">
+      <package name="pytest" version="^7.4.0"/>
+      <package name="pytest-asyncio" version="^0.21.0"/>
+      <package name="pytest-cov" version="^4.1.0"/>
+      <package name="mypy" version="^1.7.0"/>
+    </ecosystem>
+  </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>Import Direction: cognitive_memory/ → mcp_server/ (never reverse) - prevents import cycles (ADR-007)</constraint>
+    <constraint>Wrapper Pattern: Library must import directly from mcp_server tools, not duplicate code</constraint>
+    <constraint>Synchronous API: Library methods are synchronous even though MCP tools are async (use asyncio.run or sync wrappers)</constraint>
+    <constraint>Validation: Content cannot be empty or whitespace-only (must throw ValidationError)</constraint>
+    <constraint>Embedding Model: Must use OpenAI text-embedding-3-small (1536 dimensions)</constraint>
+    <constraint>Fidelity Check: Semantic fidelity score must be calculated (E2 Enhancement)</constraint>
+    <constraint>Metadata: Optional metadata parameter must be supported as dict</constraint>
+    <constraint>Source IDs: Empty source_ids array is acceptable (optional parameter)</constraint>
+  </constraints>
+  <interfaces>
+    <interface>
+      <name>store_insight</name>
+      <kind>function</kind>
+      <signature>store_insight(content: str, source_ids: list[int], metadata: dict | None = None) -> InsightResult</signature>
+      <path>cognitive_memory/store.py</path>
+    </interface>
+    <interface>
+      <name>InsightResult</name>
+      <kind>dataclass</kind>
+      <signature>InsightResult(id: int, embedding_status: str, fidelity_score: float, created_at: datetime)</signature>
+      <path>cognitive_memory/models.py</path>
+    </interface>
+    <interface>
+      <name>ValidationError</name>
+      <kind>exception</kind>
+      <signature>ValidationError(message: str)</signature>
+      <path>cognitive_memory/exceptions.py</path>
+    </interface>
+    <interface>
+      <name>handle_compress_to_l2_insight</name>
+      <kind>async function</kind>
+      <signature>async def handle_compress_to_l2_insight(arguments: dict[str, Any]) -> dict[str, Any]</signature>
+      <path>mcp_server/tools/__init__.py</path>
+    </interface>
+    <interface>
+      <name>get_connection</name>
+      <kind>context manager</kind>
+      <signature>def get_connection() -> Iterator[connection]</signature>
+      <path>mcp_server/db/connection.py</path>
+    </interface>
+  </interfaces>
+  <tests>
+    <standards>ATDD (Acceptance Test Driven Development) methodology with RED-GREEN-REFACTOR cycle. Tests are organized by priority: P0 (Critical), P1 (High), P2 (Medium), P3 (Low). Contract tests ensure Library API behavior matches MCP Tool behavior exactly. All tests use pytest with mock objects for external dependencies (OpenAI API, Database).</standards>
+    <locations>
+      <location>tests/library/test_store_insight.py - Primary test file for story 5.4 (11 tests in RED phase)</location>
+      <location>tests/library/test_imports.py - Import cycle prevention tests (P0)</location>
+      <location>tests/library/test_contract.py - Library vs MCP behavior comparison (P0)</location>
+      <location>tests/library/test_connection_pool.py - Connection pool management tests (P1)</location>
+    </locations>
+    <ideas>
+      <test_idea ac_id="AC-1">Test that store_insight() returns InsightResult dataclass with required fields (id, embedding_status, fidelity_score, created_at)</test_idea>
+      <test_idea ac_id="AC-2">Test embedding generation using OpenAI text-embedding-3-small model with retry logic</test_idea>
+      <test_idea ac_id="AC-3">Test semantic fidelity score calculation and validation (0.0-1.0 range)</test_idea>
+      <test_idea ac_id="AC-4">Test database storage in l2_insights table with proper schema (id SERIAL PRIMARY KEY, content TEXT NOT NULL, embedding vector(1536), source_ids INTEGER[] NOT NULL)</test_idea>
+      <test_idea ac_id="AC-5">Test validation that empty content and whitespace-only content raise ValidationError</test_idea>
+      <test_idea ac_id="AC-6">Test optional metadata parameter support with and without metadata dict</test_idea>
+      <test_idea ac_id="AC-7">Test that empty source_ids array [] is accepted and creates insight successfully</test_idea>
+      <test_idea risk="R-001">Test import chain to prevent cycles: from cognitive_memory import MemoryStore must work</test_idea>
+      <test_idea risk="R-003">Contract test comparing Library API results with MCP Tool results for same input</test_idea>
+    </ideas>
+  </tests>
+</story-context>

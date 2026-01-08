@@ -1,0 +1,182 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>4</epicId>
+    <storyId>2</storyId>
+    <title>graph_add_node Tool Implementation</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-27</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>bmad-docs/stories/4-2-graph-add-node-tool-implementation.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Claude Code</asA>
+    <iWant>Graph-Knoten via MCP Tool erstellen</iWant>
+    <soThat>Entitäten (Projekte, Technologien, Kunden) im Graph gespeichert werden</soThat>
+    <tasks>
+### Task 1: MCP Tool Grundstruktur (AC: 4.2.1)
+
+- [ ] Subtask 1.1: Erstelle `mcp_server/tools/graph_add_node.py`
+  - MCP Tool Definition mit Pydantic Schema
+  - Input-Parameter: label (str), name (str), properties (dict, optional), vector_id (int, optional)
+  - Folge bestehendes Tool-Pattern aus `mcp_server/tools/` (z.B. store_raw_dialogue.py)
+- [ ] Subtask 1.2: Integriere Tool in `mcp_server/main.py`
+  - Import und Registrierung analog zu bestehenden Tools
+  - Füge zu Tool-Liste hinzu
+- [ ] Subtask 1.3: Erstelle Tool-Tests
+  - Unit-Test für Parameter-Validierung
+  - Integration-Test für DB-Operationen
+
+### Task 2: Database Layer (AC: 4.2.1)
+
+- [ ] Subtask 2.1: Erstelle `mcp_server/db/graph.py`
+  - Funktion: `add_node(label, name, properties, vector_id) -> dict`
+  - SQL: `INSERT ... ON CONFLICT (label, name) DO NOTHING RETURNING id`
+  - Bei Conflict: SELECT existierenden Node
+- [ ] Subtask 2.2: Implementiere Idempotenz-Logik
+  - Wenn INSERT erfolgreich → `created: true`
+  - Wenn CONFLICT → `created: false`, existing Node zurückgeben
+- [ ] Subtask 2.3: Verbindung zu bestehendem Connection Pool
+  - Nutze `mcp_server/db/connection.py` Patterns
+  - Connection Management wie in bestehenden Tools
+
+### Task 3: Response und Error Handling (AC: 4.2.2, 4.2.3)
+
+- [ ] Subtask 3.1: Implementiere Response Format
+  - `node_id` als UUID String
+  - `created` als Boolean
+  - `label`, `name` als Bestätigung
+- [ ] Subtask 3.2: Implementiere Parameter-Validierung
+  - Label muss nicht-leer sein
+  - Name muss nicht-leer sein
+  - Properties muss dict sein (wenn vorhanden)
+  - vector_id muss positive Integer sein (wenn vorhanden)
+- [ ] Subtask 3.3: Implementiere Retry-Logic
+  - Nutze `mcp_server/utils/retry_logic.py`
+  - Exponential Backoff bei DB-Connection-Fehlern (wie andere Tools)
+
+### Task 4: Label-Standardisierung (AC: 4.2.1)
+
+- [ ] Subtask 4.1: Definiere Standard-Labels
+  - "Project" - Projekt-Entitäten
+  - "Technology" - Technologie-Stack
+  - "Client" - Kunden/Auftraggeber
+  - "Error" - Fehler/Probleme
+  - "Solution" - Lösungen
+- [ ] Subtask 4.2: Optionale Label-Validierung
+  - Warning bei nicht-Standard Labels (nicht blockierend)
+  - Logging für unbekannte Labels
+
+### Task 5: Testing und Dokumentation (AC: 4.2.1, 4.2.2, 4.2.3)
+
+- [ ] Subtask 5.1: Erstelle `tests/test_graph_add_node.py`
+  - Test: Neuer Node erstellen
+  - Test: Idempotenz (zweimal gleiche Daten)
+  - Test: Mit optionalen Feldern (properties, vector_id)
+  - Test: Fehlerbehandlung bei ungültigen Parametern
+- [ ] Subtask 5.2: Manuelles Testing in Claude Code
+  - Tool über MCP aufrufen
+  - Response validieren
+  - Edge Cases testen
+- [ ] Subtask 5.3: Dokumentation vorbereiten
+  - API-Referenz für Story 4.8 vorbereiten
+  - Code-Kommentare für Usage Patterns
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+### AC-4.2.1: graph_add_node Tool erstellen
+
+**Given** Graph-Schema existiert (Story 4.1)
+**When** Claude Code `graph_add_node` aufruft mit (label, name, properties, vector_id)
+**Then** wird der Node erstellt oder gefunden:
+
+- Idempotent: Wenn Node mit label+name existiert → Return existing ID
+- Wenn neu: INSERT mit allen Feldern
+- Optional: vector_id verknüpft Node mit L2 Insight Embedding
+
+### AC-4.2.2: Response Format
+
+**Given** graph_add_node wurde aufgerufen
+**When** die Operation erfolgreich ist
+**Then** enthält die Response:
+
+- `node_id` (UUID)
+- `created` (boolean: true wenn neu, false wenn existierend)
+- `label`, `name` zur Bestätigung
+
+### AC-4.2.3: Fehlerbehandlung
+
+**Given** graph_add_node wird mit ungültigen Parametern aufgerufen
+**When** ein Fehler auftritt
+**Then** wird korrekt gehandelt:
+
+- Bei ungültigen Parametern: Klare Error-Message
+- Bei DB-Connection-Fehler: Retry-Logic (wie andere MCP Tools)
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="bmad-docs/architecture.md" title="Cognitive Memory System v3.1.0-Hybrid - Architektur" section="MCP Tools & Resources" snippet="Definiert 11 MCP Tools inklusive graph_add_node Tool mit Input-Output-Spezifikation und Epic 4.2 Zuordnung." />
+      <doc path="bmad-docs/architecture.md" title="Cognitive Memory System v3.1.0-Hybrid - Architektur" section="Datenbank-Schema" snippet="Zeigt nodes Tabellen-Schema mit UUID PK, label, name, properties JSONB, vector_id FK, UNIQUE(label, name) Constraint." />
+      <doc path="bmad-docs/architecture.md" title="Cognitive Memory System v3.1.0-Hybrid - Architektur" section="ADR-006: PostgreSQL Adjacency List für GraphRAG" snippet="Begründet PostgreSQL Adjacency List Pattern statt Neo4j/Apache AGE, konsistent mit pgvector, keine neue Dependency." />
+      <doc path="bmad-docs/epics.md" title="Epic 4: GraphRAG Integration (v3.2-GraphRAG)" section="Story 4.2" snippet="Epic Goal und Story Details für graph_add_node Tool Implementation mit idempotentem INSERT und Response Format." />
+      <doc path="mcp_server/db/migrations/012_add_graph_tables.sql" title="Graph Schema Migration" section="nodes Tabelle Definition" snippet="Vollständiges SQL Schema für nodes Tabelle mit UNIQUE Constraint für Idempotenz und Performance Indexes." />
+    </docs>
+    <code>
+      <artifact path="mcp_server/tools/__init__.py" kind="mcp-tool-pattern" symbol="register_tools" lines="1368-1626" reason="Show MCP tool registration pattern, JSON schema validation, and tool handler mapping" />
+      <artifact path="mcp_server/tools/__init__.py" kind="mcp-tool-pattern" symbol="handle_store_raw_dialogue" lines="449-515" reason="Database operation pattern with get_connection(), cursor execution, error handling, commit" />
+      <artifact path="mcp_server/tools/__init__.py" kind="mcp-tool-pattern" symbol="validate_parameters" lines="242-291" reason="Parameter validation pattern for JSON schemas with error handling" />
+      <artifact path="mcp_server/db/connection.py" kind="database-pattern" symbol="get_connection" lines="40-75" reason="Connection pool management pattern for PostgreSQL operations" />
+      <artifact path="mcp_server/utils/retry_logic.py" kind="utility-pattern" symbol="retry_with_backoff" lines="29-60" reason="Exponential backoff retry pattern for API calls with jitter" />
+    </code>
+    <dependencies>
+      <ecosystem name="python">
+        <package name="mcp" version="^1.0.0" />
+        <package name="psycopg2-binary" version="^2.9.0" />
+        <package name="pgvector" version="^0.2.0" />
+        <package name="numpy" version="^1.24.0" />
+        <package name="pydantic" version="implicit via mcp" />
+      </ecosystem>
+      <ecosystem name="testing">
+        <package name="pytest" version="^7.4.0" />
+        <package name="pytest-asyncio" version="^0.21.0" />
+        <package name="pytest-cov" version="^4.1.0" />
+      </ecosystem>
+      <ecosystem name="quality">
+        <package name="black" version="^24.3.0" />
+        <package name="ruff" version="^0.1.0" />
+        <package name="mypy" version="^1.7.0" />
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint name="Idempotenz Required" description="graph_add_node MUSS idempotent sein bei gleichen label+name Kombination" source="Story 4.2 ACs & Architecture ADR-006" />
+    <constraint name="PostgreSQL Adjacency List" description="Nutze natives PostgreSQL Pattern, keine Neo4j oder Apache AGE Dependencies" source="ADR-006" />
+    <constraint name="Performance Requirement" description="Single Node Operation MUSS <50ms dauern für Production Performance" source="Story 4.1 Performance Benchmarks" />
+    <constraint name="MCP Tool Pattern" description="Folge existierenden Tool Pattern aus store_raw_dialogue mit JSON Schema Validation" source="mcp_server/tools/__init__.py" />
+    <constraint name="Connection Pool Usage" description="Nutze get_connection() Context Manager für Database Operations" source="mcp_server/db/connection.py" />
+    <constraint name="Error Handling Standard" description="Implementiere Retry Logic mit exponential_backoff bei Connection Fehlern" source="mcp_server/utils/retry_logic.py" />
+    <constraint name="UUID Primary Key" description="Nutze gen_random_uuid() für node_id Primary Key wie in Schema Migration" source="012_add_graph_tables.sql" />
+    <constraint name="Label Standardization" description="Standard-Labels: Project, Technology, Client, Error, Solution mit optionaler Validation" source="Story 4.2 Task 4" />
+  </constraints>
+  <interfaces>
+    <interface name="graph_add_node Tool" kind="MCP Tool" signature="graph_add_node(label: str, name: str, properties?: dict, vector_id?: int) -> {node_id: UUID, created: boolean, label: str, name: str}" path="mcp_server/tools/graph_add_node.py (zu erstellen)" />
+    <interface name="Database Layer" kind="Function" signature="add_node(label: str, name: str, properties: dict | None, vector_id: int | None) -> dict" path="mcp_server/db/graph.py (zu erstellen)" />
+    <interface name="Database Schema" kind="SQL Table" signature="nodes(id: UUID PK, label: VARCHAR(255), name: VARCHAR(255), properties: JSONB, vector_id: INTEGER FK)" path="mcp_server/db/migrations/012_add_graph_tables.sql" />
+    <interface name="Tool Registration" kind="Function" signature="register_tools(server: Server) -> list[Tool]" path="mcp_server/tools/__init__.py" />
+  </interfaces>
+  <tests>
+    <standards>Testing folgt pytest patterns mit database fixtures. Unit Tests für Parameter-Validierung und Response Format. Integration Tests für full tool->database->response flow. Manual Testing über Claude Code MCP Interface. Performance Tests für &lt;50ms requirement. Ruff compliance für code quality.</standards>
+    <locations>tests/test_graph_add_node.py (neu), tests/test_graph_schema.py (existiert als Pattern Reference)</locations>
+    <ideas>
+      <test idea="Test: Neuer Node erstellen" ac="AC-4.2.1" />
+      <test idea="Test: Idempotenz (zweimal gleiche Daten)" ac="AC-4.2.1" />
+      <test idea="Test: Mit optionalen Feldern (properties, vector_id)" ac="AC-4.2.1" />
+      <test idea="Test: Fehlerbehandlung bei ungültigen Parametern" ac="AC-4.2.3" />
+      <test idea="Test: Response Format Validierung" ac="AC-4.2.2" />
+      <test idea="Test: Performance &lt;50ms für Single Node Operation" ac="Performance Requirement" />
+    </ideas>
+  </tests>
+</story-context>

@@ -1,0 +1,321 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/output" v="1.0">
+  <metadata>
+    <epicId>5</epicId>
+    <storyId>6</storyId>
+    <title>Episode Memory Library API</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-30</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>/home/ethr/01-projects/ai-experiments/cognitive-memory/bmad-docs/stories/5-6-episode-memory-library-api.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Als i-o-system Entwickler,</asA>
+    <iWant>möchte ich `store.episode.store(query, reward, reflection)` aufrufen,</iWant>
+    <soThat>sodass ich Verbal RL Episodes ohne MCP speichern kann.</soThat>
+    <tasks>### Task 1: EpisodeMemory.store() Implementierung (AC: 5.6.1, 5.6.2, 5.6.3)
+
+- [ ] Subtask 1.1: Implementiere `store(query, reward, reflection) -> EpisodeResult` in `cognitive_memory/store.py`
+- [ ] Subtask 1.2: Importiere `add_episode()` Funktion aus `mcp_server/tools/__init__.py`
+- [ ] Subtask 1.3: Implementiere Reward Validation (-1.0 bis +1.0) mit `ValidationError`
+- [ ] Subtask 1.4: Implementiere Input Validation für Query und Reflection (non-empty strings)
+- [ ] Subtask 1.5: Konvertiere MCP Tool Response zu `EpisodeResult` Dataclass
+- [ ] Subtask 1.6: Schreibe Unit Tests für store() mit Mocks
+
+### Task 2: EpisodeMemory.search() Implementierung (AC: 5.6.4)
+
+- [ ] Subtask 2.1: Implementiere `search(query, min_similarity=0.7, limit=3) -> list[EpisodeResult]`
+- [ ] Subtask 2.2: Generiere Query Embedding via `get_embedding_with_retry()`
+- [ ] Subtask 2.3: Implementiere pgvector Cosine Similarity Search auf `episode_memory` Tabelle
+- [ ] Subtask 2.4: Filtere nach `min_similarity` Schwellwert
+- [ ] Subtask 2.5: Konvertiere DB Results zu `EpisodeResult` Liste
+- [ ] Subtask 2.6: Schreibe Unit Tests für search() mit Mocks
+
+### Task 3: EpisodeMemory.list() Implementierung (AC: 5.6.5)
+
+- [ ] Subtask 3.1: Implementiere `list(limit=10) -> list[EpisodeResult]`
+- [ ] Subtask 3.2: Query `episode_memory` sortiert nach `created_at DESC`
+- [ ] Subtask 3.3: Konvertiere DB Results zu `EpisodeResult` Liste
+- [ ] Subtask 3.4: Schreibe Unit Tests für list() mit Mocks
+
+### Task 4: Integration Tests (AC: alle)
+
+- [ ] Subtask 4.1: Erstelle `tests/library/test_episode_memory.py`
+- [ ] Subtask 4.2: Integration Test für store() → search() → list() Workflow
+- [ ] Subtask 4.3: Test für ValidationError bei ungültigem Reward
+- [ ] Subtask 4.4: Test für leere Ergebnisse bei search()
+- [ ] Subtask 4.5: Contract Test: Vergleich Library vs MCP Tool Results
+
+### Task 5: Code Quality (AC: 5.6.6)
+
+- [ ] Subtask 5.1: Ruff lint für alle neuen/geänderten Dateien
+- [ ] Subtask 5.2: MyPy Type Check
+- [ ] Subtask 5.3: Docstrings für alle public Methods
+- [ ] Subtask 5.4: Verifiziere keine Code-Duplizierung (Wrapper Pattern)</tasks>
+  </story>
+
+  <acceptanceCriteria>### AC-5.6.1: EpisodeMemory.store() Methode
+
+**Given** MemoryStore ist instanziiert und verbunden
+**When** ich `store.episode.store(query, reward, reflection)` aufrufe
+**Then** wird Episode gespeichert:
+
+- Query-Embedding wird automatisch via OpenAI API generiert
+- Reward wird validiert (-1.0 bis +1.0)
+- Episode wird in `episode_memory` Tabelle gespeichert
+- Rückgabe ist `EpisodeResult` Dataclass
+
+```python
+result = store.episode.store(
+    query="Wie implementiere ich Caching?",
+    reward=0.8,
+    reflection="Problem: Cache Invalidation war unklar. Lesson: TTL-basierte Invalidation funktioniert besser."
+)
+assert isinstance(result, EpisodeResult)
+assert result.id > 0
+assert result.reward == 0.8
+```
+
+### AC-5.6.2: Reward Validation
+
+**Given** EpisodeMemory.store() wird aufgerufen
+**When** `reward` außerhalb des Bereichs -1.0 bis +1.0 liegt
+**Then** wird `ValidationError` geworfen:
+
+```python
+# Zu hoher Reward
+with pytest.raises(ValidationError) as exc:
+    store.episode.store(query="test", reward=1.5, reflection="test")
+assert "reward" in str(exc.value).lower()
+
+# Zu niedriger Reward
+with pytest.raises(ValidationError) as exc:
+    store.episode.store(query="test", reward=-1.5, reflection="test")
+assert "reward" in str(exc.value).lower()
+```
+
+### AC-5.6.3: Input Validation für Query und Reflection
+
+**Given** EpisodeMemory.store() wird aufgerufen
+**When** `query` oder `reflection` leer oder ungültig sind
+**Then** wird `ValidationError` geworfen:
+
+```python
+# Leerer Query
+with pytest.raises(ValidationError):
+    store.episode.store(query="", reward=0.5, reflection="Lesson learned")
+
+# Leere Reflection
+with pytest.raises(ValidationError):
+    store.episode.store(query="Valid query", reward=0.5, reflection="")
+
+# None values
+with pytest.raises(ValidationError):
+    store.episode.store(query=None, reward=0.5, reflection="Test")
+```
+
+### AC-5.6.4: EpisodeMemory.search() für ähnliche Episodes
+
+**Given** Episodes sind in der Datenbank gespeichert
+**When** ich `store.episode.search(query, min_similarity=0.7, limit=3)` aufrufe
+**Then** werden ähnliche Episodes gefunden:
+
+```python
+# Setup: Episodes speichern
+store.episode.store(query="Caching Strategy", reward=0.9, reflection="...")
+store.episode.store(query="Cache Invalidation", reward=0.7, reflection="...")
+
+# Suche nach ähnlichen Episodes
+results = store.episode.search("Caching", min_similarity=0.5, limit=5)
+assert isinstance(results, list)
+assert all(isinstance(r, EpisodeResult) for r in results)
+```
+
+- Embedding-basierte Similarity Search via pgvector
+- Filterung nach `min_similarity` Schwellwert
+- Limitierung auf `limit` Ergebnisse
+- Sortierung nach Similarity Score (absteigend)
+
+### AC-5.6.5: EpisodeMemory.list() für letzte Episodes
+
+**Given** Episodes sind in der Datenbank gespeichert
+**When** ich `store.episode.list(limit=10)` aufrufe
+**Then** werden die letzten Episodes abgerufen:
+
+```python
+# Letzte 5 Episodes abrufen
+recent = store.episode.list(limit=5)
+assert isinstance(recent, list)
+assert len(recent) <= 5
+assert all(isinstance(r, EpisodeResult) for r in recent)
+# Sortiert nach created_at DESC (neueste zuerst)
+```
+
+### AC-5.6.6: Wrapper Pattern Compliance (ADR-007)
+
+**Given** EpisodeMemory Library API
+**When** ich die Implementation prüfe
+**Then** wird das MCP Server Tool wiederverwendet:
+
+- Kein Code-Duplizierung: Nutzt `mcp_server/tools/__init__.py:handle_store_episode()` oder `add_episode()` Funktion
+- Shared Embedding Generation: Nutzt `get_embedding_with_retry()` aus MCP Server
+- Identisches Verhalten: Library liefert gleiche Ergebnisse wie MCP Tool</acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>bmad-docs/epics/epic-5-library-api-for-ecosystem-integration.md</path>
+        <title>Epic 5: Library API for Ecosystem Integration</title>
+        <section>Story 5.6: Episode Memory Library API</section>
+        <snippet>**Als** i-o-system Entwickler, **möchte ich** `store.episode.store(query, reward, reflection)` aufrufen, **sodass** ich Verbal RL Episodes ohne MCP speichern kann. **And** Response enthält `EpisodeResult` mit id, query, reward, reflection, created_at.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/architecture.md</path>
+        <title>Cognitive Memory System v3.1.0-Hybrid - Architektur</title>
+        <section>Systemarchitektur</section>
+        <snippet>High-Level Architektur: Claude Code → MCP Protocol → MCP Server → PostgreSQL + pgvector. Enthält episode_memory Tabelle für Reflexionen, Verbal RL.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/stories/5-2-memorystore-core-class.md</path>
+        <title>Story 5.2: MemoryStore Core Class (Predecessor)</title>
+        <section>Completion Notes</section>
+        <snippet>Story 5.2 wurde erfolgreich mit APPROVED Review abgeschlossen (100% AC coverage, 33 Tests passing). Enthält EpisodeMemory Stubs in cognitive_memory/store.py mit NotImplementedError.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>cognitive_memory/store.py</path>
+        <kind>Implementation File</kind>
+        <symbol>EpisodeMemory class</symbol>
+        <lines>438-481</lines>
+        <reason>Contains existing EpisodeMemory stub with store() and get_recent() methods that need implementation. Already has __init__, __enter__, __exit__ for context manager support.</reason>
+      </artifact>
+      <artifact>
+        <path>cognitive_memory/types.py</path>
+        <kind>Type Definitions</kind>
+        <symbol>EpisodeResult dataclass</symbol>
+        <lines>76-94</lines>
+        <reason>Defines the EpisodeResult dataclass with id, query, reward, reflection, created_at fields required by AC-5.6.1.</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/tools/__init__.py</path>
+        <kind>MCP Server Functions</kind>
+        <symbol>add_episode function</symbol>
+        <lines>1390-1454</lines>
+        <reason>Contains the async add_episode() function that generates embeddings and stores episodes in database. This is the primary function to reuse per AC-5.6.6.</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/tools/__init__.py</path>
+        <kind>MCP Server Functions</kind>
+        <symbol>get_embedding_with_retry function</symbol>
+        <lines>320-365</lines>
+        <reason>Shared embedding generation function with retry logic that should be reused for search() implementation per AC-5.6.6.</reason>
+      </artifact>
+      <artifact>
+        <path>tests/library/test_memorystore.py</path>
+        <kind>Test File</kind>
+        <symbol>MemoryStore tests</symbol>
+        <lines>1-150</lines>
+        <reason>Reference for testing patterns used in Story 5.2. Shows how to mock database connections and test MemoryStore operations.</reason>
+      </artifact>
+      <artifact>
+        <path>tests/library/test_imports.py</path>
+        <kind>Test File</kind>
+        <symbol>Import validation tests</symbol>
+        <lines>1-50</lines>
+        <reason>Reference for package import tests from Story 5.1. Ensures cognitive_memory package imports work correctly.</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <ecosystem name="python">
+        <package name="psycopg2-binary" version="^2.9.0" />
+        <package name="pgvector" version="^0.2.0" />
+        <package name="openai" version="^1.0.0" />
+        <package name="anthropic" version="^0.25.0" />
+        <package name="numpy" version="^1.24.0" />
+        <package name="python-dotenv" version="^1.0.0" />
+      </ecosystem>
+      <ecosystem name="dev">
+        <package name="pytest" version="^7.4.0" />
+        <package name="pytest-asyncio" version="^0.21.0" />
+        <package name="pytest-cov" version="^4.1.0" />
+        <package name="ruff" version="^0.1.0" />
+        <package name="mypy" version="^1.7.0" />
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>
+      <name>Wrapper Pattern Compliance (ADR-007)</name>
+      <description>Library API must reuse MCP Server functions without code duplication. Import add_episode() and get_embedding_with_retry() from mcp_server/tools/__init__.py.</description>
+    </constraint>
+    <constraint>
+      <name>Type Safety</name>
+      <description>All public methods must have complete type hints using from __future__ import annotations. Return EpisodeResult dataclass, not dict.</description>
+    </constraint>
+    <constraint>
+      <name>Error Handling</name>
+      <description>Use ValidationError for input validation errors (AC-5.6.2, AC-5.6.3), StorageError for database failures. Follow existing patterns from Story 5.2.</description>
+    </constraint>
+    <constraint>
+      <name>Async to Sync Conversion</name>
+      <description>MCP server functions are async, library API must be sync. Use asyncio.run() to call async functions from sync context.</description>
+    </constraint>
+    <constraint>
+      <name>Connection Management</name>
+      <description>Reuse existing ConnectionManager from cognitive_memory/connection.py. Use context manager pattern with self._connection_manager.get_connection().</description>
+    </constraint>
+    <constraint>
+      <name>Code Quality</name>
+      <description>Ruff lint compliance, MyPy type checking, comprehensive docstrings for all public methods following patterns from Story 5.2.</description>
+    </constraint>
+  </constraints>
+
+  <interfaces>
+    <interface>
+      <name>EpisodeMemory.store()</name>
+      <kind>Method Signature</kind>
+      <signature>def store(self, query: str, reward: float, reflection: str) -> EpisodeResult</signature>
+      <path>cognitive_memory/store.py:EpisodeMemory</path>
+    </interface>
+    <interface>
+      <name>EpisodeMemory.search()</name>
+      <kind>Method Signature</kind>
+      <signature>def search(self, query: str, min_similarity: float = 0.7, limit: int = 3) -> list[EpisodeResult]</signature>
+      <path>cognitive_memory/store.py:EpisodeMemory</path>
+    </interface>
+    <interface>
+      <name>EpisodeMemory.list()</name>
+      <kind>Method Signature</kind>
+      <signature>def list(self, limit: int = 10) -> list[EpisodeResult]</signature>
+      <path>cognitive_memory/store.py:EpisodeMemory</path>
+    </interface>
+    <interface>
+      <name>add_episode()</name>
+      <kind>MCP Server Function</kind>
+      <signature>async def add_episode(query: str, reward: float, reflection: str, conn: Any) -> dict[str, Any]</signature>
+      <path>mcp_server/tools/__init__.py:1390</path>
+    </interface>
+    <interface>
+      <name>get_embedding_with_retry()</name>
+      <kind>MCP Server Function</kind>
+      <signature>async def get_embedding_with_retry(client: Any, text: str, max_retries: int = 3) -> list[float]</signature>
+      <path>mcp_server/tools/__init__.py:320</path>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Tests folgen Story 5.2 patterns: Mock-basierte Unit Tests mit AsyncMock für MCP Server Funktionen. Input Validation Tests mit pytest.raises(). Integration Tests mit echten DB-Connections für Contract-Validation. Code Coverage: ≥90%. Fokus auf Episode Storage und Similarity Search Testing.</standards>
+    <locations>tests/library/test_episode_memory.py - Neue Datei für Story 5.6 Tests. Pattern: tests/library/test_memorystore.py als Vorlage für Teststruktur und Mocking-Patterns.</locations>
+    <ideas>
+      <test ac="AC-5.6.1">Test successful episode storage with valid inputs → returns EpisodeResult with correct fields</test>
+      <test ac="AC-5.6.2">Test reward validation: reward=1.5 and reward=-1.5 → raises ValidationError with "reward" in message</test>
+      <test ac="AC-5.6.3">Test input validation: empty query, empty reflection, None values → raises ValidationError</test>
+      <test ac="AC-5.6.4">Test similarity search: store episodes, search with min_similarity=0.5 → returns similar episodes sorted by similarity</test>
+      <test ac="AC-5.6.5">Test list functionality: store episodes, list(limit=3) → returns ≤3 episodes sorted by created_at DESC</test>
+      <test ac="AC-5.6.6">Contract test: same input to library store() and MCP store_episode() → identical database rows</test>
+    </ideas>
+  </tests>
+</story-context>

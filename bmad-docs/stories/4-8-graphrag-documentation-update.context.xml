@@ -1,0 +1,274 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>4</epicId>
+    <storyId>8</storyId>
+    <title>GraphRAG Documentation Update</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-30</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>/home/ethr/01-projects/ai-experiments/cognitive-memory/bmad-docs/stories/4-8-graphrag-documentation-update.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>ethr</asA>
+    <iWant>vollständige Dokumentation für die GraphRAG-Erweiterung</iWant>
+    <soThat>ich die neuen Tools effektiv nutzen kann</soThat>
+    <tasks>### Task 1: API Reference Update (AC: 4.8.1)
+
+- [ ] Subtask 1.1: Neue Sektion "Graph Tools" in api-reference.md erstellen
+  - Position: Nach bestehenden 8 Tools
+  - Template: Gleiche Struktur wie bestehende Tool-Dokumentation
+- [ ] Subtask 1.2: `graph_add_node` dokumentieren
+  - Input Schema, Parameter-Beschreibungen, Beispiel-Response
+  - Use Cases für Entity Creation und Vector Linking
+- [ ] Subtask 1.3: `graph_add_edge` dokumentieren
+  - Relations-Typen-Tabelle
+  - Auto-Upsert Verhalten erklären
+  - Transaktionales Verhalten dokumentieren
+- [ ] Subtask 1.4: `graph_query_neighbors` dokumentieren
+  - Response Format mit allen Feldern
+  - Depth-Parameter und Performance-Hinweise
+  - WITH RECURSIVE CTE Erklärung (high-level)
+- [ ] Subtask 1.5: `graph_find_path` dokumentieren
+  - Pathfinding-Algorithmus (BFS) erklären
+  - Max 10 Pfade Limit dokumentieren
+  - Timeout-Verhalten dokumentieren
+- [ ] Subtask 1.6: Table of Contents aktualisieren
+  - 4 neue Tool-Einträge
+  - Tool-Count von 8 auf 11 korrigieren
+
+### Task 2: Operations Manual Update (AC: 4.8.2)
+
+- [ ] Subtask 2.1: Neue Sektion "Graph Operations" erstellen
+  - Position: Nach "Memory Operations" oder am Ende
+- [ ] Subtask 2.2: "Wie erstelle ich Graph-Nodes?" schreiben
+  - Schritt-für-Schritt Anleitung
+  - Beispiel mit Project und Technology Nodes
+- [ ] Subtask 2.3: "Wie baue ich Beziehungen auf?" schreiben
+  - Beispiel: Projekt USES Technologie
+  - Auto-Upsert-Verhalten erklären
+- [ ] Subtask 2.4: "Wie query ich den Graph?" schreiben
+  - query_neighbors für strukturierte Queries
+  - find_path für Verbindungs-Discovery
+  - Wann welches Tool verwenden
+- [ ] Subtask 2.5: Performance-Empfehlungen hinzufügen
+  - Depth-Limits: <50ms für depth=1-3
+  - Max depth=5 empfohlen
+  - Index-Nutzung erklären
+
+### Task 3: GraphRAG Guide erstellen (AC: 4.8.3)
+
+- [ ] Subtask 3.1: Datei `/docs/guides/graphrag-guide.md` erstellen
+  - Frontmatter mit Titel, Author, Date
+- [ ] Subtask 3.2: Sektion "Konzept: Wann Vector vs. Graph?" schreiben
+  - Vergleichstabelle: Semantic vs. Graph
+  - Hybrid Search Erklärung (60/20/20)
+  - Entscheidungsbaum für Query-Typ
+- [ ] Subtask 3.3: Sektion "Best Practices für Labels" schreiben
+  - Empfohlene Labels mit Beschreibungen
+  - Naming Conventions (CamelCase für Labels)
+  - Anti-Patterns vermeiden
+- [ ] Subtask 3.4: Sektion "Best Practices für Relations" schreiben
+  - Relations-Tabelle mit Beschreibungen
+  - Direktionalität erklären (Source → Target)
+  - Weight-Verwendung erklären
+- [ ] Subtask 3.5: Sektion "BMAD-BMM Workflows" schreiben
+  - Use Case 1: Architecture Check (mit Code-Beispiel)
+  - Use Case 2: Risk Analysis (mit Code-Beispiel)
+  - Use Case 3: Knowledge Harvesting (mit Code-Beispiel)
+- [ ] Subtask 3.6: ASCII-Art Diagramme erstellen
+  - Graph-Visualisierung für Beispiel-Graph
+  - Hybrid Search Flow-Diagramm
+
+### Task 4: README Update (AC: 4.8.4)
+
+- [ ] Subtask 4.1: "Key Features" Sektion erweitern
+  - GraphRAG-Integration als neues Feature
+  - Kurzbeschreibung: "Graph-based entity and relationship storage"
+- [ ] Subtask 4.2: Documentation-Tabelle erweitern
+  - Link zu graphrag-guide.md hinzufügen
+- [ ] Subtask 4.3: MCP Tools Tabelle aktualisieren
+  - 4 neue Graph-Tools hinzufügen
+  - Tool-Count auf 11 korrigieren
+- [ ] Subtask 4.4: Graph Schema Abschnitt verifizieren
+  - Prüfen ob Schema aktuell ist (vs. Migration 012)
+  - Bei Abweichungen: Schema-Beschreibung aktualisieren
+
+### Task 5: Tool Count Consistency Check (AC: 4.8.5)
+
+- [ ] Subtask 5.1: README Tool-Count prüfen und korrigieren
+  - "8 MCP Tools" → "11 MCP Tools" (oder aktueller Stand)
+- [ ] Subtask 5.2: API Reference Tool-Count prüfen
+  - Table of Contents muss alle Tools listen
+- [ ] Subtask 5.3: Architecture.md Tool-Tabelle prüfen
+  - Zeile 386-411: MCP Tools Tabelle
+  - Alle 11 Tools müssen aufgelistet sein
+- [ ] Subtask 5.4: Cross-Reference Validation
+  - Alle drei Dokumente haben konsistente Counts
+  - Keine verwaisten Tool-Referenzen
+
+### Task 6: Review und Validierung (AC: 4.8.1-4.8.5)
+
+- [ ] Subtask 6.1: Dokumentations-Review
+  - Alle neuen Dateien auf Vollständigkeit prüfen
+  - Beispiele auf Korrektheit prüfen
+  - Links auf Funktionalität testen
+- [ ] Subtask 6.2: Sprachliche Konsistenz prüfen
+  - Deutsch für document_output_language
+  - Technische Begriffe konsistent
+- [ ] Subtask 6.3: Finale Validierung
+  - Alle ACs abgehakt
+  - Keine broken Links
+  - Story-File mit Completion Notes aktualisieren</tasks>
+  </story>
+
+  <acceptanceCriteria>### AC-4.8.1: API Reference Update (4 neue Tools)
+
+**Given** alle GraphRAG-Features implementiert (Stories 4.1-4.7)
+**When** `/docs/reference/api-reference.md` aktualisiert wird
+**Then** enthält es vollständige Dokumentation für:
+
+1. **`graph_add_node`**:
+   - Parameter: label, name, properties, vector_id
+   - Input Schema mit JSON-Beispiel
+   - Response Format
+   - Use Cases (Entity Creation, Vector Linking)
+   - Beispiel-Aufruf
+
+2. **`graph_add_edge`**:
+   - Parameter: source_name, target_name, relation, source_label, target_label, weight
+   - Standardisierte Relations-Typen: USES, SOLVES, CREATED_BY, RELATED_TO, DEPENDS_ON
+   - Auto-Upsert Verhalten für Nodes
+   - Beispiel-Aufruf
+
+3. **`graph_query_neighbors`**:
+   - Parameter: node_name, relation_type, depth
+   - Response Format mit node_id, label, name, properties, relation, distance, weight
+   - Depth-Limits und Performance-Hinweise
+   - Beispiel für Multi-Hop Traversal
+
+4. **`graph_find_path`**:
+   - Parameter: start_node, end_node, max_depth
+   - Response mit path_found, path_length, path Array
+   - BFS-basiertes Pathfinding erklärt
+   - Beispiel für Pfad-Discovery
+
+### AC-4.8.2: Operations Manual Update
+
+**Given** bestehende Operations Manual existiert
+**When** `/docs/operations/operations-manual.md` erweitert wird
+**Then** enthält neuer Abschnitt "Graph Operations":
+
+- Wie erstelle ich Graph-Nodes? (Schritt-für-Schritt)
+- Wie baue ich Beziehungen auf? (mit Beispielen)
+- Wie query ich den Graph? (query_neighbors vs find_path)
+- Performance-Empfehlungen (depth Limits, Indexierung)
+
+### AC-4.8.3: GraphRAG Guide (NEUES Dokument)
+
+**Given** kein GraphRAG-Guide existiert
+**When** `/docs/guides/graphrag-guide.md` erstellt wird
+**Then** enthält:
+
+1. **Konzept: Wann Vector vs. Graph?**
+   - Semantic Search: Für natürlichsprachliche Ähnlichkeit
+   - Graph Search: Für strukturierte Beziehungen
+   - Hybrid: 60% Semantic + 20% Keyword + 20% Graph
+
+2. **Best Practices für Entity-Typen (Labels)**
+   - Empfohlene Labels: Project, Technology, Client, Error, Solution, Requirement
+   - Wann welches Label verwenden
+   - Naming Conventions
+
+3. **Best Practices für Relation-Typen**
+   - USES: Projekt → Technologie
+   - SOLVES: Lösung → Problem
+   - CREATED_BY: Entität → Agent/User
+   - RELATED_TO: Allgemeine Verknüpfung
+   - DEPENDS_ON: Abhängigkeiten
+
+4. **Beispiel-Workflows für BMAD-BMM Agenten**
+   - Architecture Check: Finde passende Technologie für Requirement
+   - Risk Analysis: Finde Projekte mit Erfahrung zu bestimmter API
+   - Knowledge Harvesting: Speichere neue Erkenntnisse im Graph
+
+### AC-4.8.4: README Update
+
+**Given** bestehende README.md
+**When** README aktualisiert wird
+**Then**:
+
+- GraphRAG als neues Feature prominent erwähnt (unter "Key Features")
+- Link zu graphrag-guide.md im Documentation-Abschnitt
+- MCP Tools Tabelle um 4 Graph-Tools erweitert
+- Graph Schema Abschnitt aktualisiert (falls Änderungen in 4.1-4.6)
+
+### AC-4.8.5: Tool Count Consistency
+
+**Given** alle Dokumentations-Updates
+**When** Tool-Counts überprüft werden
+**Then** sind alle Referenzen konsistent:
+
+- README: "11 MCP Tools" (alte 7 + 4 Graph Tools)
+- API Reference: Table of Contents listet alle 11 Tools
+- Architecture.md: MCP Tools Tabelle hat 11 Einträge</acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="docs/reference/api-reference.md" title="API Reference - MCP Tools & Resources" section="Table of Contents" snippet="Current state shows 8 MCP Tools documented. Need to add 4 Graph Tools (graph_add_node, graph_add_edge, graph_query_neighbors, graph_find_path) and update tool count from 8 to 11." />
+      <doc path="docs/operations/operations-manual.md" title="Operations Manual" section="Service Management" snippet="Contains existing Memory Operations section. Need to add new 'Graph Operations' section with step-by-step guides for graph node creation, edge building, and querying." />
+      <doc path="README.md" title="Cognitive Memory README" section="Key Features" snippet="Currently lists 8 MCP Tools. Need to add GraphRAG as new feature and update tool count to 11 in multiple sections." />
+      <doc path="bmad-docs/architecture.md" title="Architecture Documentation" section="MCP Tools & Resources" snippet="Already updated with 11 tools including 4 Graph Tools. Source of truth for tool descriptions and parameters." />
+      <doc path="bmad-docs/epics/epic-4-graphrag-integration-v32-graphrag.md" title="Epic 4 Documentation" section="Story 4.8" snippet="Defines story requirements, acceptance criteria, and technical notes for documentation updates." />
+    </docs>
+    <code>
+      <artifact path="mcp_server/tools/__init__.py" kind="tool_registration" symbol="register_tools" lines="1692-2071" reason="Contains complete tool schemas and parameter validation for all 11 MCP tools including 4 Graph tools. Source of truth for API documentation." />
+      <artifact path="mcp_server/tools/graph_add_node.py" kind="implementation" symbol="handle_graph_add_node" lines="26-116" reason="Implementation of graph_add_node tool with validation logic, error handling, and response format." />
+      <artifact path="mcp_server/tools/graph_add_edge.py" kind="implementation" symbol="handle_graph_add_edge" lines="1-100" reason="Implementation of graph_add_edge tool with auto-upsert behavior and standardized relations." />
+      <artifact path="mcp_server/tools/graph_query_neighbors.py" kind="implementation" symbol="handle_graph_query_neighbors" lines="1-100" reason="Implementation of graph_query_neighbors tool with depth-limited traversal and performance optimization." />
+      <artifact path="mcp_server/tools/graph_find_path.py" kind="implementation" symbol="handle_graph_find_path" lines="1-100" reason="Implementation of graph_find_path tool using BFS algorithm with cycle detection." />
+    </code>
+    <dependencies>
+      <ecosystem name="Python">
+        <package name="mcp" version="^1.0.0" />
+        <package name="psycopg2-binary" version="^2.9.0" />
+        <package name="pgvector" version="^0.2.0" />
+        <package name="openai" version="^1.0.0" />
+        <package name="anthropic" version="^0.25.0" />
+        <package name="numpy" version="^1.24.0" />
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint name="Documentation Language" description="All documentation must be in Deutsch (German) per document_output_language configuration" />
+    <constraint name="Tool Count Consistency" description="All references to tool count must be updated consistently: 8 → 11 tools across README, API Reference, and Architecture documentation" />
+    <constraint name="Graph Schema Alignment" description="Documentation must align with actual PostgreSQL schema from migrations (nodes, edges tables)" />
+    <constraint name="BMAD Documentation Standards" description="Follow established patterns: imperative verbs, examples after explanations, consistent markdown structure" />
+    <constraint name="Parameter Documentation" description="Use tool schemas from __init__.py as source of truth for parameter documentation" />
+  </constraints>
+  <interfaces>
+    <interface name="graph_add_node" kind="MCP Tool" signature="graph_add_node(label: string, name: string, properties?: object, vector_id?: int)" path="mcp_server/tools/__init__.py:1900-1925" />
+    <interface name="graph_add_edge" kind="MCP Tool" signature="graph_add_edge(source_name: string, target_name: string, relation: string, source_label?: string, target_label?: string, weight?: float, properties?: object)" path="mcp_server/tools/__init__.py:1926-1965" />
+    <interface name="graph_query_neighbors" kind="MCP Tool" signature="graph_query_neighbors(node_name: string, relation_type?: string, depth?: int)" path="mcp_server/tools/__init__.py:1966-1989" />
+    <interface name="graph_find_path" kind="MCP Tool" signature="graph_find_path(start_node: string, end_node: string, max_depth?: int)" path="mcp_server/tools/__init__.py:1990-2014" />
+  </interfaces>
+  <tests>
+    <standards>Testing follows pytest pattern with comprehensive unit tests. Each tool has dedicated test file in tests/ directory. Tests include parameter validation, error handling, and integration scenarios. Use fixtures for database setup and mocking for external APIs.</standards>
+    <locations>tests/test_hybrid_search.py, tests/test_database.py, tests/test_mcp_server.py. Graph tool tests should follow pattern: tests/test_graph_*.py</locations>
+    <ideas>
+      <test idea="Create tests for each Graph tool parameter validation using existing tool schemas as validation source">
+        <maps_to ac="AC-4.8.1" />
+      </test idea>
+      <test idea="Test documentation examples by executing actual tool calls and verifying responses match documented format">
+        <maps_to ac="AC-4.8.1, AC-4.8.3" />
+      </test idea>
+      <test idea="Validate tool count consistency by programmatically checking all documentation files reference 11 tools">
+        <maps_to ac="AC-4.8.5" />
+      </test idea>
+      <test idea="Test GraphRAG guide examples with real data to ensure workflows work as documented">
+        <maps_to ac="AC-4.8.3" />
+      </test idea>
+    </ideas>
+  </tests>
+</story-context>

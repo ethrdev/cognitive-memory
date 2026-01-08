@@ -1,0 +1,370 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>3</epicId>
+    <storyId>7</storyId>
+    <title>Production Configuration & Environment Setup</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-18</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>bmad-docs/stories/3-7-production-configuration-environment-setup.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Entwickler</asA>
+    <iWant>Production-Environment von Development trennen</iWant>
+    <soThat>Testing keine Production-Daten kontaminiert und Secrets sicher verwaltet werden</soThat>
+    <tasks>
+### Task 1: Create Environment Files (.env.development, .env.production, .env.template) (AC: 3.7.1)
+- Subtask 1.1: Create `.env.template` mit allen erforderlichen Variablen (documentation-only, checked into Git)
+- Subtask 1.2: Document required variables in .env.template (DATABASE_URL, OPENAI_API_KEY, ANTHROPIC_API_KEY, ENVIRONMENT)
+- Subtask 1.3: Create `.env.development` mit Test-Werten (lokale DB, Test API Keys falls vorhanden)
+- Subtask 1.4: Create `.env.production` Placeholder (User muss echte API Keys hinzufügen)
+- Subtask 1.5: Set file permissions: `chmod 600 .env.development .env.production` (Security)
+- Subtask 1.6: Update `.gitignore`: Add `.env.development`, `.env.production` (prevent secrets leakage)
+- Subtask 1.7: Verify .env.template is tracked in Git, .env.* Files are ignored
+
+### Task 2: Database Separation (Development/Production DBs) (AC: 3.7.2)
+- Subtask 2.1: Create Development Database: `cognitive_memory_dev` (via psql or createdb command)
+- Subtask 2.2: Grant permissions für `mcp_user` auf beide Datenbanken (dev + prod)
+- Subtask 2.3: Run Migrations auf `cognitive_memory_dev` (gleiche Schema wie Production)
+- Subtask 2.4: Update `.env.development`: Set DATABASE_URL to `cognitive_memory_dev`
+- Subtask 2.5: Update `.env.production`: Set DATABASE_URL to `cognitive_memory` (Production DB)
+- Subtask 2.6: Verify Schema Sync: Both DBs have identical tables/indexes
+- Subtask 2.7: Document DB Separation in `/docs/production-checklist.md`
+
+### Task 3: Configuration Management (config.yaml mit Environment Sections) (AC: 3.7.3)
+- Subtask 3.1: Modify `config.yaml`: Add `development:` Section
+- Subtask 3.2: Modify `config.yaml`: Add `production:` Section
+- Subtask 3.3: Identify environment-specific configs (Development: DEBUG logging, Production: INFO logging)
+- Subtask 3.4: Add shared configs at root level (hybrid_search_weights, backup.git_export_enabled, etc.)
+- Subtask 3.5: Document config structure in config.yaml comments
+- Subtask 3.6: Validate YAML syntax (keine Parse-Errors)
+
+### Task 4: Environment Loading Logic im MCP Server (AC: 3.7.5)
+- Subtask 4.1: Install `python-dotenv` Package (add to requirements.txt/pyproject.toml)
+- Subtask 4.2: Implement `load_environment()` Function in `mcp_server/config.py`
+- Subtask 4.3: Add Validation Logic: Required Variables prüfen (OpenAI API Key, DB URL)
+- Subtask 4.4: Add Error Handling: Missing Variables → Raise Exception mit klarer Message
+- Subtask 4.5: Add Logging: Log welches Environment geladen wurde (INFO level)
+- Subtask 4.6: Update `mcp_server/main.py`: Call `load_environment()` at startup
+- Subtask 4.7: Test Environment Loading: Run MCP Server mit `ENVIRONMENT=development` und `ENVIRONMENT=production`
+
+### Task 5: Production Checklist Documentation (AC: 3.7.4)
+- Subtask 5.1: Create `/docs/production-checklist.md` Documentation
+- Subtask 5.2: Document Pre-Deployment Checklist
+- Subtask 5.3: Document Deployment Steps
+- Subtask 5.4: Document Post-Deployment Validation
+- Subtask 5.5: Document Operational Readiness Checklist
+- Subtask 5.6: Add Troubleshooting Section (common environment issues)
+- Subtask 5.7: Add RTO/RPO Specs (from Story 3.6 Backup Strategy)
+
+### Task 6: Testing and Validation (All ACs)
+- Subtask 6.1: Test Development Environment Loading
+- Subtask 6.2: Test Production Environment Loading
+- Subtask 6.3: Test Missing Variables Error Handling
+- Subtask 6.4: Test Config Overrides
+- Subtask 6.5: Verify .gitignore
+- Subtask 6.6: Test Database Separation
+- Subtask 6.7: Validate Production Checklist
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+### AC-3.7.1: Environment Files mit Secrets Separation
+**Given** Development-Environment funktioniert (Epic 1-2 abgeschlossen)
+**When** Production-Environment erstellt wird
+**Then** existieren separate Environment Files:
+- `.env.development`: Für Testing, lokale DB, Test API Keys
+- `.env.production`: Für Production, echte API Keys, Production DB
+- `.env.template`: Dokumentiert alle erforderlichen Variablen (checked into Git)
+- Security: .env Files haben chmod 600 (nur Owner readable)
+- `.gitignore`: Enthält `.env.production`, `.env.development` (Secrets bleiben lokal)
+
+### AC-3.7.2: Database Separation (Development/Production)
+**And** Database-Separation ist implementiert:
+- Development DB: `cognitive_memory_dev` (separate PostgreSQL Database)
+- Production DB: `cognitive_memory` (original Database aus Epic 1)
+- No Cross-Contamination: Development Tests schreiben nie in Production DB
+- Schema Sync: Beide DBs haben identisches Schema (gleiche Migrations)
+
+### AC-3.7.3: Configuration Management mit Environment-Specific Overrides
+**And** Configuration Management ist implementiert:
+- `config.yaml` mit environment-specific Sections (development:, production:, shared at root)
+- Environment Variable: `ENVIRONMENT=production|development` (steuert welche Config geladen wird)
+- MCP Server Logic: Lädt Config basierend auf `ENVIRONMENT` Variable
+- Default: Wenn `ENVIRONMENT` nicht gesetzt → fallback zu `development` (sicher für Testing)
+
+### AC-3.7.4: Production Checklist Documentation
+**And** Production Checklist ist dokumentiert:
+- File: `/docs/production-checklist.md`
+- Sections: Pre-Deployment Checklist, Deployment Steps, Post-Deployment Validation, Operational Readiness
+- Checkliste Items: .env.production setup, PostgreSQL Backups, Cron Jobs, MCP Server registration, 7-Day Stability Test
+
+### AC-3.7.5: Environment Loading Logic im MCP Server
+**And** Environment Loading ist implementiert:
+- Python: Nutzt `python-dotenv` Package für .env Loading
+- Loading Order: Check ENVIRONMENT → Load .env.{ENVIRONMENT} → Load config.yaml → Validate → Log
+- Validation: MCP Server startet NICHT ohne erforderliche Variablen (OpenAI API Key, DB Credentials)
+- Logging: Log welches Environment geladen wurde (für Debugging)
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>bmad-docs/tech-spec-epic-3.md</path>
+        <title>Technical Specification - Epic 3: Production Readiness</title>
+        <section>Environment Manager (Story 3.7)</section>
+        <snippet>Environment Manager (Story 3.7): Dev/Prod configuration separation using .env files and config.yaml for runtime environment config. Production Configuration & Environment Setup implements Development/Production separation to prevent test contamination.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/tech-spec-epic-3.md</path>
+        <title>Technical Specification - Epic 3: Production Readiness</title>
+        <section>Configuration Models</section>
+        <snippet>config.yaml structure with environment-specific sections: development (cognitive_memory_dev DB) and production (cognitive_memory DB) configurations. Environment variable ENVIRONMENT=production controls which config is loaded.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/architecture.md</path>
+        <title>Cognitive Memory System Architecture</title>
+        <section>Environment Management</section>
+        <snippet>.env files + config.yaml for Development/Production separation. Ensures secrets isolation and environment-specific configs. Environment files (.env.development, .env.production) are git-ignored with chmod 600 permissions.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/architecture.md</path>
+        <title>Cognitive Memory System Architecture</title>
+        <section>Secrets Management</section>
+        <snippet>Environment Files: .env.production / .env.development (git-ignored). API Keys: OPENAI_API_KEY, ANTHROPIC_API_KEY. DB Credentials: POSTGRES_USER, POSTGRES_PASSWORD. File Permissions: chmod 600 (nur Owner readable). No Vault/SecretManager for personal use.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/architecture.md</path>
+        <title>Cognitive Memory System Architecture</title>
+        <section>Deployment Architecture - Production Environment</section>
+        <snippet>Local Deployment on Linux with systemd service management. EnvironmentFile=/home/user/i-o/config/.env.production loaded by systemd. MCP Server runs as user 'ethr' with ENVIRONMENT=production variable.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/architecture.md</path>
+        <title>Cognitive Memory System Architecture</title>
+        <section>Projektstruktur</section>
+        <snippet>Config directory structure: config/config.yaml (main config with dev/prod overrides), config/.env.template (environment template), config/.env.development (dev environment, git-ignored), config/.env.production (production environment, git-ignored).</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/PRD.md</path>
+        <title>Product Requirements Document</title>
+        <section>NFR006: Local Control & Privacy</section>
+        <snippet>Keine Cloud-Dependencies für Daten: MCP Server + PostgreSQL laufen lokal. Externe Services nur für Compute: Embeddings, Evaluation (kein Training auf User-Daten). Datenhoheit: Alle Konversationsdaten bleiben lokal.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/stories/3-6-postgresql-backup-strategy-implementation.md</path>
+        <title>Story 3.6: PostgreSQL Backup Strategy Implementation</title>
+        <section>Learnings: Configuration File Modification Patterns</section>
+        <snippet>Story 3.6 established patterns for config.yaml modifications: nested config sections with inline comments, chmod 600 for sensitive files, python-dotenv for environment loading, comprehensive documentation standards.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/stories/3-6-postgresql-backup-strategy-implementation.md</path>
+        <title>Story 3.6: PostgreSQL Backup Strategy Implementation</title>
+        <section>Learnings: Secrets Management und File Permissions</section>
+        <snippet>Security approach: chmod 600 for owner-only files, DB credentials loaded from .env (not hardcoded), no passwords logged. .env files must be gitignored to prevent secret leakage.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>mcp_server/__main__.py</path>
+        <kind>entry_point</kind>
+        <symbol>main</symbol>
+        <lines>27,64</lines>
+        <reason>MUST be modified: Currently hardcodes load_dotenv(".env.development") at line 27. Needs to load environment based on ENVIRONMENT variable. Also uses LOG_LEVEL env var (line 64) which should come from config.yaml environment section.</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/db/connection.py</path>
+        <kind>module</kind>
+        <symbol>initialize_pool</symbol>
+        <lines>40-50</lines>
+        <reason>SHOULD be referenced: Connection pool initialization likely uses DB credentials from environment variables. May need updates to read from environment-specific .env file.</reason>
+      </artifact>
+      <artifact>
+        <path>config/config.yaml</path>
+        <kind>config</kind>
+        <symbol>development, production</symbol>
+        <lines>114-184</lines>
+        <reason>WILL be modified: Already has development and production sections! Story 3.7 extends this with environment-specific overrides and documents the structure. Development uses cognitive_memory DB (line 119), needs change to cognitive_memory_dev.</reason>
+      </artifact>
+      <artifact>
+        <path>.gitignore</path>
+        <kind>config</kind>
+        <symbol>environment variables</symbol>
+        <lines>1-4</lines>
+        <reason>ALREADY configured: .env.development, .env.production, and .env are already gitignored (lines 1-4). Story 3.7 creates these files and documents the pattern.</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/db/migrations/001_initial_schema.sql</path>
+        <kind>migration</kind>
+        <symbol>schema</symbol>
+        <lines>1-end</lines>
+        <reason>REUSE: Same migrations must run on both cognitive_memory_dev and cognitive_memory databases to ensure schema sync (AC 3.7.2).</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <python>
+        <package name="python-dotenv" version="^1.0.0" purpose="Load .env files for environment-specific configuration (ALREADY INSTALLED in pyproject.toml:20)" />
+        <package name="pyyaml" version="^6.0" purpose="Parse config.yaml with environment sections (ALREADY INSTALLED in pyproject.toml:21)" />
+        <package name="psycopg2-binary" version="^2.9.0" purpose="PostgreSQL database connection (ALREADY INSTALLED in pyproject.toml:12)" />
+      </python>
+      <system>
+        <dependency name="PostgreSQL" version="15+" purpose="Database server (two databases: cognitive_memory_dev, cognitive_memory)" />
+        <dependency name="pgvector" version="latest" purpose="PostgreSQL extension for vector operations (ALREADY INSTALLED)" />
+      </system>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+### Security Constraints
+- **chmod 600**: All .env files MUST have owner-only read/write permissions (no group/world access)
+- **No Secrets in Git**: .env.development and .env.production MUST be gitignored, never committed
+- **No Secrets in Logs**: API Keys and DB passwords MUST NOT appear in log files or error messages
+- **Environment Validation**: MCP Server MUST NOT start without required environment variables (OPENAI_API_KEY, DATABASE_URL, ANTHROPIC_API_KEY)
+
+### Development Constraints
+- **Default Environment**: If ENVIRONMENT variable not set, MUST default to "development" (fail-safe for testing)
+- **Schema Sync**: Development DB (cognitive_memory_dev) and Production DB (cognitive_memory) MUST have identical schemas
+- **Config Compatibility**: Environment-specific configs MUST NOT break existing Epic 1-2 functionality
+- **Documentation Standard**: production-checklist.md MUST follow same quality bar as backup-recovery.md (Story 3.6)
+
+### Configuration Loading Constraints
+- **Loading Order**: ENVIRONMENT var → .env.{environment} → config.yaml → validate → log
+- **No Hardcoded Paths**: Use environment variables for all paths (database, logs, backups)
+- **YAML Validation**: config.yaml MUST be valid YAML syntax, no parse errors
+- **Merge Strategy**: Environment-specific sections override base config, not replace
+
+### Testing Constraints
+- **No Cross-Contamination**: Development tests MUST NEVER write to production database
+- **Manual Testing Required**: Environment setup requires manual validation (PostgreSQL databases, .env files)
+- **Backward Compatibility**: Existing Epic 1-2 stories MUST continue working with new environment setup
+  </constraints>
+  <interfaces>
+    <interface>
+      <name>Environment Variables (Required)</name>
+      <kind>configuration</kind>
+      <signature>
+ENVIRONMENT=development|production  # Controls which config section is loaded
+DATABASE_URL=postgresql://user:pass@host:port/dbname  # PostgreSQL connection string
+OPENAI_API_KEY=sk-...  # OpenAI API key for embeddings + GPT-4o
+ANTHROPIC_API_KEY=sk-ant-...  # Anthropic API key for Haiku evaluation
+LOG_LEVEL=DEBUG|INFO|WARNING|ERROR  # Optional, overrides config.yaml
+      </signature>
+      <path>config/.env.development, config/.env.production</path>
+    </interface>
+    <interface>
+      <name>load_environment() Function</name>
+      <kind>function</kind>
+      <signature>
+def load_environment() -> dict:
+    """
+    Load environment-specific configuration.
+
+    Returns:
+        dict: Merged configuration (base + environment-specific)
+
+    Raises:
+        ValueError: If required environment variables are missing
+        FileNotFoundError: If .env.{environment} file not found
+    """
+      </signature>
+      <path>mcp_server/config.py (NEW FILE)</path>
+    </interface>
+    <interface>
+      <name>PostgreSQL Databases</name>
+      <kind>database</kind>
+      <signature>
+Development: cognitive_memory_dev (host=localhost, port=5432)
+Production: cognitive_memory (host=${POSTGRES_HOST}, port=${POSTGRES_PORT})
+Both DBs: Identical schema (same migrations from mcp_server/db/migrations/)
+      </signature>
+      <path>mcp_server/db/connection.py</path>
+    </interface>
+    <interface>
+      <name>config.yaml Structure</name>
+      <kind>configuration</kind>
+      <signature>
+base:  # Shared configs (all environments)
+  memory:
+    semantic_weight: 0.7
+    keyword_weight: 0.3
+
+development:  # Dev-specific overrides
+  database:
+    name: cognitive_memory_dev
+  logging:
+    level: DEBUG
+
+production:  # Prod-specific overrides
+  database:
+    name: cognitive_memory
+  logging:
+    level: INFO
+      </signature>
+      <path>config/config.yaml</path>
+    </interface>
+  </interfaces>
+  <tests>
+    <standards>
+Story 3.7 is an environment configuration story similar to Story 3.6 (infrastructure). Testing approach:
+
+**Manual Testing Required:**
+- Environment setup requires real infrastructure (PostgreSQL databases, .env files, systemd)
+- No automated unit tests for config loading (acceptable for personal use project)
+- Documentation-driven testing (production-checklist.md walkthrough)
+
+**Testing Standards from Previous Stories:**
+- Story 3.6 established manual testing pattern for infrastructure stories
+- Validation through real system integration (MCP Server startup, database connection)
+- Quality bar: No errors during startup, environment variables loaded correctly
+
+**Security Testing:**
+- Verify .env files have chmod 600 permissions
+- Verify .env files are gitignored (run `git status`)
+- Verify no secrets appear in logs
+- Verify startup fails with clear error message if required variables missing
+    </standards>
+    <locations>
+No automated test directory for this story. Manual testing performed via:
+- mcp_server/__main__.py (startup testing)
+- PostgreSQL command line (database separation testing)
+- Git command line (gitignore verification)
+- Shell scripts (file permissions verification)
+    </locations>
+    <ideas>
+### Test Ideas Mapped to Acceptance Criteria
+
+**AC-3.7.1: Environment Files mit Secrets Separation**
+- Test Idea 1.1: Create .env.template, verify all required variables documented
+- Test Idea 1.2: Create .env.development and .env.production, verify chmod 600 permissions
+- Test Idea 1.3: Run `git status`, verify .env files NOT tracked (gitignore works)
+- Test Idea 1.4: Modify .env.development, run `git status` again, verify still ignored
+
+**AC-3.7.2: Database Separation (Development/Production)**
+- Test Idea 2.1: Create cognitive_memory_dev database, run all migrations
+- Test Idea 2.2: Compare schemas: `psql -d cognitive_memory \dt` vs `psql -d cognitive_memory_dev \dt`
+- Test Idea 2.3: Write test data to dev DB, verify production DB unchanged (no cross-contamination)
+
+**AC-3.7.3: Configuration Management**
+- Test Idea 3.1: Verify config.yaml has development and production sections
+- Test Idea 3.2: Verify config.yaml parses without YAML syntax errors
+- Test Idea 3.3: Test environment-specific override (e.g., logging_level DEBUG vs INFO)
+
+**AC-3.7.4: Production Checklist Documentation**
+- Test Idea 4.1: Walk through production-checklist.md manually, verify all steps clear and actionable
+- Test Idea 4.2: Verify checklist includes all Epic 3 dependencies (Story 3.6 backups, Story 3.2 drift detection, etc.)
+
+**AC-3.7.5: Environment Loading Logic**
+- Test Idea 5.1: Run MCP Server with ENVIRONMENT=development, verify .env.development loaded, cognitive_memory_dev DB connected
+- Test Idea 5.2: Run MCP Server with ENVIRONMENT=production, verify .env.production loaded, cognitive_memory DB connected
+- Test Idea 5.3: Remove OPENAI_API_KEY from .env, run MCP Server, verify startup fails with clear error message
+- Test Idea 5.4: Set ENVIRONMENT=invalid, verify startup fails with error "Invalid ENVIRONMENT value"
+- Test Idea 5.5: Unset ENVIRONMENT variable, verify defaults to development (fail-safe)
+
+**Edge Case Testing:**
+- Test Idea 6.1: Missing .env file - verify clear error message
+- Test Idea 6.2: Invalid DATABASE_URL - verify startup fails, no password logged
+- Test Idea 6.3: Config override precedence - environment-specific overrides base config
+    </ideas>
+  </tests>
+</story-context>

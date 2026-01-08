@@ -1,0 +1,588 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Story Context: 4.7 - Integration Testing mit BMAD-BMM Use Cases
+  Generated: 2025-11-30
+  Epic: 4 - GraphRAG Integration (v3.2-GraphRAG)
+  Status: drafted
+-->
+<story-context version="1.0">
+  <metadata>
+    <epic-id>4</epic-id>
+    <story-id>7</story-id>
+    <story-key>4-7-integration-testing-mit-bmad-bmm-use-cases</story-key>
+    <story-title>Integration Testing mit BMAD-BMM Use Cases</story-title>
+    <story-status>drafted</story-status>
+    <story-path>bmad-docs/stories/4-7-integration-testing-mit-bmad-bmm-use-cases.md</story-path>
+    <as-a>Entwickler</as-a>
+    <i-want>die GraphRAG-Integration end-to-end testen</i-want>
+    <so-that>sichergestellt ist dass BMAD-BMM Agenten sie nutzen können</so-that>
+  </metadata>
+
+  <!-- ============================================================
+       SECTION 1: STORY DEFINITION (from epics.md)
+       ============================================================ -->
+  <story-definition source="bmad-docs/epics.md#Story-4.7">
+    <acceptance-criteria>
+      <criterion id="AC-4.7.1">
+        <title>Use Case 1: Architecture Check</title>
+        <given>Graph enthält Projekt-Nodes mit USES-Kanten zu Technology-Nodes</given>
+        <when>Query "Welche Technologien nutzt Projekt cognitive-memory?"</when>
+        <then>hybrid_search findet relevante L2 Insights UND Graph-Results mit Technologies</then>
+        <validation>
+          - Query-Routing erkennt "nutzt" als relational keyword
+          - Graph-Search findet "cognitive-memory" Node
+          - Neighbors mit vector_id liefern L2 Insights
+          - RRF Fusion kombiniert alle drei Sources
+        </validation>
+      </criterion>
+
+      <criterion id="AC-4.7.2">
+        <title>Use Case 2: Risk Analysis</title>
+        <given>Graph enthält Error-Nodes mit SOLVES-Kanten zu Solution-Nodes</given>
+        <when>Query "Gibt es bekannte Probleme mit PostgreSQL Connection Pooling?"</when>
+        <then>System findet relevante Error→Solution Pairs</then>
+        <validation>
+          - Entity Extraction erkennt "PostgreSQL", "Connection", "Pooling"
+          - Graph-Search traversiert Error→Solution Pfade
+          - L2 Insights mit Lösungsstrategien werden gefunden
+        </validation>
+      </criterion>
+
+      <criterion id="AC-4.7.3">
+        <title>Use Case 3: Knowledge Harvesting</title>
+        <given>Graph enthält Client/Project Nodes mit Beziehungen</given>
+        <when>Query "Erfahrungen mit API Integration für Stripe?"</when>
+        <then>System findet relevante Projekt-Erfahrungen via Graph-Traversal</then>
+        <validation>
+          - Entity Extraction erkennt "API", "Stripe"
+          - Graph-Search findet verknüpfte Projekte
+          - L2 Insights mit Implementierungsdetails werden gefunden
+        </validation>
+      </criterion>
+
+      <criterion id="AC-4.7.4">
+        <title>Performance Requirements</title>
+        <given>All Graph Tools (Stories 4.1-4.6) implementiert</given>
+        <when>End-to-End Tests ausgeführt werden</when>
+        <then>Performance-Targets eingehalten</then>
+        <validation>
+          - graph_query_neighbors: &lt;50ms (depth=1), &lt;200ms (depth=5)
+          - graph_find_path: &lt;500ms (max_depth=5)
+          - hybrid_search (with graph): &lt;1s end-to-end
+        </validation>
+      </criterion>
+    </acceptance-criteria>
+
+    <technical-notes>
+      - Integration Testing: End-to-End Validation aller Graph-Tools
+      - Test Data: Vorbereitung realitätsnaher Graph-Strukturen
+      - Performance Benchmarks: Automated Timing Assertions
+      - BMAD-BMM Validation: Manuelle Tests mit typischen Agent-Queries
+      - Geschätzte Zeit: 4-5h
+    </technical-notes>
+  </story-definition>
+
+  <!-- ============================================================
+       SECTION 2: ARCHITECTURE CONTEXT
+       ============================================================ -->
+  <architecture-context source="bmad-docs/architecture.md">
+    <tech-stack>
+      <database>PostgreSQL + pgvector (Neon Cloud)</database>
+      <backend>Python 3.11+ MCP Server</backend>
+      <graph-pattern>PostgreSQL Adjacency List (nodes + edges tables)</graph-pattern>
+      <embedding>OpenAI text-embedding-3-small (1536-dim)</embedding>
+      <search>Hybrid Search: 60% Semantic + 20% Keyword + 20% Graph (RRF Fusion)</search>
+    </tech-stack>
+
+    <adr reference="ADR-006">
+      <title>PostgreSQL Adjacency List Pattern</title>
+      <decision>Graph-Speicherung via PostgreSQL Adjacency List statt Neo4j/Apache AGE</decision>
+      <rationale>
+        - Keine zusätzliche Dependency
+        - Wiederverwendung bestehender PostgreSQL-Infrastruktur
+        - WITH RECURSIVE CTEs für Graph-Traversal ausreichend
+        - Performance für Tiefe 1-5 akzeptabel (&lt;200ms)
+      </rationale>
+    </adr>
+
+    <nfr-compliance>
+      <nfr id="NFR001" title="Latency">Graph Queries &lt;50ms (depth=1), &lt;200ms (depth=5)</nfr>
+      <nfr id="NFR002" title="Data Integrity">CASCADE deletes für referentielle Integrität</nfr>
+      <nfr id="NFR003" title="Budget">€0/mo (keine zusätzlichen API-Kosten)</nfr>
+      <nfr id="NFR004" title="Reliability">UNIQUE Constraints für Idempotenz</nfr>
+    </nfr-compliance>
+  </architecture-context>
+
+  <!-- ============================================================
+       SECTION 3: PREREQUISITE STORIES (Completed)
+       ============================================================ -->
+  <prerequisites>
+    <story id="4.1" status="done">
+      <title>Graph Schema Migration (Nodes + Edges Tabellen)</title>
+      <key-deliverables>
+        - PostgreSQL tables: nodes (UUID, label, name, properties, vector_id, created_at)
+        - PostgreSQL tables: edges (UUID, source_id, target_id, relation, weight, properties, created_at)
+        - UNIQUE constraints for idempotency
+        - FK from nodes.vector_id to l2_insights.id
+        - Migration: mcp_server/db/migrations/012_add_graph_tables.sql
+      </key-deliverables>
+    </story>
+
+    <story id="4.2" status="done">
+      <title>graph_add_node Tool Implementation</title>
+      <key-deliverables>
+        - MCP Tool: graph_add_node (label, name, properties, vector_id)
+        - Idempotent: ON CONFLICT (label, name) DO NOTHING
+        - File: mcp_server/tools/graph_add_node.py
+      </key-deliverables>
+    </story>
+
+    <story id="4.3" status="done">
+      <title>graph_add_edge Tool Implementation</title>
+      <key-deliverables>
+        - MCP Tool: graph_add_edge (source_name, target_name, relation, weight, properties)
+        - Auto-upsert: Creates nodes if not exist
+        - File: mcp_server/tools/graph_add_edge.py
+      </key-deliverables>
+    </story>
+
+    <story id="4.4" status="done">
+      <title>graph_query_neighbors Tool Implementation</title>
+      <key-deliverables>
+        - MCP Tool: graph_query_neighbors (node_name, relation_type, depth)
+        - WITH RECURSIVE CTE for multi-hop traversal
+        - Cycle detection via path array
+        - Performance: &lt;50ms (depth 1-3), &lt;200ms (depth 4-5)
+        - File: mcp_server/tools/graph_query_neighbors.py
+        - DB Function: query_neighbors() in mcp_server/db/graph.py
+      </key-deliverables>
+    </story>
+
+    <story id="4.5" status="done">
+      <title>graph_find_path Tool Implementation</title>
+      <key-deliverables>
+        - MCP Tool: graph_find_path (start_node, end_node, max_depth)
+        - BFS-based shortest path finding
+        - Bidirectional traversal
+        - Performance protection: 1000ms timeout
+        - File: mcp_server/tools/graph_find_path.py
+        - DB Function: find_path() in mcp_server/db/graph.py
+      </key-deliverables>
+    </story>
+
+    <story id="4.6" status="done">
+      <title>Hybrid Search Erweiterung (Vector + Keyword + Graph RRF)</title>
+      <key-deliverables>
+        - Extended rrf_fusion() for 3 sources (semantic, keyword, graph)
+        - Query routing: detect_relational_query() for DE+EN keywords
+        - Weight adjustment: 60/20/20 (standard) vs 40/20/40 (relational)
+        - Entity extraction: extract_entities_from_query()
+        - Graph search: graph_search() with L2 Insight lookup via vector_id
+        - Config: hybrid_search_weights and query_routing in config.yaml
+        - Backwards-compatible API
+        - File: Extended mcp_server/tools/__init__.py
+        - Tests: tests/test_hybrid_search_graph.py (33 tests)
+      </key-deliverables>
+    </story>
+  </prerequisites>
+
+  <!-- ============================================================
+       SECTION 4: RELEVANT CODE ARTIFACTS
+       ============================================================ -->
+  <code-artifacts>
+    <artifact type="mcp-tool-registry">
+      <path>mcp_server/tools/__init__.py</path>
+      <description>Main tool registry with 12 MCP tools including graph tools</description>
+      <relevant-functions>
+        <function name="rrf_fusion" lines="40-126">3-source RRF fusion with graph support</function>
+        <function name="extract_entities_from_query" lines="285-329">Entity extraction for graph search</function>
+        <function name="detect_relational_query" lines="332-366">Query routing logic</function>
+        <function name="get_adjusted_weights" lines="369-391">Weight adjustment for query types</function>
+        <function name="graph_search" lines="394-515">Graph-based search with L2 lookup</function>
+        <function name="handle_hybrid_search" lines="967-1118">Extended hybrid search handler</function>
+        <function name="register_tools" lines="1692-2070">Tool registration for all 12 tools</function>
+      </relevant-functions>
+      <tool-count>12 tools registered</tool-count>
+      <graph-tools>
+        - graph_add_node
+        - graph_add_edge
+        - graph_query_neighbors
+        - graph_find_path
+      </graph-tools>
+    </artifact>
+
+    <artifact type="database-layer">
+      <path>mcp_server/db/graph.py</path>
+      <description>Graph database operations module</description>
+      <relevant-functions>
+        <function name="add_node" lines="21-109">Idempotent node creation</function>
+        <function name="get_node_by_id" lines="112-152">Node lookup by UUID</function>
+        <function name="get_nodes_by_label" lines="155-196">Node listing by label</function>
+        <function name="get_node_by_name" lines="199-241">Node lookup by name (for entity extraction)</function>
+        <function name="get_or_create_node" lines="243-267">Upsert helper</function>
+        <function name="add_edge" lines="270-370">Idempotent edge creation</function>
+        <function name="query_neighbors" lines="373-461">Multi-hop graph traversal with cycle detection</function>
+        <function name="find_path" lines="464-642">BFS pathfinding with bidirectional traversal</function>
+      </relevant-functions>
+    </artifact>
+
+    <artifact type="configuration">
+      <path>config/config.yaml</path>
+      <description>Global configuration including hybrid search weights</description>
+      <relevant-sections>
+        <section name="hybrid_search_weights" lines="35-38">
+          semantic: 0.6
+          keyword: 0.2
+          graph: 0.2
+        </section>
+        <section name="query_routing" lines="42-76">
+          relational_keywords (de + en)
+          relational_weights (40/20/40)
+        </section>
+      </relevant-sections>
+    </artifact>
+
+    <artifact type="database-schema">
+      <path>mcp_server/db/migrations/012_add_graph_tables.sql</path>
+      <description>Graph schema migration</description>
+      <tables>
+        <table name="nodes">
+          id UUID PRIMARY KEY,
+          label VARCHAR(255) NOT NULL,
+          name VARCHAR(255) NOT NULL,
+          properties JSONB DEFAULT '{}',
+          vector_id INTEGER REFERENCES l2_insights(id),
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        </table>
+        <table name="edges">
+          id UUID PRIMARY KEY,
+          source_id UUID NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+          target_id UUID NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+          relation VARCHAR(255) NOT NULL,
+          weight FLOAT DEFAULT 1.0,
+          properties JSONB DEFAULT '{}',
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        </table>
+      </tables>
+      <indexes>
+        - idx_nodes_unique ON nodes(label, name)
+        - idx_nodes_label ON nodes(label)
+        - idx_nodes_name ON nodes(name)
+        - idx_edges_unique ON edges(source_id, target_id, relation)
+        - idx_edges_source_id ON edges(source_id)
+        - idx_edges_target_id ON edges(target_id)
+        - idx_edges_relation ON edges(relation)
+      </indexes>
+    </artifact>
+
+    <artifact type="test-suite">
+      <path>tests/test_graph_query_neighbors.py</path>
+      <description>graph_query_neighbors tool tests (18 tests)</description>
+      <test-categories>
+        - Parameter validation
+        - Single-hop traversal
+        - Multi-hop traversal
+        - Cycle detection
+        - Relation type filtering
+        - Performance benchmarks
+      </test-categories>
+    </artifact>
+
+    <artifact type="test-suite">
+      <path>tests/test_graph_find_path.py</path>
+      <description>graph_find_path tool tests (18 tests)</description>
+      <test-categories>
+        - Direct path finding
+        - Multi-hop paths
+        - No path scenarios
+        - Bidirectional traversal
+        - Performance timeout
+      </test-categories>
+    </artifact>
+
+    <artifact type="test-suite">
+      <path>tests/test_hybrid_search_graph.py</path>
+      <description>Graph-extended hybrid search tests (33 tests)</description>
+      <test-categories>
+        - Entity extraction (capitalized words, quoted strings)
+        - Query routing (DE+EN relational keywords)
+        - 3-source RRF fusion
+        - Weight normalization
+        - Backwards compatibility
+        - Config loading
+      </test-categories>
+    </artifact>
+  </code-artifacts>
+
+  <!-- ============================================================
+       SECTION 5: DEPENDENCIES
+       ============================================================ -->
+  <dependencies source="pyproject.toml">
+    <runtime>
+      <dependency>python ^3.11</dependency>
+      <dependency>mcp ^1.0.0</dependency>
+      <dependency>psycopg2-binary ^2.9.0</dependency>
+      <dependency>pgvector ^0.2.0</dependency>
+      <dependency>openai ^1.0.0</dependency>
+      <dependency>anthropic ^0.25.0</dependency>
+      <dependency>numpy ^1.24.0</dependency>
+      <dependency>pyyaml ^6.0</dependency>
+    </runtime>
+    <dev>
+      <dependency>pytest ^7.4.0</dependency>
+      <dependency>pytest-asyncio ^0.21.0</dependency>
+      <dependency>pytest-cov ^4.1.0</dependency>
+      <dependency>ruff ^0.1.0</dependency>
+      <dependency>mypy ^1.7.0</dependency>
+    </dev>
+  </dependencies>
+
+  <!-- ============================================================
+       SECTION 6: TESTING GUIDANCE
+       ============================================================ -->
+  <testing-guidance>
+    <test-strategy>
+      <approach>End-to-End Integration Testing</approach>
+      <focus>
+        - Validate all 4 graph tools work together
+        - Test 3 primary BMAD-BMM use cases
+        - Verify performance targets
+        - Ensure backwards compatibility
+      </focus>
+    </test-strategy>
+
+    <test-categories>
+      <category name="Use Case 1: Architecture Check">
+        <description>Test "Welche Technologien nutzt Projekt X?" query flow</description>
+        <setup>
+          1. Create Project node (label="Project", name="cognitive-memory")
+          2. Create Technology nodes (label="Technology", name="PostgreSQL", "Python", "pgvector")
+          3. Create USES edges from Project to Technologies
+          4. Create L2 Insights with technology documentation
+          5. Link Technology nodes to L2 Insights via vector_id
+        </setup>
+        <validation>
+          - Query routing detects "nutzt" as relational
+          - Graph search finds cognitive-memory node
+          - Neighbors return Technology nodes
+          - L2 Insights retrieved via vector_id
+          - RRF fusion combines all 3 sources
+        </validation>
+      </category>
+
+      <category name="Use Case 2: Risk Analysis">
+        <description>Test error/solution pattern queries</description>
+        <setup>
+          1. Create Error node (label="Error", name="Connection Pool Exhaustion")
+          2. Create Solution node (label="Solution", name="Increase pool_size")
+          3. Create SOLVES edge from Solution to Error
+          4. Create L2 Insights with solution details
+        </setup>
+        <validation>
+          - Entity extraction finds "PostgreSQL", "Connection"
+          - Graph traversal finds Error→Solution paths
+          - L2 Insights with solutions returned
+        </validation>
+      </category>
+
+      <category name="Use Case 3: Knowledge Harvesting">
+        <description>Test experience/project queries</description>
+        <setup>
+          1. Create Client node (label="Client", name="ACME Corp")
+          2. Create Technology node (label="Technology", name="Stripe")
+          3. Create Project node with HAS_CLIENT and USES edges
+          4. Link to L2 Insights with implementation details
+        </setup>
+        <validation>
+          - Entity extraction finds "Stripe"
+          - Graph traversal finds related projects
+          - L2 Insights with experience returned
+        </validation>
+      </category>
+
+      <category name="Performance Testing">
+        <description>Verify performance targets</description>
+        <targets>
+          - graph_query_neighbors (depth=1): &lt;50ms
+          - graph_query_neighbors (depth=5): &lt;200ms
+          - graph_find_path (max_depth=5): &lt;500ms
+          - hybrid_search (with graph): &lt;1s end-to-end
+        </targets>
+        <method>
+          - Use pytest timing markers
+          - Log execution_time_ms from tool responses
+          - Assert against targets
+        </method>
+      </category>
+    </test-categories>
+
+    <test-data-setup>
+      <note>Integration tests should create realistic graph structures that mirror BMAD-BMM agent use patterns</note>
+      <recommended-nodes>
+        - Project nodes (cognitive-memory, i-o-system, etc.)
+        - Technology nodes (PostgreSQL, Python, pgvector, OpenAI, etc.)
+        - Error nodes (common development issues)
+        - Solution nodes (proven fixes)
+        - Client nodes (project contexts)
+      </recommended-nodes>
+      <recommended-edges>
+        - USES (Project → Technology)
+        - DEPENDS_ON (Technology → Technology)
+        - SOLVES (Solution → Error)
+        - HAS_CLIENT (Project → Client)
+        - RELATED_TO (generic association)
+      </recommended-edges>
+    </test-data-setup>
+
+    <existing-test-patterns>
+      <pattern source="tests/test_graph_query_neighbors.py">
+        - Use @pytest.fixture for database connection setup
+        - Mock database with DictCursor for unit tests
+        - Test both success and error paths
+        - Include performance timing assertions
+      </pattern>
+      <pattern source="tests/test_hybrid_search_graph.py">
+        - Test entity extraction with various query formats
+        - Test query routing with DE+EN keywords
+        - Test RRF fusion weight calculations
+        - Test backwards compatibility
+      </pattern>
+    </existing-test-patterns>
+  </testing-guidance>
+
+  <!-- ============================================================
+       SECTION 7: IMPLEMENTATION CHECKLIST
+       ============================================================ -->
+  <implementation-checklist>
+    <task id="1" name="Test Data Setup">
+      <subtask>Create comprehensive test data fixtures with Project, Technology, Error, Solution nodes</subtask>
+      <subtask>Create realistic edge relationships (USES, SOLVES, DEPENDS_ON)</subtask>
+      <subtask>Create L2 Insights and link via vector_id</subtask>
+      <subtask>Document test data schema for reproducibility</subtask>
+    </task>
+
+    <task id="2" name="Use Case 1: Architecture Check">
+      <subtask>Write integration test for "Welche Technologien nutzt Projekt X?" query</subtask>
+      <subtask>Validate query routing activates (relational keyword detected)</subtask>
+      <subtask>Validate graph_search finds correct nodes</subtask>
+      <subtask>Validate L2 Insights retrieved via vector_id</subtask>
+      <subtask>Validate RRF fusion produces correct ranking</subtask>
+    </task>
+
+    <task id="3" name="Use Case 2: Risk Analysis">
+      <subtask>Write integration test for error/solution queries</subtask>
+      <subtask>Validate entity extraction from query</subtask>
+      <subtask>Validate Error→Solution traversal works</subtask>
+      <subtask>Validate relevant L2 Insights returned</subtask>
+    </task>
+
+    <task id="4" name="Use Case 3: Knowledge Harvesting">
+      <subtask>Write integration test for experience queries</subtask>
+      <subtask>Validate technology/project associations discovered</subtask>
+      <subtask>Validate implementation details retrieved</subtask>
+    </task>
+
+    <task id="5" name="Performance Testing">
+      <subtask>Write performance benchmark tests with timing assertions</subtask>
+      <subtask>Test graph_query_neighbors performance (depth 1-5)</subtask>
+      <subtask>Test graph_find_path performance</subtask>
+      <subtask>Test end-to-end hybrid_search performance</subtask>
+    </task>
+
+    <task id="6" name="Manual Testing">
+      <subtask>Test via Claude Code MCP interface</subtask>
+      <subtask>Validate response format in Claude Code</subtask>
+      <subtask>Document any issues or improvements needed</subtask>
+    </task>
+
+    <task id="7" name="Documentation">
+      <subtask>Update README with GraphRAG testing instructions</subtask>
+      <subtask>Document test data schema</subtask>
+      <subtask>Document performance benchmarks</subtask>
+    </task>
+  </implementation-checklist>
+
+  <!-- ============================================================
+       SECTION 8: LEARNINGS FROM PREVIOUS STORIES
+       ============================================================ -->
+  <learnings>
+    <learning source="Story 4.6">
+      <title>Graph Search Integration Pattern</title>
+      <description>
+        Story 4.6 established the pattern for integrating graph search with hybrid search:
+        1. Entity extraction via pattern matching (no NLP dependency)
+        2. Node lookup via get_node_by_name()
+        3. Neighbor traversal via query_neighbors()
+        4. L2 Insight lookup via vector_id FK
+        5. RRF fusion with 3 sources
+      </description>
+      <apply-to-4.7>Use same patterns in integration tests to validate end-to-end flow</apply-to-4.7>
+    </learning>
+
+    <learning source="Story 4.4">
+      <title>WITH RECURSIVE CTE Performance</title>
+      <description>
+        Story 4.4 implemented efficient multi-hop traversal with cycle detection.
+        Performance targets: &lt;50ms (depth 1-3), &lt;200ms (depth 4-5)
+      </description>
+      <apply-to-4.7>Include performance assertions in integration tests</apply-to-4.7>
+    </learning>
+
+    <learning source="Story 4.5">
+      <title>Pathfinding with Performance Protection</title>
+      <description>
+        Story 4.5 added 1000ms query timeout for performance protection.
+        BFS-based shortest path finding with bidirectional traversal.
+      </description>
+      <apply-to-4.7>Test timeout behavior and edge cases in pathfinding tests</apply-to-4.7>
+    </learning>
+
+    <learning source="Stories 4.1-4.3">
+      <title>Idempotent Operations</title>
+      <description>
+        All graph tools use ON CONFLICT clauses for idempotent operations.
+        Test data setup can safely re-run without duplicates.
+      </description>
+      <apply-to-4.7>Leverage idempotency in test fixtures for reliable test runs</apply-to-4.7>
+    </learning>
+  </learnings>
+
+  <!-- ============================================================
+       SECTION 9: SUCCESS CRITERIA
+       ============================================================ -->
+  <success-criteria>
+    <criterion id="SC-1">
+      <title>All 3 Use Cases Pass</title>
+      <description>Architecture Check, Risk Analysis, and Knowledge Harvesting queries return expected results</description>
+    </criterion>
+
+    <criterion id="SC-2">
+      <title>Performance Targets Met</title>
+      <description>
+        - graph_query_neighbors: &lt;50ms (depth=1), &lt;200ms (depth=5)
+        - graph_find_path: &lt;500ms (max_depth=5)
+        - hybrid_search: &lt;1s end-to-end
+      </description>
+    </criterion>
+
+    <criterion id="SC-3">
+      <title>Graph-L2 Integration Works</title>
+      <description>L2 Insights are correctly retrieved via nodes.vector_id foreign key relationship</description>
+    </criterion>
+
+    <criterion id="SC-4">
+      <title>Query Routing Functions</title>
+      <description>Relational keywords trigger 40/20/40 weights, standard queries use 60/20/20</description>
+    </criterion>
+
+    <criterion id="SC-5">
+      <title>All Tests Pass</title>
+      <description>New integration tests pass alongside existing 69 graph-related tests</description>
+    </criterion>
+
+    <criterion id="SC-6">
+      <title>Manual Validation Complete</title>
+      <description>Claude Code can successfully execute BMAD-BMM style queries via MCP</description>
+    </criterion>
+  </success-criteria>
+</story-context>

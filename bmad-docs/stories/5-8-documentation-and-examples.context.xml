@@ -1,0 +1,446 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>5</epicId>
+    <storyId>8</storyId>
+    <title>Documentation and Examples</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-30</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>/home/ethr/01-projects/ai-experiments/cognitive-memory/bmad-docs/stories/5-8-documentation-and-examples.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Als Ecosystem-Entwickler,</asA>
+    <iWant>möchte ich Dokumentation und Beispiele für die Library API,</iWant>
+    <soThat>sodass ich sie korrekt nutzen kann.</soThat>
+    <tasks>### Task 1: API Reference Documentation (AC: 5.8.1, 5.8.6)
+
+- [ ] Subtask 1.1: Erstelle `/docs/api/library.md` Grundstruktur
+- [ ] Subtask 1.2: Dokumentiere MemoryStore Class mit allen Methoden
+- [ ] Subtask 1.3: Dokumentiere WorkingMemory Sub-Modul
+- [ ] Subtask 1.4: Dokumentiere EpisodeMemory Sub-Modul
+- [ ] Subtask 1.5: Dokumentiere GraphStore Sub-Modul
+- [ ] Subtask 1.6: Dokumentiere alle Data Models (Dataclasses)
+- [ ] Subtask 1.7: Dokumentiere Exception Hierarchy mit Beispielen
+- [ ] Subtask 1.8: Füge Error Handling Patterns hinzu
+
+### Task 2: Usage Example Script (AC: 5.8.2)
+
+- [ ] Subtask 2.1: Erstelle `/examples/` Verzeichnis falls nicht vorhanden
+- [ ] Subtask 2.2: Erstelle `/examples/library_usage.py` mit Grundstruktur
+- [ ] Subtask 2.3: Implementiere Connection Setup Beispiele
+- [ ] Subtask 2.4: Implementiere Hybrid Search Beispiele
+- [ ] Subtask 2.5: Implementiere Working Memory Beispiele
+- [ ] Subtask 2.6: Implementiere Episode Memory Beispiele
+- [ ] Subtask 2.7: Implementiere Graph Operations Beispiele
+- [ ] Subtask 2.8: Implementiere Error Handling Beispiele
+- [ ] Subtask 2.9: Teste Script-Ausführbarkeit (Syntax-Check)
+
+### Task 3: Migration Guide (AC: 5.8.3)
+
+- [ ] Subtask 3.1: Erstelle `/docs/migration-guide.md`
+- [ ] Subtask 3.2: Schreibe "Wann MCP vs. Library nutzen?" Section
+- [ ] Subtask 3.3: Erstelle MCP → Library Mapping-Tabelle
+- [ ] Subtask 3.4: Schreibe Code-Beispiele für Umstellung (alle 11 Tools)
+- [ ] Subtask 3.5: Dokumentiere Performance-Unterschiede
+
+### Task 4: README.md Update (AC: 5.8.4)
+
+- [ ] Subtask 4.1: Lese aktuellen README.md
+- [ ] Subtask 4.2: Füge "Library API" Section nach "MCP Tools" hinzu
+- [ ] Subtask 4.3: Füge Quick Start Beispiel hinzu
+- [ ] Subtask 4.4: Erweitere Installation Instructions
+- [ ] Subtask 4.5: Füge Links zu API Reference hinzu
+
+### Task 5: i-o-system Integration Documentation (AC: 5.8.5)
+
+- [ ] Subtask 5.1: Dokumentiere CognitiveMemoryAdapter Pattern in API Reference
+- [ ] Subtask 5.2: Schreibe StorageBackend Protocol Compliance Beispiel
+- [ ] Subtask 5.3: Dokumentiere Import-Pfade und Dependencies
+
+### Task 6: Review und Validation (AC: 5.8.6)
+
+- [ ] Subtask 6.1: Prüfe Sprachkonsistenz (Deutsch)
+- [ ] Subtask 6.2: Prüfe Code-Beispiele auf Syntax-Fehler
+- [ ] Subtask 6.3: Prüfe Markdown-Formatierung
+- [ ] Subtask 6.4: Prüfe Links und Referenzen
+- [ ] Subtask 6.5: Ruff lint auf example script</tasks>
+  </story>
+
+  <acceptanceCriteria>### AC-5.8.1: API Reference Documentation (`/docs/api/library.md`)
+
+**Given** alle Library API Features implementiert sind (Stories 5.1-5.7)
+**When** die API Reference dokumentiert wird
+**Then** enthält `/docs/api/library.md`:
+
+- **MemoryStore Class Documentation:**
+  - Konstruktor (`MemoryStore(connection_string)` und `MemoryStore.from_env()`)
+  - Context Manager Support (`with MemoryStore() as store:`)
+  - `search(query, top_k, weights)` - Parameter, Return Type, Beispiele
+  - `store_insight(content, source_ids, metadata)` - Parameter, Return Type, Beispiele
+
+- **Sub-Module Documentation:**
+  - `store.working` - WorkingMemory: `add()`, `list()`, `get()`, `clear()`
+  - `store.episode` - EpisodeMemory: `store()`, `search()`, `list()`
+  - `store.graph` - GraphStore: `add_node()`, `add_edge()`, `query_neighbors()`, `find_path()`
+
+- **Data Models:**
+  - `SearchResult`, `InsightResult`, `WorkingMemoryResult`, `EpisodeResult`
+  - `GraphNode`, `NodeResult`, `EdgeResult`, `PathResult`
+
+- **Exception Hierarchy:**
+  - `CognitiveMemoryError` (Base), `ConnectionError`, `SearchError`, `StorageError`, `ValidationError`, `EmbeddingError`
+
+- **Error Handling Patterns:**
+  - Try/Except Beispiele für alle Exception-Typen
+  - Retry-Strategien bei transienten Fehlern
+
+### AC-5.8.2: Usage Example (`/examples/library_usage.py`)
+
+**Given** API Reference ist dokumentiert
+**When** ein vollständiges Beispiel erstellt wird
+**Then** enthält `/examples/library_usage.py`:
+
+- **Connection Setup:**
+  - Mit Environment Variable: `MemoryStore.from_env()`
+  - Mit explizitem Connection String: `MemoryStore(connection_string)`
+  - Context Manager Pattern
+
+- **Core Operations:**
+  - Hybrid Search mit verschiedenen Weights
+  - L2 Insight Storage mit Metadata
+  - Working Memory Add, List, Clear
+  - Episode Memory Store und Search
+  - Graph Operations: add_node, add_edge, query_neighbors, find_path
+
+- **Error Handling Beispiele:**
+  - Connection Error Handling
+  - Validation Error Handling
+  - Graceful Degradation Patterns
+
+- **Ausführbarkeit:**
+  - Das Script ist standalone ausführbar mit `python examples/library_usage.py`
+  - Enthält `if __name__ == "__main__":` Block
+  - Alle Beispiele sind syntaktisch korrekt
+
+### AC-5.8.3: Migration Guide (`/docs/migration-guide.md`)
+
+**Given** MCP Tools und Library API sind beide verfügbar
+**When** ein Migration Guide erstellt wird
+**Then** enthält `/docs/migration-guide.md`:
+
+- **Wann MCP vs. Library nutzen?**
+  - MCP: Für Claude Code Integration, externe MCP Clients
+  - Library: Für Python-Projekte, Unit Tests, Ecosystem-Integration
+
+- **Vergleichstabelle:**
+  - MCP Tool → Library Method Mapping (z.B. `hybrid_search` → `store.search()`)
+  - Parameter-Unterschiede (falls vorhanden)
+  - Return Type-Unterschiede
+
+- **Code-Beispiele für Umstellung:**
+  - Vorher (MCP): `mcp.call_tool("hybrid_search", {...})`
+  - Nachher (Library): `store.search(query, top_k=5)`
+  - Für alle 11 MCP Tools
+
+- **Performance-Unterschiede:**
+  - Library: Direkte DB-Calls, kein MCP Protocol Overhead (~10-20ms schneller)
+  - MCP: Full Protocol Stack, notwendig für Claude Code Integration
+  - Benchmark-Referenzen (optional)
+
+### AC-5.8.4: README.md Library API Section
+
+**Given** alle Dokumentation ist erstellt
+**When** README.md aktualisiert wird
+**Then** enthält README.md:
+
+- **Library API Section** (nach "MCP Tools" Section):
+  - Installation Instructions: `from cognitive_memory import MemoryStore`
+  - Quick Start Beispiel (5-10 Zeilen)
+  - Link zu vollständiger API Reference
+
+- **Installation Instructions Erweiterung:**
+  - Hinweis dass Library API im selben Package enthalten ist
+  - Keine zusätzliche Installation nötig
+
+### AC-5.8.5: i-o-system Integration Dokumentation
+
+**Given** Library API ist dokumentiert
+**When** Ecosystem-Integration dokumentiert wird
+**Then** enthält API Reference oder separates Dokument:
+
+- **CognitiveMemoryAdapter Pattern:**
+  - Wie `CognitiveMemoryAdapter` die Library nutzen kann
+  - Beispiel für StorageBackend Protocol Compliance
+  - Import-Pfade und Dependencies
+
+- **Beispiel Implementation:**
+  ```python
+  from cognitive_memory import MemoryStore
+  from io_system.storage.base import StorageBackend
+
+  class CognitiveMemoryAdapter(StorageBackend):
+      def __init__(self):
+          self._store = MemoryStore.from_env()
+
+      def search(self, query: str, limit: int = 5) -> list[dict]:
+          results = self._store.search(query, top_k=limit)
+          return [self._to_io_format(r) for r in results]
+  ```
+
+### AC-5.8.6: Sprache und Konsistenz
+
+**Given** alle Dokumentation wird finalisiert
+**When** Sprachkonsistenz geprüft wird
+**Then**:
+
+- **Dokumentationssprache:** Deutsch (gemäß `document_output_language: Deutsch (German)`)
+- **Code-Beispiele:** Python mit Type Hints
+- **Konsistente Terminologie:** Gleiche Begriffe für gleiche Konzepte (z.B. immer "Insight" nicht mal "Insight" mal "Erkenntnis")
+- **Markdown-Formatierung:** Einheitliche Heading-Struktur, Code-Blöcke mit Syntax-Highlighting</acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>bmad-docs/epic-5-tech-context.md</path>
+        <title>Epic 5 Technical Context: Library API for Ecosystem Integration</title>
+        <section>Public API Design</section>
+        <snippet>Vollständige Spezifikation der MemoryStore Klasse mit allen Methoden, Datenmodellen und Exception Hierarchy. Wrapper Pattern (ADR-007) spezifiziert, dass cognitive_memory/ direkt aus mcp_server/ importiert.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/epics/epic-5-library-api-for-ecosystem-integration.md</path>
+        <title>Epic 5: Library API for Ecosystem Integration</title>
+        <section>Story 5.8: Documentation & Examples</section>
+        <snippet>Story 5.8 definiert alle Dokumentations-Anforderungen: API Reference (/docs/api/library.md), Usage Example (/examples/library_usage.py), Migration Guide (/docs/migration-guide.md), README.md Update und i-o-system Integration.</snippet>
+      </doc>
+      <doc>
+        <path>docs/reference/api-reference.md</path>
+        <title>API Reference - MCP Tools & Resources</title>
+        <section>Complete MCP API Documentation</section>
+        <snippet>Umfassende Dokumentation aller 11 MCP Tools und 5 Resources für Migration Guide. Enthält Signaturen, Parameter, Return Types und Examples für store_raw_dialogue, hybrid_search, compress_to_l2_insight, etc.</snippet>
+      </doc>
+      <doc>
+        <path>README.md</path>
+        <title>Cognitive Memory Project README</title>
+        <section>Project Overview and Architecture</section>
+        <snippet>Architektur-Übersicht mit MCP Tools Tabelle, Features und Projektstruktur. Basis für README.md Library API Section Erweiterung.</snippet>
+      </doc>
+      <doc>
+        <path>docs/guides/mcp-configuration.md</path>
+        <title>MCP Configuration Guide</title>
+        <section>MCP Setup Instructions</section>
+        <snippet>Konfigurations-Anleitung für MCP Integration - relevant für Performance-Vergleich in Migration Guide.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>cognitive_memory/__init__.py</path>
+        <kind>module</kind>
+        <symbol>__all__ exports</symbol>
+        <lines>83-107</lines>
+        <reason>Public API exports - MemoryStore, WorkingMemory, EpisodeMemory, GraphStore, all result types and exceptions</reason>
+      </artifact>
+      <artifact>
+        <path>cognitive_memory/store.py</path>
+        <kind>class</kind>
+        <symbol>MemoryStore</symbol>
+        <lines>53-102</lines>
+        <reason>Main entry point class with constructor, context manager, and lazy initialization of sub-modules</reason>
+      </artifact>
+      <artifact>
+        <path>cognitive_memory/store.py</path>
+        <kind>method</kind>
+        <symbol>MemoryStore.from_env</symbol>
+        <lines>103-116</lines>
+        <reason>Factory method for environment variable based initialization - key for example scripts</reason>
+      </artifact>
+      <artifact>
+        <path>cognitive_memory/store.py</path>
+        <kind>method</kind>
+        <symbol>MemoryStore.search</symbol>
+        <lines>252-336</lines>
+        <reason>Core hybrid search implementation with semantic, keyword, and RRF fusion - main documentation target</reason>
+      </artifact>
+      <artifact>
+        <path>cognitive_memory/store.py</path>
+        <kind>method</kind>
+        <symbol>MemoryStore.store_insight</symbol>
+        <lines>338-372</lines>
+        <reason>L2 insight storage with embedding generation and semantic fidelity check</reason>
+      </artifact>
+      <artifact>
+        <path>cognitive_memory/store.py</path>
+        <kind>class</kind>
+        <symbol>WorkingMemory</symbol>
+        <lines>551-617</lines>
+        <reason>Working memory management with LRU eviction and importance scoring</reason>
+      </artifact>
+      <artifact>
+        <path>cognitive_memory/store.py</path>
+        <kind>class</kind>
+        <symbol>EpisodeMemory</symbol>
+        <lines>908-978</lines>
+        <reason>Episode memory storage for verbal reinforcement learning with similarity search</reason>
+      </artifact>
+      <artifact>
+        <path>cognitive_memory/store.py</path>
+        <kind>class</kind>
+        <symbol>GraphStore</symbol>
+        <lines>1162-1234</lines>
+        <reason>Graph operations: add_node, add_edge, query_neighbors, find_path for GraphRAG functionality</reason>
+      </artifact>
+      <artifact>
+        <path>cognitive_memory/types.py</path>
+        <kind>dataclass</kind>
+        <symbol>SearchResult</symbol>
+        <lines>14-36</lines>
+        <reason>Main search result type with id, content, score, source, metadata - used in all examples</reason>
+      </artifact>
+      <artifact>
+        <path>cognitive_memory/types.py</path>
+        <kind>dataclass</kind>
+        <symbol>InsightResult</symbol>
+        <lines>38-57</lines>
+        <reason>L2 insight storage result with embedding status and fidelity score</reason>
+      </artifact>
+      <artifact>
+        <path>cognitive_memory/types.py</path>
+        <kind>dataclass</kind>
+        <symbol>WorkingMemoryResult</symbol>
+        <lines>59-75</lines>
+        <reason>Working memory operation result with evicted and archived IDs</reason>
+      </artifact>
+      <artifact>
+        <path>cognitive_memory/types.py</path>
+        <kind>dataclass</kind>
+        <symbol>EpisodeResult</symbol>
+        <lines>97-115</lines>
+        <reason>Episode memory storage result with query, reward, and reflection</reason>
+      </artifact>
+      <artifact>
+        <path>cognitive_memory/types.py</path>
+        <kind>dataclass</kind>
+        <symbol>GraphNode</symbol>
+        <lines>117-135</lines>
+        <reason>Graph node representation for GraphRAG operations</reason>
+      </artifact>
+      <artifact>
+        <path>cognitive_memory/types.py</path>
+        <kind>dataclass</kind>
+        <symbol>GraphEdge</symbol>
+        <lines>137-157</lines>
+        <reason>Graph edge representation for relationships between entities</reason>
+      </artifact>
+      <artifact>
+        <path>cognitive_memory/types.py</path>
+        <kind>dataclass</kind>
+        <symbol>PathResult</symbol>
+        <lines>159-177</lines>
+        <reason>Graph path finding result with node and edge details</reason>
+      </artifact>
+      <artifact>
+        <path>cognitive_memory/exceptions.py</path>
+        <kind>class</kind>
+        <symbol>CognitiveMemoryError</symbol>
+        <lines>10-24</lines>
+        <reason>Base exception class for catch-all error handling in examples</reason>
+      </artifact>
+      <artifact>
+        <path>cognitive_memory/exceptions.py</path>
+        <kind>class</kind>
+        <symbol>ConnectionError</symbol>
+        <lines>26-38</lines>
+        <reason>Database connection failures - common error case for example error handling</reason>
+      </artifact>
+      <artifact>
+        <path>cognitive_memory/exceptions.py</path>
+        <kind>class</kind>
+        <symbol>ValidationError</symbol>
+        <lines>66-77</lines>
+        <reason>Input validation failures - important for parameter validation examples</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <ecosystem name="python">
+        <package name="mcp" version="^1.0.0" purpose="Model Context Protocol foundation" />
+        <package name="psycopg2-binary" version="^2.9.0" purpose="PostgreSQL database driver" />
+        <package name="pgvector" version="^0.2.0" purpose="PostgreSQL vector extension support" />
+        <package name="openai" version="^1.0.0" purpose="Embedding generation for semantic search" />
+        <package name="anthropic" version="^0.25.0" purpose="Haiku API for evaluation and reflexion" />
+        <package name="numpy" version="^1.24.0" purpose="Numerical operations for search algorithms" />
+        <package name="scipy" version="^1.11.0" purpose="RRF fusion and statistical operations" />
+        <package name="scikit-learn" version="^1.3.0" purpose="ML algorithms and similarity calculations" />
+        <package name="python-dotenv" version="^1.0.0" purpose="Environment variable management" />
+      </ecosystem>
+      <ecosystem name="dev">
+        <package name="pytest" version="^7.4.0" purpose="Unit testing framework" />
+        <package name="pytest-asyncio" version="^0.21.0" purpose="Async testing support" />
+        <package name="pytest-cov" version="^4.1.0" purpose="Test coverage reporting" />
+        <package name="black" version="^24.3.0" purpose="Code formatting" />
+        <package name="ruff" version="^0.1.0" purpose="Linting and code quality" />
+        <package name="mypy" version="^1.7.0" purpose="Type checking" />
+      </ecosystem>
+      <ecosystem name="external-apis">
+        <api name="OpenAI Embeddings" cost="$0.06/month" purpose="Vector embeddings for semantic search" />
+        <api name="OpenAI GPT-4o" cost="$1-1.5/month" purpose="Dual judge evaluation" />
+        <api name="Anthropic Haiku" cost="$2-3.5/month" purpose="Dual judge, evaluation, and reflexion" />
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="language" description="Dokumentationssprache: Deutsch (gemäß document_output_language)" />
+    <constraint type="code-examples" description="Python mit Type Hints für alle Code-Beispiele" />
+    <constraint type="terminology" description="Konsistente Terminologie: Gleiche Begriffe für gleiche Konzepte (z.B. immer 'Insight')" />
+    <constraint type="markdown" description="Einheitliche Heading-Struktur, Code-Blöcke mit Syntax-Highlighting" />
+    <constraint type="wrapper-pattern" description="ADR-007: Library API nutzt Wrapper Pattern, importiert direkt aus mcp_server/" />
+    <constraint type="no-code-duplication" description="Keine Code-Duplizierung zwischen Library und MCP Server" />
+    <constraint type="package-structure" description="cognitive_memory/ Package parallel zu mcp_server/ mit __init__.py exports" />
+  </constraints>
+  <interfaces>
+    <interface name="MemoryStore.__init__" kind="constructor" signature="MemoryStore(connection_string: str | None = None, auto_initialize: bool = True)" path="cognitive_memory/store.py:80-99" />
+    <interface name="MemoryStore.from_env" kind="factory" signature="@classmethod def from_env(cls) -> MemoryStore" path="cognitive_memory/store.py:103-116" />
+    <interface name="MemoryStore.__enter__/__exit__" kind="context-manager" signature="def __enter__(self) -> MemoryStore; def __exit__(self, exc_type, exc_val, exc_tb)" path="cognitive_memory/store.py:166-179" />
+    <interface name="MemoryStore.search" kind="method" signature="def search(self, query: str, top_k: int = 5, weights: dict[str, float] | None = None) -> list[SearchResult]" path="cognitive_memory/store.py:252-336" />
+    <interface name="MemoryStore.store_insight" kind="method" signature="def store_insight(self, content: str, source_ids: list[int], metadata: dict | None = None) -> InsightResult" path="cognitive_memory/store.py:338-372" />
+    <interface name="WorkingMemory.add" kind="method" signature="def add(self, content: str, importance: float = 0.5) -> WorkingMemoryResult" path="cognitive_memory/store.py:619-671" />
+    <interface name="WorkingMemory.list" kind="method" signature="def list(self) -> list[WorkingMemoryItem]" path="cognitive_memory/store.py:673-703" />
+    <interface name="WorkingMemory.clear" kind="method" signature="def clear(self) -> int" path="cognitive_memory/store.py:705-739" />
+    <interface name="EpisodeMemory.store" kind="method" signature="def store(self, query: str, reward: float, reflection: str) -> EpisodeResult" path="cognitive_memory/store.py:980-1035" />
+    <interface name="EpisodeMemory.search" kind="method" signature="def search(self, query: str, min_similarity: float = 0.7, limit: int = 3) -> list[Episode]" path="cognitive_memory/store.py:1037-1091" />
+    <interface name="GraphStore.add_node" kind="method" signature="def add_node(self, label: str, name: str, properties: dict | None = None) -> NodeResult" path="cognitive_memory/store.py:1236-1295" />
+    <interface name="GraphStore.add_edge" kind="method" signature="def add_edge(self, source: str, target: str, relation: str, weight: float = 1.0) -> EdgeResult" path="cognitive_memory/store.py:1297-1360" />
+    <interface name="GraphStore.query_neighbors" kind="method" signature="def query_neighbors(self, node_name: str, relation_type: str | None = None, depth: int = 1) -> list[GraphNode]" path="cognitive_memory/store.py:1362-1435" />
+    <interface name="GraphStore.find_path" kind="method" signature="def find_path(self, start: str, end: str, max_depth: int = 5) -> PathResult" path="cognitive_memory/store.py:1437-1492" />
+  </interfaces>
+  <tests>
+    <standards>Testing Framework: pytest mit pytest-asyncio für asynchrone Operationen. Mock-basierte Tests mit unittest.mock.patch für externe API-Abhängigkeiten (OpenAI, Anthropic). ATDD (Acceptance Test Driven Development) Pattern mit Priority-based Tests (P0: Core, P1: Important, P2: Nice-to-have). Context Manager Pattern Tests für Connection Management. Validation Tests für alle Input-Parameter und Return Types.</standards>
+    <locations>tests/library/ - ATDD Tests für Library API (Story 5.1-5.7)
+- test_imports.py: Import und Package-Struktur Tests (10 tests)
+- test_memory_store.py: MemoryStore Core Tests (13 tests)
+- test_search.py: Hybrid Search Tests (14 tests)
+- test_store_insight.py: L2 Insight Storage Tests (11 tests)
+- test_working_memory.py: Working Memory Tests (8 tests)
+- test_episode_memory.py: Episode Memory Tests (7 tests)
+- test_graph_store.py: Graph Operations Tests (6 tests)
+- test_connection_pool.py: Connection Pool Tests (7 tests)
+- test_contract.py: Library vs MCP Consistency Tests (10 tests)</locations>
+    <ideas>
+      <test-idea ac="AC-5.8.1" description="API Reference Tests: Validiere dass alle dokumentierten Methoden und Signaturen existieren und korrekte Return Types haben">
+        <example>pytest tests/library/test_memory_store.py::TestMemoryStorePublicAPI</example>
+      </test-idea>
+      <test-idea ac="AC-5.8.2" description="Usage Example Executability: Teste dass examples/library_usage.py syntaktisch korrekt ist und mit Mocks läuft">
+        <example>python -m py_compile examples/library_usage.py</example>
+      </test-idea>
+      <test-idea ac="AC-5.8.3" description="Migration Guide Accuracy: Vergleiche MCP Tool Calls mit Library Method Calls für konsistentes Verhalten">
+        <example>pytest tests/library/test_contract.py::TestMCPVsLibraryConsistency</example>
+      </test-idea>
+      <test-idea ac="AC-5.8.5" description="i-o-system Integration: Teste CognitiveMemoryAdapter Pattern mit StorageBackend Protocol">
+        <example>Beispiel in docs/api/library.md unter "Ecosystem Integration"</example>
+      </test-idea>
+      <test-idea ac="AC-5.8.6" description="Documentation Consistency: Automatisierte Check für deutsche Sprache und konsistente Terminologie">
+        <example>Custom script für markdown files + ruff lint auf python examples</example>
+      </test-idea>
+    </ideas>
+  </tests>
+</story-context>

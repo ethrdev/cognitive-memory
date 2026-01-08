@@ -1,0 +1,206 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>5</epicId>
+    <storyId>5</storyId>
+    <title>Working Memory Library API</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-30</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>/home/ethr/01-projects/ai-experiments/cognitive-memory/bmad-docs/stories/5-5-working-memory-library-api.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Als i-o-system Entwickler,</asA>
+    <iWant>möchte ich `store.working.add(content, importance)` aufrufen,</iWant>
+    <soThat>sodass ich Session Context ohne MCP speichern kann.</soThat>
+    <tasks>### Task 1: WorkingMemoryItem Dataclass erstellen (AC: 5.5.2, 5.5.4)
+
+- [ ] Subtask 1.1: Erstelle `WorkingMemoryItem` Dataclass in `cognitive_memory/types.py`
+- [ ] Subtask 1.2: Felder: `id`, `content`, `importance`, `last_accessed`, `created_at`
+- [ ] Subtask 1.3: Verifiziere konsistenz mit `WorkingMemoryResult` (bereits vorhanden)
+
+### Task 2: WorkingMemory.add() implementieren (AC: 5.5.1, 5.5.5)
+
+- [ ] Subtask 2.1: Implementiere Importance-Validierung (0.0-1.0)
+- [ ] Subtask 2.2: Implementiere Insert in `working_memory` Tabelle
+- [ ] Subtask 2.3: Implementiere LRU Eviction Check (max 10 Items)
+- [ ] Subtask 2.4: Implementiere Stale Memory Archivierung bei Eviction (importance >0.8)
+- [ ] Subtask 2.5: Return `WorkingMemoryResult` mit allen Details
+- [ ] Subtask 2.6: Schreibe Tests für `add()` mit verschiedenen Szenarien
+
+### Task 3: WorkingMemory.list() implementieren (AC: 5.5.2)
+
+- [ ] Subtask 3.1: Implementiere `get_all()` → `list[WorkingMemoryItem]`
+- [ ] Subtask 3.2: Sortierung nach `last_accessed` DESC
+- [ ] Subtask 3.3: Schreibe Tests für `list()` mit verschiedenen Item-Mengen
+
+### Task 4: WorkingMemory.clear() implementieren (AC: 5.5.3)
+
+- [ ] Subtask 4.1: Archiviere kritische Items (importance >0.8) zu Stale Memory
+- [ ] Subtask 4.2: Lösche alle Items aus `working_memory`
+- [ ] Subtask 4.3: Return Anzahl gelöschter Items
+- [ ] Subtask 4.4: Schreibe Tests für `clear()` mit und ohne kritische Items
+
+### Task 5: WorkingMemory.get() implementieren (AC: 5.5.4)
+
+- [ ] Subtask 5.1: Implementiere `get(id)` → `WorkingMemoryItem | None`
+- [ ] Subtask 5.2: Aktualisiere `last_accessed` bei Abruf (LRU Touch)
+- [ ] Subtask 5.3: Return `None` falls Item nicht existiert
+- [ ] Subtask 5.4: Schreibe Tests für `get()` mit existierendem und nicht-existierendem Item
+
+### Task 6: Integration mit MemoryStore.working Property (AC: 5.5.6)
+
+- [ ] Subtask 6.1: Verifiziere lazy-initialization von `store.working`
+- [ ] Subtask 6.2: Verifiziere Connection Pool Sharing mit MemoryStore
+- [ ] Subtask 6.3: Schreibe Integration-Tests für `store.working.add/list/get/clear`
+
+### Task 7: Code Quality und Tests (AC: alle)
+
+- [ ] Subtask 7.1: Erstelle `tests/library/test_working_memory.py`
+- [ ] Subtask 7.2: Ruff lint alle neuen Dateien
+- [ ] Subtask 7.3: MyPy Type-Check
+- [ ] Subtask 7.4: Vollständige Docstrings für alle Methoden</tasks>
+  </story>
+
+  <acceptanceCriteria>### AC-5.5.1: Working Memory Add Operation
+
+**Given** MemoryStore ist instanziiert und verbunden
+**When** ich `store.working.add(content, importance=0.5)` aufrufe
+**Then** wird Working Memory aktualisiert:
+
+- Content wird zur Working Memory hinzugefügt
+- LRU Eviction wenn >10 Items (oder konfigurierbar)
+- Stale Memory Archivierung bei Eviction (Importance >0.8)
+
+**And** Response enthält `WorkingMemoryResult`:
+
+```python
+@dataclass
+class WorkingMemoryResult:
+    added_id: int
+    evicted_id: Optional[int]
+    archived_id: Optional[int]  # Falls zu Stale Memory archiviert
+    current_count: int
+```
+
+### AC-5.5.2: Working Memory List Operation
+
+**Given** MemoryStore ist instanziiert und verbunden
+**When** ich `store.working.list()` aufrufe
+**Then** erhalte ich eine Liste aller Working Memory Items:
+
+- Response: `list[WorkingMemoryItem]` mit `id`, `content`, `importance`, `last_accessed`, `created_at`
+- Sortiert nach `last_accessed` (neueste zuerst)
+
+```python
+@dataclass
+class WorkingMemoryItem:
+    id: int
+    content: str
+    importance: float
+    last_accessed: datetime
+    created_at: datetime
+```
+
+### AC-5.5.3: Working Memory Clear Operation
+
+**Given** MemoryStore ist instanziiert und Working Memory enthält Items
+**When** ich `store.working.clear()` aufrufe
+**Then** werden alle Items gelöscht:
+
+- Response: `int` (Anzahl gelöschter Items)
+- Working Memory ist anschließend leer
+- Kritische Items (importance >0.8) werden zu Stale Memory archiviert vor dem Löschen
+
+### AC-5.5.4: Working Memory Get Operation
+
+**Given** MemoryStore ist instanziiert und Working Memory enthält Items
+**When** ich `store.working.get(id)` aufrufe
+**Then** erhalte ich das spezifische Item:
+
+- Response: `WorkingMemoryItem | None`
+- `None` falls Item nicht existiert
+- `last_accessed` wird beim Abruf aktualisiert (LRU Touch)
+
+### AC-5.5.5: Importance Validation
+
+**Given** MemoryStore ist instanziiert
+**When** ich `store.working.add(content, importance=X)` mit ungültigem Importance aufrufe
+**Then** wird `ValidationError` geworfen:
+
+- `importance < 0.0` → `ValidationError("Importance must be >= 0.0")`
+- `importance > 1.0` → `ValidationError("Importance must be <= 1.0")`
+
+### AC-5.5.6: Wrapper Pattern Compliance (ADR-007)
+
+**Given** WorkingMemory Implementation
+**When** Code-Review durchgeführt wird
+**Then** folgt Implementation dem Wrapper Pattern:
+
+- Importiert von `mcp_server/tools/update_working_memory.py` (oder DB-Layer direkt)
+- Keine Code-Duplizierung
+- Shared Connection Pool mit MemoryStore
+- Konsistentes Verhalten mit MCP Tool `update_working_memory`</acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="bmad-docs/epics/epic-5-library-api-for-ecosystem-integration.md" title="Epic 5: Library API for Ecosystem Integration" section="Story 5.5" snippet="Als i-o-system Entwickler, möchte ich `store.working.add(content, importance)` aufrufen, sodass ich Session Context ohne MCP speichern kann. Prerequisites: Story 5.2 (MemoryStore Core), Technical Notes: Wiederverwendung von `mcp_server/tools/update_working_memory.py` Logik, WorkingMemory als Sub-Objekt von MemoryStore (`store.working`)" />
+      <doc path="bmad-docs/epic-5-tech-context.md" title="Epic 5 Technical Context: Library API for Ecosystem Integration" section="Wrapper Pattern (ADR-007)" snippet="ADR-007 specifies a **Wrapper Pattern** where `cognitive_memory/` imports directly from `mcp_server/`, ensuring no code duplication and consistent behavior. WorkingMemory Methoden: `add()` → Full Implementation, `list()` (rename von `get_all()` für API-Konsistenz), `get()` → Neue Methode, `clear()` → Full Implementation." />
+      <doc path="bmad-docs/architecture.md" title="Cognitive Memory System v3.1.0-Hybrid - Architektur" section="Datenbank-Schema" snippet="CREATE TABLE working_memory (id SERIAL PRIMARY KEY, content TEXT NOT NULL, importance FLOAT DEFAULT 0.5, last_accessed TIMESTAMPTZ DEFAULT NOW(), created_at TIMESTAMPTZ DEFAULT NOW()); CREATE INDEX idx_wm_lru ON working_memory(last_accessed ASC);" />
+      <doc path="bmad-docs/stories/1-7-working-memory-management-mcp-tool-update-working-memory.md" title="Story 1.7: Working Memory Management MCP Tool" section="Acceptance Criteria" snippet="Working Memory Implementierung mit LRU Eviction und Stale Memory Archivierung bei Importance > 0.8. Max 10 Items in Working Memory." />
+    </docs>
+    <code>
+      <artifact path="cognitive_memory/store.py" kind="class" symbol="WorkingMemory" lines="389-436" reason="Bestehende WorkingMemory Klasse mit Stubs - Story 5.5 implementiert add(), list(), get(), clear() Methoden">
+        <interface name="WorkingMemory.add()" signature="def add(self, content: str, importance: float = 0.5) -> WorkingMemoryResult" kind="method" path="cognitive_memory/store.py:425" />
+        <interface name="WorkingMemory.get_all()" signature="def get_all(self) -> list[dict[str, Any]]" kind="method" path="cognitive_memory/store.py:429" />
+        <interface name="WorkingMemory.clear()" signature="def clear(self) -> int" kind="method" path="cognitive_memory/store.py:433" />
+      </artifact>
+      <artifact path="cognitive_memory/types.py" kind="dataclass" symbol="WorkingMemoryResult" lines="58-74" reason="Return Type für WorkingMemory.add() Operation - bereits vorhanden und wird in Story 5.5 genutzt">
+        <interface name="WorkingMemoryResult" signature="@dataclass\nclass WorkingMemoryResult:\n    added_id: int | None = None\n    evicted_id: int | None = None\n    archived_id: int | None = None\n    current_count: int = 0" kind="dataclass" path="cognitive_memory/types.py:58-74" />
+      </artifact>
+      <artifact path="mcp_server/tools/__init__.py" kind="function" symbol="handle_update_working_memory" lines="1278-1386" reason="MCP Tool Logik zum Wrappen - WorkingMemory.add() nutzt gleiche Logik für LRU Eviction, Stale Memory Archivierung und Validation">
+        <interface name="handle_update_working_memory()" signature="async def handle_update_working_memory(arguments: dict[str, Any]) -> dict[str, Any]" kind="function" path="mcp_server/tools/__init__.py:1278" />
+      </artifact>
+      <artifact path="mcp_server/db/migrations/001_initial_schema.sql" kind="schema" symbol="working_memory" lines="50-60" reason="Datenbank Schema für Working Memory Tabelle mit LRU Index">
+        <interface name="working_memory table" signature="CREATE TABLE working_memory (id SERIAL PRIMARY KEY, content TEXT NOT NULL, importance FLOAT DEFAULT 0.5, last_accessed TIMESTAMPTZ DEFAULT NOW(), created_at TIMESTAMPTZ DEFAULT NOW())" kind="table" path="mcp_server/db/migrations/001_initial_schema.sql:50-56" />
+      </artifact>
+    </code>
+    <dependencies>
+      <ecosystem name="python" packages="psycopg2-binary (Database Connection), openai (Embeddings), dataclasses (Type Definitions)" />
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+  <constraint type="Wrapper Pattern (ADR-007)" description="WorkingMemory implementiert Wrapper Pattern - importiert von `mcp_server/tools/__init__.py` (handle_update_working_memory) oder DB-Layer direkt, keine Code-Duplizierung, Shared Connection Pool mit MemoryStore, konsistentes Verhalten mit MCP Tool `update_working_memory`" />
+  <constraint type="Importance Validation" description="importance muss im Bereich 0.0-1.0 liegen, `ValidationError` bei `importance < 0.0` → `ValidationError(&quot;Importance must be >= 0.0&quot;)`, `importance > 1.0` → `ValidationError(&quot;Importance must be <= 1.0&quot;)`" />
+  <constraint type="LRU Eviction Logic" description="Max 10 Items in Working Memory, bei Kapazitätsgrenze LRU Eviction (ältestes Item basierend auf last_accessed), kritische Items (importance >0.8) werden zu Stale Memory archiviert statt gelöscht" />
+  <constraint type="Type Hints &amp; Docstrings" description="Vollständige Type Hints mit `from __future__ import annotations`, vollständige Docstrings für alle Methoden mit Args/Returns, Nutzung von `WorkingMemoryResult` und `WorkingMemoryItem` dataclasses" />
+  <constraint type="Connection Pool Sharing" description="WorkingMemory nutzt gleichen ConnectionManager wie MemoryStore, Thread-Safe Connection Handling, graceful Error Handling bei DB-Connection Problemen" />
+</constraints>
+  <interfaces>
+  <interface name="WorkingMemory.add()" kind="method" signature="def add(self, content: str, importance: float = 0.5) -> WorkingMemoryResult" path="cognitive_memory/store.py:425" description="Add item to working memory with LRU eviction, importance validation, and stale memory archiving" />
+  <interface name="WorkingMemory.list()" kind="method" signature="def list(self) -> list[WorkingMemoryItem]" path="cognitive_memory/store.py" description="List all working memory items sorted by last_accessed DESC (rename von get_all für API-Konsistenz)" />
+  <interface name="WorkingMemory.get()" kind="method" signature="def get(self, id: int) -> WorkingMemoryItem | None" path="cognitive_memory/store.py" description="Get specific working memory item by ID, updates last_accessed (LRU touch)" />
+  <interface name="WorkingMemory.clear()" kind="method" signature="def clear(self) -> int" path="cognitive_memory/store.py:433" description="Clear all working memory items, archives critical items (importance >0.8) before deletion" />
+  <interface name="WorkingMemoryItem" kind="dataclass" signature="@dataclass\nclass WorkingMemoryItem:\n    id: int\n    content: str\n    importance: float\n    last_accessed: datetime\n    created_at: datetime" path="cognitive_memory/types.py" description="Dataclass for working memory items returned by list() and get() operations" />
+</interfaces>
+  <tests>
+    <standards>Story 5.5 fokussiert auf Working Memory CRUD Testing und LRU Eviction Testing. Test Kategorien: add() Tests (einfaches Add, LRU Eviction, Stale Memory Archivierung, ValidationError), list() Tests (leere Working Memory, Sortierung nach last_accessed), get() Tests (existierendes Item, nicht-existierendes Item, LRU Touch), clear() Tests (mit und ohne kritische Items). Mock Strategy: unittest.mock mit Connection Mocking für isolierte Unit Tests.</standards>
+    <locations>
+      <location path="tests/library/test_working_memory.py" description="NEW: Story 5.5 Working Memory Tests" />
+      <location path="tests/library/test_imports.py" description="EXISTING: Story 5.1 Import Tests" />
+      <location path="tests/library/test_memorystore.py" description="EXISTING: Story 5.2 MemoryStore Core Tests" />
+      <location path="tests/library/" pattern="*.py" description="Library API Tests Directory" />
+    </locations>
+    <ideas>
+      <test for="AC-5.5.1" description="Test add() mit importance=0.5 (default) → WorkingMemoryResult mit added_id, keine eviction bei &lt;10 Items" />
+      <test for="AC-5.5.1" description="Test LRU Eviction bei 11 Items → WorkingMemoryResult mit evicted_id, archived_id bei importance >0.8" />
+      <test for="AC-5.5.5" description="Test ValidationError bei importance <0.0 und >1.0" />
+      <test for="AC-5.5.2" description="Test list() mit 0-10 Items → korrekte Sortierung nach last_accessed DESC" />
+      <test for="AC-5.5.4" description="Test get() mit existierendem ID → WorkingMemoryItem mit aktualisiertem last_accessed" />
+      <test for="AC-5.5.4" description="Test get() mit nicht-existierendem ID → None" />
+      <test for="AC-5.5.3" description="Test clear() mit Items → korrekte Anzahl gelöschter Items, Stale Memory Archivierung" />
+      <test for="AC-5.5.6" description="Integration Test: store.working.add/list/get/clear mit MemoryStore Connection Sharing" />
+    </ideas>
+  </tests>
+</story-context>

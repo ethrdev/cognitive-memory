@@ -1,0 +1,302 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>5</epicId>
+    <storyId>2</storyId>
+    <title>MemoryStore Core Class</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-30</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>bmad-docs/stories/5-2-memorystore-core-class.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>i-o-system Entwickler</asA>
+    <iWant>eine MemoryStore Klasse mit DB-Connection Management</iWant>
+    <soThat>ich ohne MCP Server auf cognitive-memory zugreifen kann</soThat>
+    <tasks>
+      <task id="1" name="MemoryStore.from_env() Factory Method" ac="5.2.4">
+        <subtask id="1.1">Implementiere @classmethod from_env(cls) -> MemoryStore</subtask>
+        <subtask id="1.2">Lese DATABASE_URL aus os.environ</subtask>
+        <subtask id="1.3">Wirf ConnectionError wenn Variable nicht gesetzt</subtask>
+        <subtask id="1.4">Schreibe Tests fuer from_env() mit/ohne DATABASE_URL</subtask>
+      </task>
+      <task id="2" name="Connection Pool Integration" ac="5.2.1, 5.2.3">
+        <subtask id="2.1">Verifiziere connect() Methode mit initialize_pool() Integration</subtask>
+        <subtask id="2.2">Verifiziere close() Methode mit close_all_connections() Integration</subtask>
+        <subtask id="2.3">Implementiere Pool-Parameter in connect() (min_connections, max_connections, connection_timeout)</subtask>
+        <subtask id="2.4">Schreibe Integration-Tests mit echtem Connection Pool</subtask>
+      </task>
+      <task id="3" name="Context Manager Verifikation" ac="5.2.2">
+        <subtask id="3.1">Verifiziere __enter__ ruft connect() auf (wenn auto_initialize=True)</subtask>
+        <subtask id="3.2">Verifiziere __exit__ ruft close() auf</subtask>
+        <subtask id="3.3">Teste Exception-Safety (Connection wird bei Fehler geschlossen)</subtask>
+        <subtask id="3.4">Schreibe Tests fuer Context Manager mit Exceptions</subtask>
+      </task>
+      <task id="4" name="Sub-Object Accessor Properties" ac="5.2.5">
+        <subtask id="4.1">Implementiere @property working mit Lazy-Initialisierung</subtask>
+        <subtask id="4.2">Implementiere @property episode mit Lazy-Initialisierung</subtask>
+        <subtask id="4.3">Implementiere @property graph mit Lazy-Initialisierung</subtask>
+        <subtask id="4.4">Stelle sicher Sub-Objekte teilen Connection Pool</subtask>
+        <subtask id="4.5">Schreibe Tests fuer alle Sub-Object Accessors</subtask>
+      </task>
+      <task id="5" name="is_connected Property und Status" ac="5.2.3">
+        <subtask id="5.1">Verifiziere is_connected Property Implementation</subtask>
+        <subtask id="5.2">Teste Status-Updates nach connect() und close()</subtask>
+        <subtask id="5.3">Teste Status bei Context Manager Nutzung</subtask>
+      </task>
+      <task id="6" name="Integration Tests" ac="alle">
+        <subtask id="6.1">Erstelle tests/library/test_memorystore.py</subtask>
+        <subtask id="6.2">Mock-Tests fuer Connection Pool Integration</subtask>
+        <subtask id="6.3">Test fuer vollstaendigen Lifecycle (construct -> connect -> use -> close)</subtask>
+        <subtask id="6.4">Test fuer Sub-Object Sharing des Connection Pools</subtask>
+        <subtask id="6.5">Ruff lint und Type-Check alle neuen Dateien</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <ac id="5.2.1" title="MemoryStore Konstruktor und DB-Connection">
+      <given>Package-Setup aus Story 5.1 existiert</given>
+      <when>ich MemoryStore instanziiere</when>
+      <then>
+        - MemoryStore(connection_string="...") Konstruktor akzeptiert Connection String
+        - Alternative: MemoryStore.from_env() liest DATABASE_URL aus Environment
+        - Connection Pooling via bestehender initialize_pool() Funktion aus mcp_server.db.connection
+        - Lazy Connection: Verbindung wird erst bei erstem Datenbankzugriff hergestellt (oder explizit via connect())
+      </then>
+    </ac>
+    <ac id="5.2.2" title="Context Manager Support">
+      <given>MemoryStore ist instanziiert</given>
+      <when>ich Context Manager nutze</when>
+      <then>
+        - __enter__ initialisiert Connection Pool (wenn auto_initialize=True)
+        - __exit__ schliesst Connection Pool (nur wenn selbst erstellt)
+        - Exception-Safe: Connection wird auch bei Fehler geschlossen
+      </then>
+    </ac>
+    <ac id="5.2.3" title="Manuelles Lifecycle-Management">
+      <given>MemoryStore ist instanziiert</given>
+      <when>ich manuelles Lifecycle-Management nutze</when>
+      <then>
+        - connect() akzeptiert optionale Pool-Parameter (min_connections, max_connections, connection_timeout)
+        - close() schliesst Connection Pool sauber
+        - is_connected Property zeigt aktuellen Status
+      </then>
+    </ac>
+    <ac id="5.2.4" title="Factory Method from_env()">
+      <given>DATABASE_URL ist als Environment Variable gesetzt</given>
+      <when>ich MemoryStore.from_env() aufrufe</when>
+      <then>
+        - Liest DATABASE_URL aus Environment
+        - Wirft ConnectionError wenn DATABASE_URL nicht gesetzt
+      </then>
+    </ac>
+    <ac id="5.2.5" title="Sub-Object Accessor Properties">
+      <given>MemoryStore ist instanziiert</given>
+      <when>ich auf Sub-Objekte zugreife</when>
+      <then>
+        - store.working gibt WorkingMemory Instanz zurueck (teilt Connection)
+        - store.episode gibt EpisodeMemory Instanz zurueck (teilt Connection)
+        - store.graph gibt GraphStore Instanz zurueck (teilt Connection)
+        - Sub-Objekte werden lazy initialisiert (erst bei erstem Zugriff erstellt)
+        - Sub-Objekte teilen Connection Pool mit Parent MemoryStore
+      </then>
+    </ac>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>bmad-docs/epic-5-tech-context.md</path>
+        <title>Epic 5 Technical Context</title>
+        <section>Technical Architecture, Public API Design</section>
+        <snippet>Wrapper Pattern (ADR-007): cognitive_memory imports from mcp_server, no code duplication. Package structure with MemoryStore as main entry point.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/stories/5-1-core-library-package-setup.md</path>
+        <title>Story 5.1: Core Library Package Setup (Predecessor)</title>
+        <section>Completion Notes, Senior Developer Review</section>
+        <snippet>Package foundation established with store.py stubs, connection.py wrapper, exceptions.py, types.py. All imports working, 5/5 tests passing. APPROVED.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/test-design-epic-5.md</path>
+        <title>Test Design: Epic 5</title>
+        <section>Risk Assessment, Test Coverage Plan</section>
+        <snippet>R-002 Connection Pool Exhaustion (Score 6): Pool-Size Limit default 10, Connection Timeout 30s. P0 tests for MemoryStore: 13 tests covering instantiation, connection, context manager.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/architecture.md</path>
+        <title>Architecture Document</title>
+        <section>ADR-007, Epic 5 Library API Architecture</section>
+        <snippet>MemoryStore wraps mcp_server tools. Sub-objects (working, episode, graph) share ConnectionManager.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <file>
+        <path>cognitive_memory/store.py</path>
+        <kind>core-class</kind>
+        <symbol>MemoryStore, WorkingMemory, EpisodeMemory, GraphStore</symbol>
+        <lines>25-455</lines>
+        <reason>Primary implementation file. Contains MemoryStore stub with __init__, connect(), close(), __enter__, __exit__, is_connected. Sub-classes have stubs. MISSING: from_env(), working/episode/graph properties.</reason>
+      </file>
+      <file>
+        <path>cognitive_memory/connection.py</path>
+        <kind>connection-wrapper</kind>
+        <symbol>ConnectionManager</symbol>
+        <lines>23-204</lines>
+        <reason>Wraps mcp_server.db.connection. Implements initialize(), get_connection(), close(), is_initialized property. Pool ownership tracking (_owns_pool flag).</reason>
+      </file>
+      <file>
+        <path>cognitive_memory/exceptions.py</path>
+        <kind>exceptions</kind>
+        <symbol>CognitiveMemoryError, ConnectionError, SearchError, StorageError, ValidationError, EmbeddingError</symbol>
+        <lines>1-90</lines>
+        <reason>Exception hierarchy. Use ConnectionError for from_env() failure scenario.</reason>
+      </file>
+      <file>
+        <path>cognitive_memory/types.py</path>
+        <kind>dataclasses</kind>
+        <symbol>SearchResult, InsightResult, WorkingMemoryResult, EpisodeResult, GraphNode, GraphEdge, PathResult</symbol>
+        <lines>1-156</lines>
+        <reason>Return types for all API methods. WorkingMemoryResult used by working.add().</reason>
+      </file>
+      <file>
+        <path>cognitive_memory/__init__.py</path>
+        <kind>package-init</kind>
+        <symbol>__version__, __all__, exports</symbol>
+        <lines>1-107</lines>
+        <reason>Public API exports. Ensure from_env is exported if added as MemoryStore.from_env.</reason>
+      </file>
+      <file>
+        <path>mcp_server/db/connection.py</path>
+        <kind>database-pool</kind>
+        <symbol>initialize_pool, get_connection, close_all_connections, get_pool_status</symbol>
+        <lines>40-213</lines>
+        <reason>Upstream connection pool. initialize_pool accepts min/max_connections, timeout. get_pool_status for is_connected check.</reason>
+      </file>
+      <file>
+        <path>tests/library/test_imports.py</path>
+        <kind>test</kind>
+        <symbol>test_import_memory_store_from_package, test_import_all_public_exports</symbol>
+        <lines>1-123</lines>
+        <reason>Story 5.1 tests. Reference pattern for new test_memorystore.py.</reason>
+      </file>
+    </code>
+    <dependencies>
+      <python>
+        <package name="psycopg2-binary" version="^2.9.0">PostgreSQL driver for connection pool</package>
+        <package name="mcp" version="^1.0.0">MCP server framework (peer dependency)</package>
+        <package name="pytest" version="^7.4.0">Test framework</package>
+        <package name="pytest-cov" version="^4.1.0">Coverage reporting</package>
+        <package name="mypy" version="^1.7.0">Static type checking</package>
+        <package name="ruff" version="^0.1.0">Linting</package>
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint type="pattern">
+      <name>Wrapper Pattern (ADR-007)</name>
+      <rule>cognitive_memory imports from mcp_server, never reverse. No code duplication.</rule>
+    </constraint>
+    <constraint type="lifecycle">
+      <name>Connection Pool Ownership</name>
+      <rule>ConnectionManager tracks _owns_pool flag. Only close pool if created by this instance.</rule>
+    </constraint>
+    <constraint type="lazy-init">
+      <name>Lazy Sub-Object Initialization</name>
+      <rule>working, episode, graph properties create instances on first access, not in __init__.</rule>
+    </constraint>
+    <constraint type="connection-sharing">
+      <name>Shared Connection Pool</name>
+      <rule>Sub-objects receive reference to parent's ConnectionManager, not new instances.</rule>
+    </constraint>
+    <constraint type="testing">
+      <name>Mock Strategy</name>
+      <rule>Use @patch('cognitive_memory.connection.initialize_pool') for unit tests. Real DB for integration tests only.</rule>
+    </constraint>
+    <constraint type="code-quality">
+      <name>Type Hints and Docstrings</name>
+      <rule>All public methods require type hints and docstrings. Use from __future__ import annotations.</rule>
+    </constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="MemoryStore.from_env" kind="factory-method">
+      <signature>@classmethod def from_env(cls) -> MemoryStore</signature>
+      <path>cognitive_memory/store.py</path>
+      <notes>Reads DATABASE_URL from os.environ. Raises ConnectionError if not set.</notes>
+    </interface>
+    <interface name="MemoryStore.connect" kind="method">
+      <signature>def connect(self, min_connections: int = 1, max_connections: int = 10, connection_timeout: int = 5) -> None</signature>
+      <path>cognitive_memory/store.py:75-98</path>
+      <notes>Already implemented. Calls ConnectionManager.initialize(). Sets _is_connected = True.</notes>
+    </interface>
+    <interface name="MemoryStore.close" kind="method">
+      <signature>def close(self) -> None</signature>
+      <path>cognitive_memory/store.py:100-104</path>
+      <notes>Already implemented. Calls ConnectionManager.close(). Sets _is_connected = False.</notes>
+    </interface>
+    <interface name="MemoryStore.is_connected" kind="property">
+      <signature>@property def is_connected(self) -> bool</signature>
+      <path>cognitive_memory/store.py:70-73</path>
+      <notes>Already implemented. Returns self._is_connected and self._connection_manager.is_initialized.</notes>
+    </interface>
+    <interface name="MemoryStore.working" kind="property">
+      <signature>@property def working(self) -> WorkingMemory</signature>
+      <path>cognitive_memory/store.py</path>
+      <notes>TO IMPLEMENT: Lazy-initialized property returning WorkingMemory with shared ConnectionManager.</notes>
+    </interface>
+    <interface name="MemoryStore.episode" kind="property">
+      <signature>@property def episode(self) -> EpisodeMemory</signature>
+      <path>cognitive_memory/store.py</path>
+      <notes>TO IMPLEMENT: Lazy-initialized property returning EpisodeMemory with shared ConnectionManager.</notes>
+    </interface>
+    <interface name="MemoryStore.graph" kind="property">
+      <signature>@property def graph(self) -> GraphStore</signature>
+      <path>cognitive_memory/store.py</path>
+      <notes>TO IMPLEMENT: Lazy-initialized property returning GraphStore with shared ConnectionManager.</notes>
+    </interface>
+    <interface name="ConnectionManager.initialize" kind="method">
+      <signature>def initialize(self, min_connections: int = 1, max_connections: int = 10, connection_timeout: int = 5) -> None</signature>
+      <path>cognitive_memory/connection.py:62-116</path>
+      <notes>Calls mcp_server.db.connection.initialize_pool(). Handles pool ownership.</notes>
+    </interface>
+    <interface name="ConnectionManager.get_connection" kind="context-manager">
+      <signature>@contextmanager def get_connection(self) -> Iterator[connection]</signature>
+      <path>cognitive_memory/connection.py:118-145</path>
+      <notes>Wraps mcp_server.db.connection.get_connection(). Raises ConnectionError if not initialized.</notes>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Pytest with fixtures for mock and real DB. Unit tests mock initialize_pool and get_connection.
+      Integration tests require DATABASE_URL. Use @patch for connection mocking.
+      Follow pattern from tests/library/test_imports.py. All tests in tests/library/test_memorystore.py.
+      Run with: pytest tests/library/test_memorystore.py -v --tb=short
+    </standards>
+    <locations>
+      <location>tests/library/test_memorystore.py</location>
+      <location>tests/library/test_imports.py (reference)</location>
+    </locations>
+    <ideas>
+      <idea ac="5.2.1">test_memorystore_init_with_connection_string - Verify __init__ accepts connection_string</idea>
+      <idea ac="5.2.1">test_memorystore_init_without_connection_string - Verify __init__ reads DATABASE_URL from env</idea>
+      <idea ac="5.2.2">test_context_manager_calls_connect_on_enter - Verify __enter__ calls connect() when auto_initialize=True</idea>
+      <idea ac="5.2.2">test_context_manager_calls_close_on_exit - Verify __exit__ calls close()</idea>
+      <idea ac="5.2.2">test_context_manager_exception_safe - Verify connection closed even on exception</idea>
+      <idea ac="5.2.3">test_connect_with_pool_parameters - Verify connect() passes min/max_connections to initialize_pool</idea>
+      <idea ac="5.2.3">test_close_sets_is_connected_false - Verify close() sets is_connected to False</idea>
+      <idea ac="5.2.3">test_is_connected_reflects_pool_status - Verify is_connected checks both flags</idea>
+      <idea ac="5.2.4">test_from_env_reads_database_url - Verify from_env() reads DATABASE_URL</idea>
+      <idea ac="5.2.4">test_from_env_raises_without_database_url - Verify from_env() raises ConnectionError</idea>
+      <idea ac="5.2.4">test_from_env_raises_with_empty_database_url - Verify from_env() raises on empty string</idea>
+      <idea ac="5.2.5">test_working_property_returns_working_memory - Verify store.working returns WorkingMemory</idea>
+      <idea ac="5.2.5">test_episode_property_returns_episode_memory - Verify store.episode returns EpisodeMemory</idea>
+      <idea ac="5.2.5">test_graph_property_returns_graph_store - Verify store.graph returns GraphStore</idea>
+      <idea ac="5.2.5">test_sub_objects_share_connection_manager - Verify sub-objects have same ConnectionManager reference</idea>
+      <idea ac="5.2.5">test_sub_objects_lazy_initialized - Verify sub-objects created on first access only</idea>
+    </ideas>
+  </tests>
+</story-context>

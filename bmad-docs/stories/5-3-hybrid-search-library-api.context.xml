@@ -1,0 +1,171 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>5</epicId>
+    <storyId>3</storyId>
+    <title>Hybrid Search Library API</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-30</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>/home/ethr/01-projects/ai-experiments/cognitive-memory/bmad-docs/stories/5-3-hybrid-search-library-api.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Als i-o-system Entwickler,</asA>
+    <iWant>möchte ich `store.search(query, top_k)` aufrufen,</iWant>
+    <soThat>sodass ich Semantic + Keyword Search ohne MCP nutzen kann.</soThat>
+    <tasks>### Task 1: Implement search() Method (AC: 5.3.1, 5.3.3)
+
+- [ ] Subtask 1.1: Implementiere `search()` Methode in `cognitive_memory/store.py`
+- [ ] Subtask 1.2: Importiere `semantic_search`, `keyword_search`, `rrf_fusion` aus `mcp_server/tools/__init__.py`
+- [ ] Subtask 1.3: Importiere `generate_query_embedding` oder nutze `get_embedding_with_retry` aus `mcp_server/external/openai_client.py`
+- [ ] Subtask 1.4: Konvertiere Dict-Results zu `SearchResult` Dataclass-Instanzen
+- [ ] Subtask 1.5: Handle async-to-sync conversion (MCP Tools sind async)
+
+### Task 2: Weights Parameter Support (AC: 5.3.2)
+
+- [ ] Subtask 2.1: Implementiere weights Parameter mit Default `{"semantic": 0.7, "keyword": 0.3}`
+- [ ] Subtask 2.2: Normalisiere weights falls sie nicht 1.0 summieren
+- [ ] Subtask 2.3: Schreibe Tests für verschiedene weight Kombinationen
+
+### Task 3: Input Validation (AC: 5.3.5)
+
+- [ ] Subtask 3.1: Validiere query ist non-empty string
+- [ ] Subtask 3.2: Validiere top_k ist positiver integer ≤ 100
+- [ ] Subtask 3.3: Raise `ValidationError` für ungültige Inputs
+- [ ] Subtask 3.4: Teste SQL Injection Safety
+
+### Task 4: Empty Result Handling (AC: 5.3.4)
+
+- [ ] Subtask 4.1: Stelle sicher leere Liste (nicht None) bei keinen Ergebnissen
+- [ ] Subtask 4.2: Schreibe Test für no-match Query
+
+### Task 5: Connection State Check (AC: 5.3.6)
+
+- [ ] Subtask 5.1: Check `is_connected` vor Search-Ausführung
+- [ ] Subtask 5.2: Raise `ConnectionError` wenn nicht connected
+- [ ] Subtask 5.3: Schreibe Test für disconnected State
+
+### Task 6: ATDD Tests to GREEN (AC: alle)
+
+- [ ] Subtask 6.1: Führe `tests/library/test_search.py` aus (aktuell RED)
+- [ ] Subtask 6.2: Implementiere bis alle Tests GREEN sind
+- [ ] Subtask 6.3: Schreibe zusätzliche Tests für Edge Cases
+- [ ] Subtask 6.4: Ruff lint und Type-Check</tasks>
+  </story>
+
+  <acceptanceCriteria>### AC-5.3.1: Basic Search Method
+
+**Given** MemoryStore ist instanziiert und connected
+**When** ich `store.search(query, top_k=5)` aufrufe
+**Then** wird Hybrid Search ausgeführt:
+
+- Embedding wird automatisch via OpenAI API generiert (oder Mock)
+- Semantic Search (70%) + Keyword Search (30%) mit RRF Fusion
+- Gibt Liste von `SearchResult` Objekten zurück (max top_k)
+
+### AC-5.3.2: Custom Weights Configuration
+
+**Given** MemoryStore ist instanziiert
+**When** ich `store.search(query, weights={"semantic": 0.8, "keyword": 0.2})` aufrufe
+**Then** werden die benutzerdefinierten Gewichte angewendet:
+
+- weights Parameter akzeptiert dict mit "semantic" und "keyword" Keys
+- Weights müssen nicht exakt 1.0 summieren (werden normalisiert)
+- Default: `{"semantic": 0.7, "keyword": 0.3}`
+
+### AC-5.3.3: SearchResult Dataclass Format
+
+**Given** Search-Ergebnisse existieren
+**When** ich `store.search()` aufrufe
+**Then** enthält jedes Result die richtigen Felder:
+
+```python
+@dataclass
+class SearchResult:
+    id: int              # L2 Insight ID
+    content: str         # Insight Content
+    score: float         # RRF Fused Score (0.0-1.0)
+    source: str          # "l2_insight" oder "l0_raw"
+    metadata: dict       # Zusätzliche Metadaten
+```
+
+### AC-5.3.4: Empty Result Handling
+
+**Given** MemoryStore ist instanziiert
+**When** ich `store.search()` mit einer Query ohne Treffer aufrufe
+**Then** wird eine leere Liste zurückgegeben (nicht None, keine Exception):
+
+```python
+results = store.search("xyznonexistentquery12345")
+assert results == []  # Empty list, not None
+```
+
+### AC-5.3.5: Input Validation
+
+**Given** MemoryStore ist instanziiert
+**When** ich `store.search()` mit ungültigen Parametern aufrufe
+**Then** werden passende Exceptions geworfen:
+
+- Leere Query (`""`) → `ValidationError`
+- Negative top_k (`-1`) → `ValidationError`
+- top_k > 100 → `ValidationError`
+- SQL Injection Versuch → Safe handling (kein Fehler, keine Injection)
+
+### AC-5.3.6: Connection Required
+
+**Given** MemoryStore ist nicht connected
+**When** ich `store.search()` aufrufe
+**Then** wird `ConnectionError` geworfen:
+
+```python
+store = MemoryStore()  # Not connected
+with pytest.raises(ConnectionError):
+    store.search("test")
+```</acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="bmad-docs/epics/epic-5-library-api-for-ecosystem-integration.md" title="Epic 5: Library API for Ecosystem Integration" section="Story 5.3: Hybrid Search Library API" snippet="Story 5.3 implementiert die Hybrid Search Library API - die zentrale Search-Funktion für programmatischen Zugriff auf cognitive-memory mit Wrapper Pattern für MCP Tools." />
+      <doc path="bmad-docs/epic-5-tech-context.md" title="Epic 5 Technical Context" section="Technical Architecture & Wrapper Pattern" snippet="ADR-007 specifies a Wrapper Pattern where cognitive_memory/ imports directly from mcp_server/, ensuring no code duplication and consistent behavior." />
+      <doc path="bmad-docs/architecture.md" title="Cognitive Memory System Architecture" section="System Architecture & Technology Decisions" snippet="MCP-basiertes Gedächtnissystem mit PostgreSQL + pgvector, OpenAI Embeddings, und Hybrid Search (Semantic + Keyword mit RRF Fusion)." />
+    </docs>
+    <code>
+      <code path="mcp_server/tools/__init__.py" kind="mcp-tools" symbol="semantic_search" lines="157-211" reason="Async semantic search function using pgvector cosine distance, returns list of dicts with id, content, distance" />
+      <code path="mcp_server/tools/__init__.py" kind="mcp-tools" symbol="keyword_search" lines="214-269" reason="Async keyword search using PostgreSQL Full-Text Search, returns list of dicts with id, content, rank" />
+      <code path="mcp_server/tools/__init__.py" kind="mcp-tools" symbol="rrf_fusion" lines="40-126" reason="Reciprocal Rank Fusion with configurable weights, combines semantic and keyword search results" />
+      <code path="mcp_server/tools/__init__.py" kind="mcp-tools" symbol="generate_query_embedding" lines="934-964" reason="Generate 1536-dimensional embedding using OpenAI API or mock mode via subprocess" />
+      <code path="cognitive_memory/store.py" kind="library-api" symbol="search" lines="226-253" reason="Main search method stub to implement with hybrid search logic, async-to-sync conversion required" />
+      <code path="cognitive_memory/types.py" kind="dataclass" symbol="SearchResult" lines="14-36" reason="Dataclass for search results with id, content, score, source, metadata, and component scores" />
+      <code path="cognitive_memory/exceptions.py" kind="exceptions" symbol="ConnectionError" lines="26-37" reason="Exception raised when database connection fails or pool exhaustion" />
+      <code path="cognitive_memory/exceptions.py" kind="exceptions" symbol="SearchError" lines="40-50" reason="Exception raised when search operations fail including embedding generation failures" />
+      <code path="cognitive_memory/exceptions.py" kind="exceptions" symbol="ValidationError" lines="66-76" reason="Exception raised when input validation fails including invalid parameters" />
+    </code>
+    <dependencies>
+      <dependency ecosystem="python" packages="psycopg2-binary^2.9.0,pgvector^0.2.0,openai^1.0.0,anthropic^0.25.0,numpy^1.24.0,scipy^1.11.0,scikit-learn^1.3.0" />
+      <dependency ecosystem="python" dev-packages="pytest^7.4.0,pytest-asyncio^0.21.0,mypy^1.7.0,black^24.3.0,ruff^0.1.0" />
+      <dependency ecosystem="external" services="OpenAI Embeddings API (text-embedding-3-small)" />
+      <dependency ecosystem="external" services="PostgreSQL 15+ with pgvector extension" />
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+  <constraint type="architecture" description="Wrapper Pattern (ADR-007): cognitive_memory/ must import from mcp_server/, never reverse dependency. No code duplication, consistent behavior with MCP tools." />
+  <constraint type="connection" description="Connection Pooling: Use shared connection pool from mcp_server/db/connection.py, check self.is_connected before operations, raise ConnectionError if not connected." />
+  <constraint type="async" description="Async-to-Sync Conversion: MCP tools are async functions, library API must be synchronous. Use asyncio.run() or sync wrapper patterns." />
+  <constraint type="validation" description="Input Validation: Validate query is non-empty string, top_k is 1-100 range, weights dict has 'semantic' and 'keyword' keys. Raise ValidationError for invalid inputs." />
+  <constraint type="performance" description="Performance: Generate embedding once per query, fetch semantic and keyword results in parallel, limit top_k to maximum 100 to prevent resource exhaustion." />
+  <constraint type="sql-safety" description="SQL Injection Safety: Use parameterized queries, validate user input, never concatenate user input directly into SQL statements." />
+</constraints>
+  <interfaces>
+    <interface name="MemoryStore.search" kind="method" signature="search(self, query: str, top_k: int = 5, weights: dict[str, float] | None = None) -> list[SearchResult]" path="cognitive_memory/store.py:226" />
+    <interface name="semantic_search" kind="async-function" signature="semantic_search(query_embedding: list[float], top_k: int, conn: Any, filter_params: dict | None = None) -> list[dict]" path="mcp_server/tools/__init__.py:157" />
+    <interface name="keyword_search" kind="async-function" signature="keyword_search(query_text: str, top_k: int, conn: Any, filter_params: dict | None = None) -> list[dict]" path="mcp_server/tools/__init__.py:214" />
+    <interface name="rrf_fusion" kind="function" signature="rrf_fusion(semantic_results: list[dict], keyword_results: list[dict], weights: dict, k: int = 60, graph_results: list[dict] | None = None) -> list[dict]" path="mcp_server/tools/__init__.py:40" />
+    <interface name="generate_query_embedding" kind="function" signature="generate_query_embedding(query_text: str) -> list[float]" path="mcp_server/tools/__init__.py:934" />
+  </interfaces>
+  <tests>
+    <standards>ATDD Pattern with RED-GREEN-REFACTOR workflow. Mock external dependencies (OpenAI API, database) for unit tests. Use patch() decorators to isolate functionality. Contract testing ensures library API results match MCP tool results. Test categories: basic functionality, configuration validation, error handling, and edge cases.</standards>
+    <locations>tests/library/test_search.py - 14 ATDD tests for Story 5.3. Use pytest with asyncio support. Mock patterns: patch('cognitive_memory.store.semantic_search'), patch.dict(os.environ, {'DATABASE_URL': ...}). Run with: pytest tests/library/test_search.py -v --tb=short</locations>
+    <ideas>Test AC-5.3.1: Basic search with default weights returns SearchResult list. Test AC-5.3.2: Custom weights configuration normalized correctly. Test AC-5.3.3: SearchResult dataclass format matches expected fields. Test AC-5.3.4: Empty query returns empty list, not None. Test AC-5.3.5: Input validation raises ValidationError for empty query, invalid top_k. Test AC-5.3.6: Disconnected store raises ConnectionError.</ideas>
+  </tests>
+</story-context>

@@ -1,0 +1,305 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>5</epicId>
+    <storyId>7</storyId>
+    <title>Graph Query Neighbors Library API</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-30</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>5-7-graph-query-neighbors-library-api.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Als i-o-system Entwickler,</asA>
+    <iWant>möchte ich `store.graph.query_neighbors(node_name)` aufrufen,</iWant>
+    <soThat>sodass ich Graph-Traversierung ohne MCP durchführen kann.</soThat>
+    <tasks>### Task 1: GraphStore.query_neighbors() Implementation (AC: 5.7.1, 5.7.2, 5.7.6)
+
+- [ ] Subtask 1.1: Importiere `mcp_server.db.graph.query_neighbors` und `get_node_by_name`
+- [ ] Subtask 1.2: Implementiere `query_neighbors(node_name, relation_type=None, depth=1)`
+- [ ] Subtask 1.3: Füge Input-Validation hinzu (depth 1-5, node_name nicht leer)
+- [ ] Subtask 1.4: Füge Connection-Check hinzu (`_ensure_connected()`)
+- [ ] Subtask 1.5: Wrapper um `get_node_by_name()` + `query_neighbors()` aus mcp_server
+- [ ] Subtask 1.6: Schreibe Tests für query_neighbors (Single-Hop, Multi-Hop, Filtering)
+
+### Task 2: GraphStore.add_node() Implementation (AC: 5.7.3, 5.7.6)
+
+- [ ] Subtask 2.1: Importiere `mcp_server.db.graph.add_node`
+- [ ] Subtask 2.2: Implementiere `add_node(name, label, properties=None)`
+- [ ] Subtask 2.3: Füge Input-Validation hinzu (name/label nicht leer)
+- [ ] Subtask 2.4: Wrapper um `add_node()` aus mcp_server mit JSON-Serialisierung für properties
+- [ ] Subtask 2.5: Schreibe Tests für add_node (Create, Idempotent, Validation)
+
+### Task 3: GraphStore.add_edge() Implementation (AC: 5.7.4, 5.7.6)
+
+- [ ] Subtask 3.1: Importiere `mcp_server.db.graph.add_edge` und `get_or_create_node`
+- [ ] Subtask 3.2: Implementiere `add_edge(source_name, target_name, relation, weight=1.0)`
+- [ ] Subtask 3.3: Füge Input-Validation hinzu (weight 0.0-1.0, Namen nicht leer)
+- [ ] Subtask 3.4: Auto-Upsert Logic: Rufe `get_or_create_node()` für Source und Target auf
+- [ ] Subtask 3.5: Wrapper um `add_edge()` aus mcp_server
+- [ ] Subtask 3.6: Schreibe Tests für add_edge (Create, Auto-Upsert, Weight-Validation)
+
+### Task 4: GraphStore.find_path() Implementation (AC: 5.7.5, 5.7.6)
+
+- [ ] Subtask 4.1: Importiere `mcp_server.db.graph.find_path`
+- [ ] Subtask 4.2: Implementiere `find_path(start_node, end_node, max_depth=5)`
+- [ ] Subtask 4.3: Füge Input-Validation hinzu (max_depth 1-10)
+- [ ] Subtask 4.4: Wrapper um `find_path()` aus mcp_server
+- [ ] Subtask 4.5: Schreibe Tests für find_path (Path-Found, No-Path, Timeout)
+
+### Task 5: Error Handling und _ensure_connected() (AC: 5.7.7)
+
+- [ ] Subtask 5.1: Implementiere `_ensure_connected()` Helper-Methode
+- [ ] Subtask 5.2: Füge ConnectionError bei nicht-verbundenem Status hinzu
+- [ ] Subtask 5.3: Füge ValidationError für alle Input-Validierungen hinzu
+- [ ] Subtask 5.4: Füge StorageError Wrapping für DB-Exceptions hinzu
+- [ ] Subtask 5.5: Schreibe Tests für alle Error-Cases
+
+### Task 6: Integration Tests und Documentation (AC: alle)
+
+- [ ] Subtask 6.1: Erstelle `tests/library/test_graph_store.py`
+- [ ] Subtask 6.2: Schreibe Integration-Tests mit Mocks für alle 4 Methoden
+- [ ] Subtask 6.3: Teste Connection-Pool-Sharing mit Parent MemoryStore
+- [ ] Subtask 6.4: Ruff lint und Type-Check alle neuen Dateien
+- [ ] Subtask 6.5: Verifiziere keine Import-Zyklen zwischen cognitive_memory und mcp_server</tasks>
+  </story>
+
+  <acceptanceCriteria>### AC-5.7.1: GraphStore.query_neighbors() Single-Hop und Multi-Hop Traversal
+
+**Given** MemoryStore ist instanziiert und verbunden, Graph-Daten existieren
+**When** ich `store.graph.query_neighbors(node_name, relation_type=None, depth=1)` aufrufe
+**Then** werden Nachbar-Nodes gefunden:
+
+- Single-Hop (depth=1): Direkte Nachbarn des Knotens werden zurückgegeben
+- Multi-Hop (depth>1): Transitive Nachbarn bis zur angegebenen Tiefe
+- Optional Filterung nach `relation_type` (z.B. "USES", "SOLVES", "RELATED_TO")
+- Max depth: 5 (Performance-Limit, wirft ValidationError bei depth>5)
+- Cycle Detection: Keine Endlosschleifen bei zyklischen Graphen
+
+### AC-5.7.2: GraphNode Response Type
+
+**Given** query_neighbors() wird aufgerufen
+**When** Nachbarn gefunden werden
+**Then** Response enthält Liste von `dict` mit Graph-Node-Informationen:
+
+```python
+# Return type: list[dict[str, Any]]
+# Each dict contains:
+{
+    "node_id": str,     # UUID des Nachbar-Knotens
+    "label": str,       # Node-Typ (z.B. "Project", "Technology")
+    "name": str,        # Node-Name
+    "properties": dict, # Flexible Metadaten
+    "relation": str,    # Verbindungs-Relation zum Parent
+    "distance": int,    # Anzahl Hops vom Start-Knoten
+    "weight": float,    # Edge-Gewichtung (0.0-1.0)
+}
+```
+
+### AC-5.7.3: GraphStore.add_node() Node-Erstellung
+
+**Given** MemoryStore ist instanziiert und verbunden
+**When** ich `store.graph.add_node(name, label, properties=None)` aufrufe
+**Then** wird ein Node erstellt oder gefunden:
+
+- Idempotente Operation: Existierender Node wird zurückgegeben (kein Duplikat)
+- Return: `int` (Node-ID für Referenz)
+- Validation: name und label dürfen nicht leer sein
+
+### AC-5.7.4: GraphStore.add_edge() Edge-Erstellung
+
+**Given** MemoryStore ist instanziiert und verbunden
+**When** ich `store.graph.add_edge(source_name, target_name, relation, weight=1.0)` aufrufe
+**Then** wird eine Edge erstellt:
+
+- Auto-Upsert: Source- und Target-Nodes werden bei Bedarf erstellt (mit label="Entity")
+- Idempotente Operation: Existierende Edge wird aktualisiert
+- Return: `int` (Edge-ID für Referenz)
+- Validation: weight muss zwischen 0.0 und 1.0 liegen
+
+### AC-5.7.5: GraphStore.find_path() Pfad-Suche
+
+**Given** MemoryStore ist instanziiert und verbunden
+**When** ich `store.graph.find_path(start_node, end_node, max_depth=5)` aufrufe
+**Then** wird der kürzeste Pfad gefunden:
+
+- BFS-basierte Pathfinding mit bidirektionalem Traversal
+- Cycle Detection verhindert Endlosschleifen
+- Return: `dict[str, Any]` mit path_found, path_length, paths
+- Timeout-Protection: Max 1 Sekunde Query-Zeit
+- Max depth: 10 (Performance-Limit)
+
+### AC-5.7.6: Code-Wiederverwendung aus MCP Server
+
+**Given** GraphStore-Methoden werden implementiert
+**When** ich die Implementation prüfe
+**Then** werden bestehende mcp_server-Funktionen wiederverwendet:
+
+- `store.graph.query_neighbors()` nutzt `mcp_server.db.graph.query_neighbors()`
+- `store.graph.add_node()` nutzt `mcp_server.db.graph.add_node()`
+- `store.graph.add_edge()` nutzt `mcp_server.db.graph.add_edge()` und `get_or_create_node()`
+- `store.graph.find_path()` nutzt `mcp_server.db.graph.find_path()`
+- Keine Code-Duplizierung gemäß ADR-007
+
+### AC-5.7.7: Error Handling und Validation
+
+**Given** GraphStore-Methoden werden mit ungültigen Inputs aufgerufen
+**When** Validation fehlschlägt oder DB-Operationen fehlschlagen
+**Then** werden passende Exceptions geworfen:
+
+- `ValidationError`: Bei depth>5 (query_neighbors), depth>10 (find_path), weight außerhalb [0,1], leere Namen
+- `StorageError`: Bei DB-Operationen die fehlschlagen
+- `ConnectionError`: Wenn nicht verbunden (`is_connected=False`)</acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <!-- Primary Epic Documentation -->
+      <doc path="bmad-docs/epics/epic-5-library-api-for-ecosystem-integration.md" title="Epic 5: Library API for Ecosystem Integration" section="Story 5.7 Specification" snippet="Complete Epic 5 definition including Story 5.7 specification with method signatures and dependencies"/>
+
+      <!-- Story-Specific Documentation -->
+      <doc path="bmad-docs/stories/5-7-graph-query-neighbors-library-api.md" title="Story 5.7: Graph Query Neighbors Library API" section="Acceptance Criteria & Implementation" snippet="Authoritative source with complete story specification, detailed acceptance criteria, task breakdown, and wrapper pattern guidance"/>
+
+      <!-- Technical Context & Architecture -->
+      <doc path="bmad-docs/epic-5-tech-context.md" title="Epic 5 Technical Context" section="Public API Design & Wrapper Pattern" snippet="Critical technical context containing GraphStore API specification, wrapper pattern (ADR-007), data models, exception hierarchy, and risk mitigations"/>
+
+      <!-- Architecture Decisions -->
+      <doc path="bmad-docs/architecture.md" title="System Architecture" section="ADR-007: Library API Wrapper Pattern" snippet="Contains ADR-007 wrapper pattern specification, ADR-006 PostgreSQL adjacency list, wrapper implementation examples, and project structure"/>
+
+      <!-- Existing Implementation Reference -->
+      <doc path="mcp_server/db/graph.py" title="Graph Database Functions" section="Core Functions to Wrap" snippet="Existing add_node, add_edge, query_neighbors, find_path functions that Library API must wrap"/>
+
+      <doc path="cognitive_memory/store.py" title="MemoryStore Implementation" section="GraphStore Stub" snippet="Current GraphStore stub implementation requiring completion"/>
+
+      <!-- Data Models -->
+      <doc path="cognitive_memory/types.py" title="Data Type Definitions" section="Graph Dataclasses" snippet="Existing GraphNode, GraphEdge, PathResult dataclass definitions"/>
+
+      <!-- MCP Tool Reference -->
+      <doc path="mcp_server/tools/graph_query_neighbors.py" title="Graph Query Neighbors Tool" section="Implementation Reference" snippet="MCP Tool reference showing async implementation and parameter validation patterns"/>
+    </docs>
+    <code>
+      <!-- Core Implementation Files -->
+      <code path="cognitive_memory/store.py" kind="class" symbol="GraphStore" lines="483-556" reason="Current stub implementation that needs to be completed. Contains context manager, connection management, and all 4 method signatures (add_node, add_edge, get_neighbors, find_path) to implement."/>
+      <code path="mcp_server/db/graph.py" kind="module" symbol="*" lines="1-600" reason="Core database functions to be wrapped: add_node(), add_edge(), query_neighbors(), find_path(), get_node_by_name(), get_or_create_node(). Contains idempotent INSERT logic and PostgreSQL recursive CTE traversal."/>
+
+      <!-- Type Definitions -->
+      <code path="cognitive_memory/types.py" kind="dataclass" symbol="GraphNode" lines="96-114" reason="Existing dataclass for graph nodes with id, name, label, properties, vector_id fields. Can be used for return types or inspiration for dict format."/>
+      <code path="cognitive_memory/types.py" kind="dataclass" symbol="GraphEdge" lines="116-136" reason="Existing dataclass for graph edges with source_id, target_id, relation, weight, properties. Reference for edge creation and path finding."/>
+      <code path="cognitive_memory/types.py" kind="dataclass" symbol="PathResult" lines="138-156" reason="Existing dataclass for path finding results with path list, length, found status, nodes and edges details."/>
+
+      <!-- Exception Hierarchy -->
+      <code path="cognitive_memory/exceptions.py" kind="class" symbol="ValidationError" lines="66-76" reason="Required exception for input validation errors (depth out of range, weight out of range, empty names)."/>
+      <code path="cognitive_memory/exceptions.py" kind="class" symbol="StorageError" lines="53-63" reason="Required exception for wrapping database operation failures."/>
+      <code path="cognitive_memory/exceptions.py" kind="class" symbol="ConnectionError" lines="26-38" reason="Required exception for when store is not connected (_ensure_connected() check)."/>
+
+      <!-- Connection Management -->
+      <code path="cognitive_memory/connection.py" kind="class" symbol="ConnectionManager" lines="1-100" reason="Connection management shared with parent MemoryStore. Used by GraphStore for database operations via _connection_manager.get_connection()."/>
+
+      <!-- Test Reference -->
+      <code path="tests/library/test_memorystore.py" kind="test" symbol="TestFromEnvFactoryMethod" lines="22-51" reason="Testing pattern reference for story 5.7. Shows mock usage, environment variable handling, and exception testing structure."/>
+    </code>
+    <dependencies>
+      <!-- Core Python Dependencies -->
+      <dependency ecosystem="python" name="python" version="^3.11">Core runtime requirement for the cognitive memory library.</dependency>
+
+      <!-- Database Dependencies -->
+      <dependency ecosystem="python" name="psycopg2-binary" version="^2.9.0">PostgreSQL database adapter for Python. Required for connection management and query execution.</dependency>
+      <dependency ecosystem="python" name="pgvector" version="^0.2.0">PostgreSQL vector extension support. Used for vector operations in related components.</dependency>
+
+      <!-- Core Libraries -->
+      <dependency ecosystem="python" name="mcp" version="^1.0.0">Model Context Protocol library. Used by the MCP server components being wrapped.</dependency>
+      <dependency ecosystem="python" name="pyyaml" version="^6.0">YAML parsing and serialization. Used for configuration management.</dependency>
+      <dependency ecosystem="python" name="ruamel-yaml" version="^0.18.0">Alternative YAML parser with better error handling. Used in configuration.</dependency>
+      <dependency ecosystem="python" name="tabulate" version="^0.9.0">Table formatting utility. Used in CLI tools and documentation.</dependency>
+
+      <!-- Development Dependencies -->
+      <dependency ecosystem="dev" name="pytest" version="^7.4.0">Testing framework for unit tests and integration tests.</dependency>
+      <dependency ecosystem="dev" name="pytest-asyncio" version="^0.21.0">Async support for pytest. Required for testing async MCP components.</dependency>
+      <dependency ecosystem="dev" name="pytest-cov" version="^4.1.0">Coverage reporting for pytest tests.</dependency>
+
+      <!-- Code Quality -->
+      <dependency ecosystem="dev" name="black" version="^24.3.0">Code formatting tool with 88-character line limit.</dependency>
+      <dependency ecosystem="dev" name="ruff" version="^0.1.0">Fast Python linter with pycodestyle, pyflakes, and isort rules.</dependency>
+      <dependency ecosystem="dev" name="mypy" version="^1.7.0">Static type checking with relaxed settings for current codebase.</dependency>
+      <dependency ecosystem="dev" name="pre-commit" version="^3.5.0">Git pre-commit hooks for code quality enforcement.</dependency>
+
+      <!-- Type Stubs -->
+      <dependency ecosystem="dev" name="types-psycopg2" version="^2.9.21.20251012">Type stubs for psycopg2-binary for better mypy support.</dependency>
+      <dependency ecosystem="dev" name="types-jsonschema" version="^4.25.1.20251009">Type stubs for jsonschema validation.</dependency>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <!-- Development Constraints from Architecture and Story -->
+    <constraint type="architectural" source="ADR-007">Wrapper Pattern: All GraphStore methods MUST wrap mcp_server.db.graph functions, no code duplication.</constraint>
+    <constraint type="architectural" source="Epic 5">Connection Sharing: GraphStore MUST use parent MemoryStore's connection pool via _connection_manager.</constraint>
+    <constraint type="performance" source="Story ACs">Depth Limits: query_neighbors depth ≤ 5, find_path depth ≤ 10 for performance protection.</constraint>
+    <constraint type="input_validation" source="Story ACs">Parameter Ranges: weight must be 0.0-1.0, names/labels cannot be empty.</constraint>
+    <constraint type="api_compliance" source="Story 5.2">Method Signature: get_neighbors() must be renamed to query_neighbors() to match story spec.</constraint>
+    <constraint type="error_handling" source="Story ACs">Exception Types: Must raise ValidationError, StorageError, ConnectionError from cognitive_memory.exceptions.</constraint>
+    <constraint type="database_schema" source="ADR-006">PostgreSQL Schema: Must use existing nodes/edges tables with idempotent INSERT patterns.</constraint>
+    <constraint type="import_cycle_prevention" source="Epic 5">Import Safety: No circular imports between cognitive_memory and mcp_server packages.</constraint>
+    <constraint type="testing" source="Story 5.7 Task 6">Test Coverage: Must include tests for validation, error cases, connection management, and mocking.</constraint>
+  </constraints>
+  <interfaces>
+    <!-- API Interface Specifications -->
+    <interface name="GraphStore.query_neighbors" kind="method" signature="query_neighbors(node_name: str, relation_type: str | None = None, depth: int = 1) -> list[dict[str, Any]]" path="cognitive_memory/store.py:GraphStore">
+      Single-hop and multi-hop graph traversal with cycle detection. Wraps mcp_server.db.graph.query_neighbors() and get_node_by_name().
+    </interface>
+
+    <interface name="GraphStore.add_node" kind="method" signature="add_node(name: str, label: str, properties: dict[str, Any] | None = None) -> int" path="cognitive_memory/store.py:GraphStore">
+      Idempotent node creation with label+name uniqueness. Wraps mcp_server.db.graph.add_node() with JSON serialization for properties.
+    </interface>
+
+    <interface name="GraphStore.add_edge" kind="method" signature="add_edge(source_name: str, target_name: str, relation: str, weight: float = 1.0) -> int" path="cognitive_memory/store.py:GraphStore">
+      Edge creation with auto-upsert for source/target nodes. Wraps mcp_server.db.graph.add_edge() and get_or_create_node().
+    </interface>
+
+    <interface name="GraphStore.find_path" kind="method" signature="find_path(start_node: str, end_node: str, max_depth: int = 5) -> dict[str, Any]" path="cognitive_memory/store.py:GraphStore">
+      BFS-based shortest path finding with bidirectional traversal. Wraps mcp_server.db.graph.find_path().
+    </interface>
+
+    <!-- Database Function Interfaces (to be wrapped) -->
+    <interface name="mcp_server.db.graph.query_neighbors" kind="function" signature="query_neighbors(node_id: str, relation_type: str | None = None, max_depth: int = 1) -> list[dict[str, Any]]" path="mcp_server/db/graph.py">
+      PostgreSQL WITH RECURSIVE CTE traversal with cycle detection. Returns neighbor node dicts with distance, weight, relation info.
+    </interface>
+
+    <interface name="mcp_server.db.graph.add_node" kind="function" signature="add_node(label: str, name: str, properties: str = "{}", vector_id: int | None = None) -> dict[str, Any]" path="mcp_server/db/graph.py">
+      Idempotent node INSERT with ON CONFLICT handling. Returns node_id, created flag, confirmed label/name.
+    </interface>
+
+    <interface name="mcp_server.db.graph.add_edge" kind="function" signature="add_edge(source_name: str, target_name: str, relation: str, weight: float = 1.0, properties: dict = None) -> dict[str, Any]" path="mcp_server/db/graph.py">
+      Edge creation with auto-upsert of source/target nodes via get_or_create_node().
+    </interface>
+
+    <interface name="mcp_server.db.graph.find_path" kind="function" signature="find_path(start_node: str, end_node: str, max_depth: int = 5) -> dict[str, Any]" path="mcp_server/db/graph.py">
+      BFS pathfinding with bidirectional traversal and timeout protection. Returns path_found, path_length, paths data.
+    </interface>
+  </interfaces>
+  <tests>
+    <standards>Story 5.7 uses Epic 5 testing strategy with pytest framework, unittest.mock for isolation, and comprehensive coverage including unit tests for individual GraphStore methods, integration tests for connection management, and contract tests ensuring API consistency with MCP server functions. All tests must mock database operations to avoid requiring real PostgreSQL connections during development, following the established pattern from Story 5.2 tests with proper exception testing and validation coverage.</standards>
+    <locations>tests/library/test_graph_store.py (new file for Story 5.7), tests/library/ (existing test infrastructure), tests/conftest.py (shared fixtures and setup), tests/ (root test directory with pytest configuration matching pyproject.toml settings)</locations>
+    <ideas>
+      <test idea="query_neighbors_single_hop" ac="5.7.1" description="Test depth=1 returns direct neighbors only, validate distance=1 for all results"/>
+      <test idea="query_neighbors_multi_hop" ac="5.7.1" description="Test depth=3 returns transitive neighbors, validate distance values up to 3"/>
+      <test idea="query_neighbors_filtering" ac="5.7.1" description="Test relation_type filter returns only matching relations (e.g., 'USES')"/>
+      <test idea="query_neighbors_validation" ac="5.7.7" description="Test ValidationError for depth>5 and empty node_name"/>
+      <test idea="query_neighbors_not_found" ac="5.7.2" description="Test empty list returned when starting node doesn't exist"/>
+
+      <test idea="add_node_creation" ac="5.7.3" description="Test new node creation returns node ID with correct label+name"/>
+      <test idea="add_node_idempotent" ac="5.7.3" description="Test duplicate label+name returns existing node ID (no duplicates)"/>
+      <test idea="add_node_validation" ac="5.7.7" description="Test ValidationError for empty name or label"/>
+
+      <test idea="add_edge_creation" ac="5.7.4" description="Test edge creation with existing nodes returns edge ID"/>
+      <test idea="add_edge_auto_upsert" ac="5.7.4" description="Test edge creation automatically creates missing source/target nodes"/>
+      <test idea="add_edge_weight_validation" ac="5.7.7" description="Test ValidationError for weight<0.0 or weight>1.0"/>
+
+      <test idea="find_path_success" ac="5.7.5" description="Test path found returns correct path_length and node sequence"/>
+      <test idea="find_path_no_path" ac="5.7.5" description="Test no path available returns path_found=False"/>
+      <test idea="find_path_validation" ac="5.7.7" description="Test ValidationError for max_depth>10"/>
+
+      <test idea="_ensure_connected_error" ac="5.7.7" description="Test ConnectionError when operations called without connection"/>
+      <test idea="storage_error_wrapping" ac="5.7.7" description="Test StorageError wraps database exceptions properly"/>
+      <test idea="connection_pool_sharing" ac="all" description="Test GraphStore shares parent MemoryStore connection pool"/>
+    </ideas>
+  </tests>
+</story-context>

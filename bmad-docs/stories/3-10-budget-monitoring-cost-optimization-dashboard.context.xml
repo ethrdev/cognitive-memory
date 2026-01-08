@@ -1,0 +1,583 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>3</epicId>
+    <storyId>10</storyId>
+    <title>Budget Monitoring & Cost Optimization Dashboard</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-20</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>bmad-docs/stories/3-10-budget-monitoring-cost-optimization-dashboard.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>ethr</asA>
+    <iWant>monatliche API-Kosten überwachen und Budget-Alerts erhalten</iWant>
+    <soThat>NFR003 (Budget €5-10/mo) eingehalten wird</soThat>
+    <tasks>
+## Tasks Overview
+
+### Task 1: Database Schema - api_cost_log Table
+- Create migration script for api_cost_log table (id, date, api_name, num_calls, token_count, estimated_cost)
+- Add data model ApiCostLog with CRUD methods
+
+### Task 2: API Cost Logging Integration
+- Modify OpenAI Embeddings Client - add cost logging after each embedding call
+- Modify Anthropic Haiku Client (Evaluation) - log cost with token counts
+- Modify Anthropic Haiku Client (Reflexion) - log cost when reflexion triggered
+- Modify GPT-4o Dual Judge Client - log cost for judge calls
+- Add cost rates configuration in config.yaml
+
+### Task 3: Monthly Aggregation Logic
+- Create mcp_server/utils/budget_monitoring.py module
+- Implement get_monthly_cost(days=30) function
+- Implement get_cost_breakdown_by_api(days=30) function
+- Implement get_cost_trend(days=30) function
+- Add unit tests for aggregation functions
+
+### Task 4: Budget Alert Logic
+- Implement check_budget_alert(threshold=10.0) function
+- Add budget alert logging (WARNING when projected >€10/mo)
+- Add optional Email/Slack alert mechanism
+- Integrate alert check into daily cron (4 AM)
+
+### Task 5: Cost Optimization Insights
+- Implement get_highest_cost_api(days=30) - identifies most expensive API
+- Implement get_cost_per_query(days=30) - calculates average cost per query
+- Implement get_reflexion_rate(days=30) - analyzes reflexion frequency
+- Implement get_cost_breakdown_by_workflow(days=30) - cost % per workflow step
+
+### Task 6: CLI Dashboard Tool
+- Create scripts/budget_report.py with argparse (--days, --format)
+- Implement text output format with tabulate library
+- Implement JSON output format
+- Add error handling and comprehensive help text
+- Test CLI tool with various scenarios
+
+### Task 7: Integration mit Claude Code
+- Document SQL queries for Claude Code in docs/budget-monitoring-queries.md
+- Test queries via Claude Code conversational interface
+
+### Task 8: Documentation
+- Update docs/api-reference.md - add Budget Monitoring section
+- Create docs/budget-monitoring.md - comprehensive guide (Deutsch)
+- Update docs/production-checklist.md - add section 4.4.2
+
+### Task 9: Testing and Validation
+- Test API Cost Logging (all 4 API clients)
+- Test Monthly Aggregation (mock 30 days data)
+- Test Budget Alert (mock high cost scenarios)
+- Test Cost Optimization Insights
+- Test CLI Tool (text/json formats, error cases)
+- Integration Test deferred to Story 3.11 (7-Day Stability Testing)
+</tasks>
+  </story>
+
+  <acceptanceCriteria>
+### AC-3.10.1: Daily Cost Tracking
+**Given** System läuft in Production mit externen APIs
+**When** API-Calls durchgeführt werden
+**Then** wird jeder Call in api_cost_log Tabelle geloggt
+
+- Columns: date, api_name, num_calls, token_count, estimated_cost
+- APIs tracked: openai_embeddings, gpt4o_judge, haiku_eval, haiku_reflection
+- Cost estimation: Token Count × API Rate (rates in config.yaml)
+- Logging after each successful API call with token counts from response
+
+### AC-3.10.2: Monthly Aggregation
+**Given** api_cost_log enthält Daily Cost Entries
+**When** Monthly Aggregation abgefragt wird
+**Then** werden Kosten über 30 Tage aggregiert
+
+- Total cost: SUM(estimated_cost) over last 30 days
+- Breakdown per API: Group by api_name with total_cost and num_calls
+- Month-over-month comparison: Last 30 days vs. 30-60 days ago (trend: rising/falling/stable)
+
+### AC-3.10.3: Budget Alert
+**Given** Daily costs werden getrackt
+**When** Projected monthly cost >€10.00
+**Then** wird Budget Alert getriggert
+
+- Alert trigger: daily_cost × 30 = projected monthly cost
+- Condition: Projected monthly >€10.00 (NFR003 soft limit)
+- Action: Log WARNING + optional Email/Slack alert
+- Alert message includes cost breakdown (top 3 APIs) and recommendations
+- Threshold configurable in config.yaml
+
+### AC-3.10.4: Cost Optimization Insights
+**Given** api_cost_log enthält historische Daten
+**When** Cost Optimization Report generiert wird
+**Then** werden folgende Insights bereitgestellt
+
+1. **Highest Cost API:** Identifies most expensive API (meist GPT-4o Dual Judge €4-6/mo) with recommendation
+2. **Query Volume Correlation:** cost_per_query = total_cost / total_queries with trend analysis
+3. **Reflexion Rate Analysis:** reflexion_rate = haiku_reflection_calls / total_queries (warning if >30%)
+4. **Cost Breakdown per Workflow:** Embeddings %, Dual Judge %, Evaluation %, Reflexion %
+
+### AC-3.10.5: Simple CLI Dashboard
+**Given** Budget Monitoring Tool implementiert
+**When** CLI Command ausgeführt wird
+**Then** wird Budget Report angezeigt
+
+- Command: python scripts/budget_report.py --days 30
+- Text output: Total cost, projected monthly, breakdown table, budget status, recommendations
+- JSON output: Full metrics dump with --format json flag
+- Alternative: PostgreSQL queries via Claude Code for conversational budget checks
+</acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <!-- PRD - NFR003 Budget Requirements -->
+      <doc>
+        <path>bmad-docs/PRD.md</path>
+        <title>Product Requirements Document</title>
+        <section>NFR003: Budget & Cost Efficiency</section>
+        <snippet>System muss mit Budget €5-10/mo (erste 3 Monate) laufen, danach Reduktion auf €2-3/mo durch Staged Dual Judge (Enhancement E8). Kontinuierliches Cost Monitoring für API-Calls erforderlich.</snippet>
+      </doc>
+
+      <!-- Epic 3 Definition -->
+      <doc>
+        <path>bmad-docs/epics.md</path>
+        <title>Epic Definitions</title>
+        <section>Epic 3: Working Memory, Evaluation & Production Readiness</section>
+        <snippet>Epic 3 bringt das System in production-ready State mit Monitoring-Infrastruktur, Budget-Optimierung und Stability Testing. Story 3.10 implementiert Budget Monitoring Dashboard für NFR003 Compliance.</snippet>
+      </doc>
+
+      <!-- Story 3.10 Details from Epics -->
+      <doc>
+        <path>bmad-docs/epics.md</path>
+        <title>Epic Definitions</title>
+        <section>Story 3.10: Budget Monitoring Dashboard</section>
+        <snippet>Implementiert api_cost_log tracking für alle API calls (OpenAI, Anthropic), monthly aggregation, budget alerts bei projected cost >€10/mo, CLI dashboard tool, und cost optimization insights (highest cost API, reflexion rate analysis).</snippet>
+      </doc>
+
+      <!-- Tech Spec Epic 3 - Story 3.10 Implementation -->
+      <doc>
+        <path>bmad-docs/tech-spec-epic-3.md</path>
+        <title>Epic 3 Technical Specification</title>
+        <section>Story 3.10: Budget Monitoring Dashboard - Acceptance Criteria</section>
+        <snippet>Daily cost tracking in api_cost_log (date, api_name, num_calls, token_count, estimated_cost). Monthly aggregation über 30 Tage mit breakdown per API. Budget alert wenn projected monthly >€10.00. CLI Tool: python scripts/budget_report.py --days 30.</snippet>
+      </doc>
+
+      <!-- Tech Spec Epic 3 - Budget Monitoring CLI Details -->
+      <doc>
+        <path>bmad-docs/tech-spec-epic-3.md</path>
+        <title>Epic 3 Technical Specification</title>
+        <section>Budget Monitoring CLI (lines 454-504)</section>
+        <snippet>CLI Dashboard mit argparse (--days, --format). Text output: Total cost, projected monthly, breakdown table (tabulate), budget status, recommendations. JSON output: Full metrics dump. Budget alert threshold konfigurierbar in config.yaml.</snippet>
+      </doc>
+
+      <!-- Tech Spec Epic 3 - api_cost_log Schema -->
+      <doc>
+        <path>bmad-docs/tech-spec-epic-3.md</path>
+        <title>Epic 3 Technical Specification</title>
+        <section>Data Models - api_cost_log Table (lines 146-156)</section>
+        <snippet>CREATE TABLE api_cost_log (id SERIAL PRIMARY KEY, date DATE NOT NULL, api_name VARCHAR(50) NOT NULL, num_calls INTEGER NOT NULL, token_count INTEGER, estimated_cost FLOAT NOT NULL). Index: idx_cost_date_api ON (date DESC, api_name).</snippet>
+      </doc>
+
+      <!-- Architecture - api_cost_log Schema -->
+      <doc>
+        <path>bmad-docs/architecture.md</path>
+        <title>Cognitive Memory System Architecture</title>
+        <section>Database Schema - api_cost_log Table (lines 306-317)</section>
+        <snippet>Budget monitoring table mit Schema: id, date, api_name (openai_embeddings, gpt4o_judge, haiku_eval, haiku_reflection), num_calls, token_count, estimated_cost. Index für fast date-range queries. Retention unlimited für historical trend analysis.</snippet>
+      </doc>
+
+      <!-- Architecture - Budget & Cost Efficiency -->
+      <doc>
+        <path>bmad-docs/architecture.md</path>
+        <title>Cognitive Memory System Architecture</title>
+        <section>NFR003: Budget & Cost Efficiency</section>
+        <snippet>Budget Target: €5-10/mo (Dual Judge Phase), €2-3/mo (Single Judge Phase). Cost Breakdown: OpenAI Embeddings €0.06-0.10/mo, GPT-4o Dual Judge €4-6/mo, Haiku Evaluation €1-2/mo, Haiku Reflexion €0.45/mo. Budget Monitoring validiert cost reduction nach Staged Dual Judge transition.</snippet>
+      </doc>
+
+      <!-- Story 3.9 Integration (Prerequisite) -->
+      <doc>
+        <path>bmad-docs/stories/3-9-staged-dual-judge-implementation-enhancement-e8.md</path>
+        <title>Story 3.9: Staged Dual Judge Implementation</title>
+        <section>Integration with Story 3.10</section>
+        <snippet>Story 3.9 reduziert API costs von €5-10/mo auf €2-3/mo (-40%) durch Single Judge + Spot Checks. Story 3.10 Budget Monitoring validiert diese cost reduction via api_cost_log data. CLI tool patterns (argparse, tabulate, JSON output) von Story 3.9 reusable für Story 3.10.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <!-- OpenAI Client - Needs Cost Logging -->
+      <artifact>
+        <path>mcp_server/external/openai_client.py</path>
+        <kind>service</kind>
+        <symbol>OpenAIEmbeddingsClient</symbol>
+        <lines>1-50</lines>
+        <reason>Needs cost logging after each embedding API call. Extract token count from response, calculate cost (token_count × €0.00002), insert into api_cost_log. Also contains GPT-4o judge calls that need cost logging.</reason>
+      </artifact>
+
+      <!-- Anthropic Client - Needs Cost Logging -->
+      <artifact>
+        <path>mcp_server/external/anthropic_client.py</path>
+        <kind>service</kind>
+        <symbol>HaikuClient</symbol>
+        <lines>1-50</lines>
+        <reason>Needs cost logging after evaluation and reflexion calls. Extract input_tokens + output_tokens from response, calculate cost ((input_tokens × $1 + output_tokens × $5) / 1M, convert to EUR), insert into api_cost_log.</reason>
+      </artifact>
+
+      <!-- Retry Logic Utility - Pattern to Reuse -->
+      <artifact>
+        <path>mcp_server/utils/retry_logic.py</path>
+        <kind>utility</kind>
+        <symbol>retry_with_backoff</symbol>
+        <lines>all</lines>
+        <reason>Existing retry logic decorator already used by API clients. Budget monitoring should log costs after successful retries (not on failed attempts).</reason>
+      </artifact>
+
+      <!-- Staged Dual Judge Utility - Integration Point -->
+      <artifact>
+        <path>mcp_server/utils/staged_dual_judge.py</path>
+        <kind>utility</kind>
+        <symbol>is_dual_judge_enabled</symbol>
+        <lines>all</lines>
+        <reason>Budget monitoring must respect dual_judge_enabled flag. Full Dual Judge logs both GPT-4o + Haiku costs. Single Judge + Spot Checks logs GPT-4o always, Haiku only on 5% spot checks.</reason>
+      </artifact>
+
+      <!-- Staged Dual Judge CLI - Pattern to Reuse -->
+      <artifact>
+        <path>scripts/staged_dual_judge_cli.py</path>
+        <kind>script</kind>
+        <symbol>main</symbol>
+        <lines>all</lines>
+        <reason>CLI tool pattern from Story 3.9: argparse (--days, --format), tabulate for tables, JSON output, comprehensive help text. Reuse this pattern for budget_report.py.</reason>
+      </artifact>
+
+      <!-- Config File - Needs Budget Section -->
+      <artifact>
+        <path>config/config.yaml</path>
+        <kind>config</kind>
+        <symbol>config</symbol>
+        <lines>all</lines>
+        <reason>Needs new sections: api_cost_rates (EUR per token for all APIs) and budget (monthly_limit_eur, alert_threshold_eur, optional alert channels). Hard-coded rates, manual update when API prices change.</reason>
+      </artifact>
+
+      <!-- Database Migrations Directory -->
+      <artifact>
+        <path>mcp_server/db/migrations/</path>
+        <kind>directory</kind>
+        <symbol>migrations</symbol>
+        <lines>n/a</lines>
+        <reason>Will create 003_api_cost_log.sql migration for api_cost_log table. Schema: id, date, api_name, num_calls, token_count, estimated_cost. Index: idx_cost_date_api (date DESC, api_name).</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <!-- Python Core Dependencies (Existing) -->
+      <python>
+        <package name="psycopg2-binary" version=">=2.9.9">PostgreSQL driver for DB queries</package>
+        <package name="openai" version=">=1.51.0">OpenAI API client (already installed)</package>
+        <package name="anthropic" version=">=0.39.0">Anthropic API client (already installed)</package>
+        <package name="pyyaml" version=">=6.0">Config file parsing (already installed)</package>
+        <package name="python-dotenv" version=">=1.0.0">Environment variables (already installed)</package>
+      </python>
+
+      <!-- New Dependencies for Budget Monitoring -->
+      <python>
+        <package name="tabulate" version=">=0.9.0">Pretty-print tables for CLI text output (check if installed, used by Story 3.9)</package>
+      </python>
+
+      <!-- No new system dependencies required -->
+      <system>
+        <package name="postgresql" version=">=15">PostgreSQL database (already installed)</package>
+        <package name="cron" version="any">Scheduled tasks for daily budget alerts (already installed)</package>
+      </system>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+## Development Constraints
+
+### 1. Cost Logging Integration
+- **Conditional Logging:** Only log API cost when API actually called (learned from Story 3.9 fix)
+- **OpenAI Embeddings:** Log after successful embedding creation
+- **GPT-4o Judge:** Log only when judge called (Dual Judge Mode or Spot Check)
+- **Haiku Evaluation:** Log only when evaluation performed
+- **Haiku Reflexion:** Log only when reflexion triggered (Reward &lt;0.3)
+- **Staged Dual Judge Integration:** Respect dual_judge_enabled flag from Story 3.9
+
+### 2. Configuration Management
+- **API Cost Rates:** Hard-coded in config.yaml, manual update when API prices change
+- **Budget Thresholds:** Configurable monthly_limit_eur (default €10.00), alert_threshold_eur (default €8.00)
+- **Environment-Aware:** Same config structure for development and production environments
+
+### 3. CLI Tool Standards
+- **Pattern from Story 3.9:** Use argparse, tabulate, JSON output, comprehensive help text
+- **Arguments:** --days (default 30), --format (text|json)
+- **Error Handling:** Graceful failures with clear error messages
+- **Performance:** CLI execution &lt;2s (performance target)
+
+### 4. Database Schema
+- **Table:** api_cost_log with columns (id, date, api_name, num_calls, token_count, estimated_cost)
+- **Index:** idx_cost_date_api for fast date-range queries (date DESC, api_name)
+- **Retention:** Unlimited (no auto-deletion) to allow historical trend analysis
+- **Migration:** Use sequential numbering (003_api_cost_log.sql follows 002_*.sql)
+
+### 5. Testing Strategy
+- **Manual Testing:** Required for configuration/monitoring story
+- **Real Data Validation:** User (ethr) validates with production system
+- **Integration Test:** Deferred to Story 3.11 (7-Day Stability Testing)
+- **Cost Accuracy:** Compare CLI report with manual calculation (token counts × rates)
+
+### 6. Documentation Language
+- **Output Language:** Deutsch (German) as per document_output_language setting
+- **User Audience:** ethr (operator/developer)
+- **Documentation Files:** budget-monitoring.md (guide), api-reference.md (section), production-checklist.md (update)
+
+### 7. Integration with Story 3.9
+- **Cost Reduction Validation:** Budget monitoring validates -40% cost reduction from Staged Dual Judge
+- **Before/After Comparison:** api_cost_log Month 3 (Dual Judge) vs. Month 4 (Single Judge)
+- **Optimization Recommendation:** If gpt4o_judge &gt;40% budget → recommend Staged Dual Judge activation
+  </constraints>
+  <interfaces>
+## API Signatures and Interfaces
+
+### 1. Budget Monitoring Module (mcp_server/utils/budget_monitoring.py)
+
+```python
+def get_monthly_cost(days: int = 30) -> dict:
+    """
+    Calculate total API costs over last N days.
+
+    Returns:
+        {
+            "total_cost": float,  # EUR
+            "days": int,
+            "projected_monthly": float  # (total_cost / days) × 30
+        }
+    """
+
+def get_cost_breakdown_by_api(days: int = 30) -> list[dict]:
+    """
+    Aggregate costs grouped by API name.
+
+    Returns:
+        [
+            {
+                "api_name": str,
+                "total_cost": float,
+                "num_calls": int,
+                "percentage": float  # % of total cost
+            },
+            ...
+        ]
+    """
+
+def check_budget_alert(threshold: float = 10.0) -> dict:
+    """
+    Check if projected monthly cost exceeds threshold.
+
+    Returns:
+        {
+            "alert": bool,
+            "projected": float,
+            "threshold": float,
+            "breakdown": list[dict]  # Top 3 APIs
+        }
+    """
+
+def get_cost_trend(days: int = 30) -> dict:
+    """
+    Calculate cost trend (last 30 days vs. 30-60 days ago).
+
+    Returns:
+        {
+            "current_period": float,
+            "previous_period": float,
+            "change_pct": float,
+            "trend": str  # "rising" | "falling" | "stable"
+        }
+    """
+
+def get_highest_cost_api(days: int = 30) -> dict:
+    """
+    Identify most expensive API.
+
+    Returns:
+        {
+            "api_name": str,
+            "total_cost": float,
+            "percentage": float,
+            "recommendation": str | None
+        }
+    """
+
+def get_reflexion_rate(days: int = 30) -> dict:
+    """
+    Calculate reflexion rate (haiku_reflection_calls / total_evaluations).
+
+    Returns:
+        {
+            "reflexion_rate": float,  # 0.0-1.0
+            "reflexion_calls": int,
+            "total_evaluations": int,
+            "status": str  # "healthy" | "warning"
+        }
+    """
+```
+
+### 2. Cost Logging Functions (API Clients)
+
+```python
+def log_api_cost(
+    api_name: str,
+    num_calls: int,
+    token_count: int,
+    estimated_cost: float
+) -> None:
+    """
+    Insert API cost entry into api_cost_log table.
+
+    Args:
+        api_name: One of 'openai_embeddings', 'gpt4o_judge', 'haiku_eval', 'haiku_reflection'
+        num_calls: Number of API calls (usually 1)
+        token_count: Total tokens (input + output)
+        estimated_cost: Cost in EUR
+    """
+```
+
+### 3. CLI Tool (scripts/budget_report.py)
+
+```python
+def generate_text_report(days: int) -> str:
+    """Generate budget report in text format (tabulate tables)."""
+
+def generate_json_report(days: int) -> str:
+    """Generate budget report in JSON format."""
+
+def main():
+    """
+    CLI entry point.
+
+    Usage:
+        python scripts/budget_report.py --days 30 --format text
+        python scripts/budget_report.py --days 7 --format json
+    """
+```
+
+### 4. Database Interface (api_cost_log Table)
+
+```sql
+-- Insert API cost entry
+INSERT INTO api_cost_log (date, api_name, num_calls, token_count, estimated_cost)
+VALUES (CURRENT_DATE, 'openai_embeddings', 1, 1536, 0.00002);
+
+-- Query monthly costs
+SELECT SUM(estimated_cost) FROM api_cost_log
+WHERE date >= NOW() - INTERVAL '30 days';
+
+-- Query cost breakdown
+SELECT api_name, SUM(estimated_cost) as total_cost, SUM(num_calls) as total_calls
+FROM api_cost_log
+WHERE date >= NOW() - INTERVAL '30 days'
+GROUP BY api_name
+ORDER BY total_cost DESC;
+```
+  </interfaces>
+  <tests>
+    <standards>
+## Testing Standards
+
+**Testing Approach for Story 3.10:**
+
+Story 3.10 is a **Monitoring & Reporting Story** requiring manual testing with real API data. Integration testing deferred to Story 3.11 (7-Day Stability Testing).
+
+**Manual Testing Requirements:**
+1. Trigger API calls (embeddings, evaluation, reflexion, judge) and verify api_cost_log entries created
+2. Mock 30 days of cost data and verify aggregation calculations (SUM, percentages)
+3. Mock high cost scenarios (>€10/mo projected) and verify budget alerts triggered
+4. Test CLI tool with various arguments (--days, --format) and edge cases
+5. Compare CLI report output with manual calculation (token counts × rates)
+6. Post-7-Days: Compare budget report with actual API dashboards (OpenAI, Anthropic)
+
+**Success Criteria:**
+- API cost logging creates entries for all API calls (no missing logs)
+- Monthly aggregation matches manual calculation (within €0.01 discrepancy)
+- Budget alert triggers exactly at threshold (€10.00)
+- CLI tool displays correct costs, breakdown, and recommendations
+- Integration test: Budget report aligns with API dashboards (&lt;5% discrepancy acceptable)
+
+**Testing Tools:**
+- PostgreSQL queries for manual verification
+- Manual API call triggers via Claude Code or test scripts
+- CLI tool execution with various scenarios
+- Mock data insertion for edge case testing
+    </standards>
+    <locations>
+## Test Locations
+
+**Unit Tests (Optional for Story 3.10):**
+- `tests/test_budget_monitoring.py` - Budget aggregation functions
+- `tests/test_cli_tool.py` - CLI tool argument parsing and output formatting
+
+**Integration Tests (Deferred to Story 3.11):**
+- 7-Day Stability Testing validates budget compliance (&lt;€2 for 7 days)
+- Compare api_cost_log with OpenAI/Anthropic dashboard usage metrics
+
+**Manual Test Scripts:**
+- `scripts/test_api_cost_logging.py` - Trigger test API calls, verify logging
+- SQL queries in `docs/budget-monitoring-queries.md` - Manual verification queries
+    </locations>
+    <ideas>
+## Test Ideas Mapped to Acceptance Criteria
+
+### AC-3.10.1: Daily Cost Tracking
+**Test Idea 1:** Trigger API calls and verify api_cost_log entries
+- Trigger: OpenAI embedding call
+- Expected: Entry in api_cost_log with api_name='openai_embeddings', token_count=1536, estimated_cost=€0.00002
+- Verify: Token counts match API response
+
+**Test Idea 2:** Test conditional logging (Story 3.9 integration)
+- Scenario: Dual Judge Mode enabled
+- Expected: Both gpt4o_judge and haiku_eval entries created
+- Scenario: Single Judge + Spot Check (95% queries)
+- Expected: Only gpt4o_judge entry created (Haiku logged on 5% spot checks)
+
+### AC-3.10.2: Monthly Aggregation
+**Test Idea 3:** Mock 30 days of cost data and verify aggregation
+- Insert: 30 days of mixed API costs (openai_embeddings, gpt4o_judge, haiku_eval, haiku_reflection)
+- Query: get_monthly_cost(days=30)
+- Verify: SUM matches manual calculation, projected_monthly = (total_cost / 30) × 30
+
+**Test Idea 4:** Test cost breakdown percentages
+- Expected: Breakdown percentages sum to 100%
+- Verify: gpt4o_judge typically highest (40-60%), haiku_eval 20-40%, others &lt;10%
+
+### AC-3.10.3: Budget Alert
+**Test Idea 5:** Mock high cost data and trigger alert
+- Insert: api_cost_log entry with estimated_cost = €12.50 (projected monthly >€10.00)
+- Query: check_budget_alert(threshold=10.0)
+- Expected: {"alert": True, "projected": 12.50, "threshold": 10.00, "breakdown": [...]}
+
+**Test Idea 6:** Test threshold edge case
+- Insert: Data where projected monthly = €10.00 exactly
+- Expected: Alert triggered (threshold is inclusive: ≥€10.00)
+
+### AC-3.10.4: Cost Optimization Insights
+**Test Idea 7:** Test highest cost API identification
+- Scenario: GPT-4o Dual Judge costs €6.20 (highest)
+- Expected: get_highest_cost_api() returns gpt4o_judge with recommendation "Consider Staged Dual Judge"
+
+**Test Idea 8:** Test reflexion rate analysis
+- Scenario: 167 reflexion calls / 2600 total evaluations = 6.4%
+- Expected: get_reflexion_rate() returns {"reflexion_rate": 0.064, "status": "healthy"}
+- Scenario: 900 reflexion calls / 2600 total evaluations = 34.6%
+- Expected: {"reflexion_rate": 0.346, "status": "warning"}
+
+### AC-3.10.5: Simple CLI Dashboard
+**Test Idea 9:** Test CLI text output format
+- Command: python scripts/budget_report.py --days 30
+- Expected: Text table with API breakdown (tabulate), budget status (✅/⚠️/❌), recommendations
+
+**Test Idea 10:** Test CLI JSON output format
+- Command: python scripts/budget_report.py --days 30 --format json
+- Expected: Valid JSON with keys: total_cost, projected_monthly, breakdown, budget_status, budget_limit
+
+**Test Idea 11:** Test CLI error handling
+- Scenario: No data in api_cost_log
+- Expected: "No cost data found for last 30 days" (graceful error)
+- Scenario: PostgreSQL connection failure
+- Expected: "Failed to connect to database" with exit code 1
+    </ideas>
+  </tests>
+</story-context>

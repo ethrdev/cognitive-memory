@@ -1,0 +1,268 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/output" v="1.0">
+  <metadata>
+    <epicId>1</epicId>
+    <storyId>11</storyId>
+    <title>Dual Judge Implementation mit GPT-4o + Haiku (MCP Tool: store_dual_judge_scores)</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-13</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>bmad-docs/stories/1-11-dual-judge-implementation-mit-gpt-4o-haiku-mcp-tool-store-dual-judge-scores.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Als MCP Server,</asA>
+    <iWant>möchte ich echte unabhängige Dual Judges (GPT-4o + Haiku) für IRR Validation nutzen,</iWant>
+    <soThat>sodass methodisch valides Ground Truth mit Cohen's Kappa >0.70 entsteht.</soThat>
+    <tasks>GPT-4o Judge Integration (AC: 1)
+- Haiku Judge Integration (AC: 2)
+- Parallel API Execution (AC: alle)
+- Score Persistence in ground_truth Table (AC: Scores speichern)
+- Cohen's Kappa Calculation (AC: Kappa berechnen)
+- MCP Tool: store_dual_judge_scores Implementation (AC: alle)
+- API Cost Tracking (Supporting)
+- Testing & Validation (AC: alle)</tasks>
+  </story>
+
+  <acceptanceCriteria>Given Ground Truth Queries sind gelabelt (Story 1.10)
+When das Tool store_dual_judge_scores aufgerufen wird für eine Query
+Then werden beide Judges parallel aufgerufen:
+
+1. GPT-4o Judge (OpenAI API):
+   - Model: gpt-4o
+   - Prompt: "Rate relevance of document for query (0.0-1.0)"
+   - Response: Float Score pro Dokument
+
+2. Haiku Judge (Anthropic API):
+   - Model: claude-3-5-haiku-20241022
+   - Gleicher Prompt wie GPT-4o
+   - Response: Float Score pro Dokument
+
+And Scores werden in ground_truth gespeichert:
+- Neue Columns: judge1_score, judge2_score, judge1_model, judge2_model
+- Binary Conversion: Score >0.5 = Relevant (1), Score ≤0.5 = Not Relevant (0)
+
+And Cohen's Kappa wird berechnet:
+- Kappa Formula: (P_o - P_e) / (1 - P_e)
+- P_o: Observed Agreement (% Übereinstimmung)
+- P_e: Expected Agreement by Chance
+- Kappa gespeichert in ground_truth.kappa Column</acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>bmad-docs/PRD.md</path>
+        <title>Product Requirements Document</title>
+        <section>Dual Judge Ground Truth Collection</section>
+        <snippet>FR010: Ground Truth Collection mit echten unabhängigen Dual Judges ✅ v3.1-Hybrid - Streamlit UI sammelt 50-100 gelabelte Queries. MCP Server ruft GPT-4o API (OpenAI) + Haiku API (Anthropic) auf für echte unabhängige Evaluation, berechnet Cohen's Kappa, speichert Ergebnisse. IRR Contingency Plan (E1) bei Kappa &lt;0.70. Rationale: True inter-model reliability, methodisch valides Ground Truth.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/PRD.md</path>
+        <title>Product Requirements Document</title>
+        <section>Methodological Validity</section>
+        <snippet>Methodological Improvement (v3.0 → v3.1): v3.0.0-MCP hatte Single-Model Dual Judge (Claude Code 2x Prompts) → kompromittiert Cohen's Kappa. v3.1-Hybrid nutzt GPT-4o + Haiku = true independence, valides Ground Truth.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/architecture.md</path>
+        <title>Architecture Documentation</title>
+        <section>Dual Judge Architecture</section>
+        <snippet>Dual Judge (Ground Truth): GPT-4o + Haiku, gpt-4o, claude-3-5-haiku-20241022, Epic 1, True IRR (Kappa &gt;0.70), methodisch valide</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/architecture.md</path>
+        <title>Architecture Documentation</title>
+        <section>Database Schema - ground_truth Table</section>
+        <snippet>CREATE TABLE ground_truth: id SERIAL PRIMARY KEY, query TEXT NOT NULL, expected_docs INTEGER[] NOT NULL, judge1_score FLOAT[], judge2_score FLOAT[], judge1_model VARCHAR(100), judge2_model VARCHAR(100), kappa FLOAT, created_at TIMESTAMPTZ DEFAULT NOW()</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/tech-spec-epic-1.md</path>
+        <title>Technical Specification Epic 1</title>
+        <section>External API 2: GPT-4o Dual Judge</section>
+        <snippet>Client: openai Python SDK, model="gpt-4o", temperature=0.0 (Deterministisch), Cost: ~€0.01 per query (100 queries = €1/mo), Retry: 4 attempts mit Exponential Backoff</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/tech-spec-epic-1.md</path>
+        <title>Technical Specification Epic 1</title>
+        <section>External API 3: Haiku Dual Judge</section>
+        <snippet>Client: anthropic Python SDK, model="claude-3-5-haiku-20241022", max_tokens=100, temperature=0.0 (Deterministisch), Cost: ~€0.01 per query (100 queries = €1/mo)</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/tech-spec-epic-1.md</path>
+        <title>Technical Specification Epic 1</title>
+        <section>Ground Truth Collection Workflow</section>
+        <snippet>Workflow 3: Ground Truth Collection mit Dual Judge (Stories 1.10-1.11) - 3. Dual Judge Evaluation: For each labeled query: Call GPT-4o API → judge1_scores, Call Haiku API → judge2_scores, Parallel execution (asyncio), Store in ground_truth table, Cost: €0.23 for 100 queries</snippet>
+      </doc>
+    </docs>
+    <code>
+      <code>
+        <path>mcp_server/tools/__init__.py</path>
+        <kind>stub implementation</kind>
+        <symbol>handle_store_dual_judge_scores</symbol>
+        <lines>1147-1162</lines>
+        <reason>Existing stub implementation that needs to be replaced with full dual judge functionality</reason>
+      </code>
+      <code>
+        <path>mcp_server/tools/__init__.py</path>
+        <kind>function</kind>
+        <symbol>get_embedding_with_retry</symbol>
+        <lines>342-402</lines>
+        <reason>Retry logic pattern with exponential backoff (1s, 2s, 4s) that can be adapted for dual judge API calls</reason>
+      </code>
+      <code>
+        <path>mcp_server/db/connection.py</path>
+        <kind>context manager</kind>
+        <symbol>get_connection</symbol>
+        <lines>96-151</lines>
+        <reason>Database connection pattern using context manager with explicit commit required</reason>
+      </code>
+      <code>
+        <path>mcp_server/db/migrations/001_initial_schema.sql</path>
+        <kind>database schema</kind>
+        <symbol>ground_truth table</symbol>
+        <lines>92-102</lines>
+        <reason>Database table structure - needs migration to change judge1_score/judge2_score from FLOAT to FLOAT[]</reason>
+      </code>
+      <code>
+        <path>tests/test_compress_to_l2_insight.py</path>
+        <kind>unit test</kind>
+        <symbol>mock_openai_client fixture</symbol>
+        <lines>32-39</lines>
+        <reason>Testing pattern for mocking API clients - should be adapted for dual judge testing</reason>
+      </code>
+      <code>
+        <path>mcp_server/db/migrations/002_api_cost_log.sql</path>
+        <kind>database schema</kind>
+        <symbol>api_cost_log table</symbol>
+        <lines>1-10</lines>
+        <reason>New table schema for API cost tracking - needs to be created for dual judge implementation</reason>
+        <content>CREATE TABLE api_cost_log (
+    id SERIAL PRIMARY KEY,
+    api_name VARCHAR(100) NOT NULL,
+    model VARCHAR(100) NOT NULL,
+    prompt_tokens INTEGER,
+    completion_tokens INTEGER,
+    total_tokens INTEGER,
+    estimated_cost_eur DECIMAL(10, 4),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);</content>
+      </code>
+    </code>
+    <dependencies>
+      <dependency ecosystem="python">
+        <package name="openai" version="^1.0.0" purpose="GPT-4o API calls for dual judge evaluation"/>
+        <package name="anthropic" version="^0.25.0" purpose="Haiku API calls for dual judge evaluation"/>
+        <package name="scikit-learn" version="^1.3.0" purpose="Cohen's Kappa calculation (sklearn.metrics.cohen_kappa_score)"/>
+        <package name="psycopg2-binary" version="^2.9.0" purpose="PostgreSQL database connectivity"/>
+        <package name="pgvector" version="^0.2.0" purpose="Vector database extension"/>
+        <package name="numpy" version="^1.24.0" purpose="Array operations for score processing"/>
+      </dependency>
+      <dependency ecosystem="external-apis">
+        <package name="OpenAI GPT-4o" model="gpt-4o" cost="~€0.01 per query" purpose="Dual Judge evaluation"/>
+        <package name="Anthropic Haiku" model="claude-3-5-haiku-20241022" cost="~€0.01 per query" purpose="Dual Judge evaluation"/>
+      </dependency>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+  <constraint>
+    <type>database schema</type>
+    <description>ground_truth table needs migration: judge1_score and judge2_score columns must be changed from FLOAT to FLOAT[] to store arrays of scores per document</description>
+  </constraint>
+  <constraint>
+    <type>api rate limits</type>
+    <description>Both GPT-4o and Haiku APIs have rate limits - implement 4-retry exponential backoff (1s, 2s, 4s, 8s) with jitter</description>
+  </constraint>
+  <constraint>
+    <type>async execution</type>
+    <description>Must use native async SDKs (AsyncOpenAI, AsyncAnthropic) for parallel API calls to meet latency target &lt;2s</description>
+  </constraint>
+  <constraint>
+    <type>deterministic evaluation</type>
+    <description>Both judges must use temperature=0.0 for consistent, reproducible scores across sessions</description>
+  </constraint>
+  <constraint>
+    <type>error handling</type>
+    <description>Implement partial failure handling - if one judge fails, return results from available judge with degraded status</description>
+  </constraint>
+  <constraint>
+    <type>cost tracking</type>
+    <description>Create api_cost_log table if not exists and log all API calls with token counts and estimated costs for budget monitoring</description>
+  </constraint>
+  <constraint>
+    <type>input validation</type>
+    <description>Validate both judge1_binary and judge2_binary arrays are non-empty before calling Cohen's Kappa calculation to prevent ValueError</description>
+  </constraint>
+</constraints>
+  <interfaces>
+  <interface>
+    <name>store_dual_judge_scores</name>
+    <kind>MCP Tool</kind>
+    <signature>async def handle_store_dual_judge_scores(arguments: dict[str, Any]) -> dict[str, Any]</signature>
+    <path>mcp_server/tools/__init__.py</path>
+  </interface>
+  <interface>
+    <name>GPT-4o API Client</name>
+    <kind>REST API</kind>
+    <signature>client.chat.completions.create(model="gpt-4o", messages=[...], temperature=0.0)</signature>
+    <path>OpenAI SDK (openai package)</path>
+  </interface>
+  <interface>
+    <name>Haiku API Client</name>
+    <kind>REST API</kind>
+    <signature>client.messages.create(model="claude-3-5-haiku-20241022", messages=[...], temperature=0.0)</signature>
+    <path>Anthropic SDK (anthropic package)</path>
+  </interface>
+  <interface>
+    <name>Cohen's Kappa Calculation</name>
+    <kind>Function</kind>
+    <signature>from sklearn.metrics import cohen_kappa_score; kappa = cohen_kappa_score(judge1_binary, judge2_binary)</signature>
+    <path>sklearn.metrics.cohen_kappa_score</path>
+  </interface>
+  <interface>
+    <name>Database Connection</name>
+    <kind>Context Manager</kind>
+    <signature>with get_connection() as conn: cursor = conn.cursor(); conn.commit()</signature>
+    <path>mcp_server/db/connection.py</path>
+  </interface>
+</interfaces>
+  <tests>
+    <standards>
+      <standard>Follow existing test patterns in tests/test_compress_to_l2_insight.py - use mock clients for API testing, fixtures for setup/teardown, pytest.mark.asyncio for async tests</standard>
+      <standard>Integration tests should use real API keys but limit to 10 queries to control costs during development</standard>
+      <standard>Validate score ranges: all scores must be 0.0-1.0, binary conversion must use >0.5 threshold, kappa must be -1.0 to 1.0</standard>
+      <standard>Performance testing: verify parallel execution completes in &lt;2s for 5 documents</standard>
+    </standards>
+    <locations>
+      <location>tests/test_dual_judge.py - create new test file following existing patterns</location>
+      <location>tests/ directory - follow existing pytest configuration with asyncio markers</location>
+      <location>Mock API responses in tests using unittest.mock.Mock and patch decorators</location>
+    </locations>
+    <ideas>
+      <idea acceptance_criteria="1">
+        <test>Mock GPT-4o API response with relevance scores for 5 documents</test>
+        <test>Verify temperature=0.0 parameter is passed correctly</test>
+        <test>Test retry logic with RateLimitError simulation</test>
+      </idea>
+      <idea acceptance_criteria="2">
+        <test>Mock Haiku API response with relevance scores for same 5 documents</test>
+        <test>Verify claude-3-5-haiku-20241022 model is used</test>
+        <test>Test async execution timing with asyncio.gather</test>
+      </idea>
+      <idea acceptance_criteria="3">
+        <test>Create mock query with 5 documents, verify both APIs called in parallel</test>
+        <test>Measure execution time &lt;2s target for parallel calls</test>
+        <test>Test partial failure handling (one API fails, other succeeds)</test>
+      </idea>
+      <idea acceptance_criteria="4">
+        <test>UPDATE ground_truth with judge1_score[], judge2_score[], judge1_model, judge2_model arrays</test>
+        <test>Verify database migration from FLOAT to FLOAT[] columns</test>
+        <test>Test array length validation (equal number of scores per judge)</test>
+      </idea>
+      <idea acceptance_criteria="5">
+        <test>Test binary conversion: scores >0.5 → 1, scores ≤0.5 → 0</test>
+        <test>Verify Cohen's Kappa calculation with known inputs (perfect agreement = 1.0)</test>
+        <test>Test sklearn.metrics.cohen_kappa_score vs manual calculation</test>
+        <test>Test empty array handling before Kappa calculation (validation before calling cohen_kappa_score)</test>
+      </idea>
+    </ideas>
+  </tests>
+</story-context>

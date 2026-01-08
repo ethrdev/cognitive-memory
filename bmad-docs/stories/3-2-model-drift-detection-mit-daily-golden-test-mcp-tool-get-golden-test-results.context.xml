@@ -1,0 +1,249 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>3</epicId>
+    <storyId>2</storyId>
+    <title>Model Drift Detection mit Daily Golden Test</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-18</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>bmad-docs/stories/3-2-model-drift-detection-mit-daily-golden-test-mcp-tool-get-golden-test-results.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>MCP Server</asA>
+    <iWant>täglich das Golden Test Set ausführen und Precision@5 tracken</iWant>
+    <soThat>API-Änderungen (Embedding-Modell Updates, Haiku API Drift) frühzeitig erkannt werden</soThat>
+    <tasks>
+### Task 1: Database Schema Migration (AC: 3.2.2)
+- Subtask 1.1: Create migration file `007_model_drift_log.sql`
+- Subtask 1.2: Define table schema with all required columns
+- Subtask 1.3: Add PRIMARY KEY constraint on date column
+- Subtask 1.4: Add CHECK constraint for precision_at_5 BETWEEN 0.0 AND 1.0
+- Subtask 1.5: Create index on date column (DESC) for fast recent queries
+- Subtask 1.6: Execute migration on PostgreSQL database
+
+### Task 2: Implement MCP Tool get_golden_test_results (AC: 3.2.1, 3.2.4)
+- Subtask 2.1: Create new file `mcp_server/tools/get_golden_test_results.py`
+- Subtask 2.2: Implement database query to load all queries from golden_test_set table
+- Subtask 2.3: For each query: create embedding via OpenAI API (reuse existing client)
+- Subtask 2.4: For each query: call hybrid_search MCP tool with top_k=5
+- Subtask 2.5: Calculate Precision@5 for each query (count relevant docs in top-5)
+- Subtask 2.6: Aggregate to macro-average Precision@5 (sum / num_queries)
+- Subtask 2.7: Calculate avg_retrieval_time from all hybrid_search calls
+- Subtask 2.8: Extract embedding_model_version from OpenAI API response headers
+
+### Task 3: Implement Drift Detection Logic (AC: 3.2.3)
+- Subtask 3.1: Query model_drift_log for 7-day rolling average baseline
+- Subtask 3.2: Calculate baseline_p5 = AVG(precision_at_5) WHERE date >= CURRENT_DATE - INTERVAL '7 days'
+- Subtask 3.3: Implement drift detection: drift_detected = (baseline_p5 - current_p5) > 0.05
+- Subtask 3.4: Handle edge case: baseline_p5 = NULL if <7 days of data (set drift_detected = FALSE)
+- Subtask 3.5: Log warning message if drift_detected = TRUE
+
+### Task 4: Store Metrics in model_drift_log (AC: 3.2.2)
+- Subtask 4.1: Implement UPSERT logic (INSERT ON CONFLICT UPDATE) to prevent duplicates
+- Subtask 4.2: Store all required fields: date, precision_at_5, num_queries, avg_retrieval_time, embedding_model_version, drift_detected, baseline_p5
+- Subtask 4.3: Verify data persistence with SELECT query
+- Subtask 4.4: Add error handling for database write failures
+
+### Task 5: Return MCP Tool Response (AC: 3.2.4)
+- Subtask 5.1: Construct JSON response dict with all required fields
+- Subtask 5.2: Calculate drop_percentage = (baseline_p5 - current_p5) / baseline_p5 if baseline_p5 else 0.0
+- Subtask 5.3: Return dict from MCP tool (MCP SDK handles JSON serialization)
+- Subtask 5.4: Add docstring with response schema example
+
+### Task 6: Create Cron Job Wrapper Script (Deployment)
+- Subtask 6.1: Create `mcp_server/scripts/run_golden_test.sh` wrapper script
+- Subtask 6.2: Script calls MCP Server directly (not via MCP protocol, internal Python import)
+- Subtask 6.3: Add logging to file `/var/log/mcp-server/golden-test.log`
+- Subtask 6.4: Add error handling and exit codes
+- Subtask 6.5: Document cron job configuration: `0 2 * * * /path/to/run_golden_test.sh`
+
+### Task 7: Testing and Validation (All ACs)
+- Subtask 7.1: Manual Test: Run get_golden_test_results and verify response format
+- Subtask 7.2: Manual Test: Verify model_drift_log table populated correctly
+- Subtask 7.3: Manual Test: Verify drift detection triggers with mock baseline
+- Subtask 7.4: Manual Test: Run tool twice same day → verify UPDATE not duplicate INSERT
+- Subtask 7.5: Manual Test: Verify 7-day rolling average calculation with test data
+- Subtask 7.6: Document expected P@5 ≥0.75 validation (based on Story 2.9 results)
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+**AC-3.2.1: Golden Test Set Execution**
+- Führe `hybrid_search` für alle 50-100 Queries aus Golden Test Set aus
+- Verwende kalibrierte Gewichte (semantic=0.7, keyword=0.3) aus config.yaml
+- Vergleiche Top-5 Ergebnisse mit expected_docs für jede Query
+- Berechne Precision@5 für jede einzelne Query (relevant_in_top5 / 5.0)
+- Aggregiere zu Daily Macro-Average Precision@5 Metric
+- Expected: P@5 ≥0.75 (validiert in Story 2.9)
+
+**AC-3.2.2: Model Drift Log Storage**
+- Columns erforderlich: date, precision_at_5, num_queries, avg_retrieval_time, embedding_model_version, drift_detected, baseline_p5
+- Neue Zeile pro Tag (historische Tracking)
+- Keine Duplikate: Bei mehrfachem Ausführen am gleichen Tag → UPDATE statt INSERT
+
+**AC-3.2.3: Drift Detection Alert**
+- Condition: Precision@5 drop >5% (absolut) gegenüber Rolling 7-Day Average
+- Calculation: drift_detected = (baseline_p5 - current_p5) > 0.05
+- Action: Log Warning in PostgreSQL (drift_detected = TRUE)
+- Edge Case: Falls <7 Tage Daten vorhanden → Drift Detection disabled (baseline = NULL)
+
+**AC-3.2.4: MCP Tool Response Format**
+- Returns JSON dict with: date, precision_at_5, num_queries, drift_detected, baseline_p5, current_p5, drop_percentage, avg_retrieval_time
+- Format: JSON dict für einfache Verarbeitung
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>bmad-docs/tech-spec-epic-3.md</path>
+        <title>Epic 3 Technical Specification</title>
+        <section>Story 3.2: Model Drift Detection (lines 1432-1460)</section>
+        <snippet>Defines acceptance criteria for daily Golden Test execution, model_drift_log table schema, drift detection logic (>5% drop threshold), and MCP Tool response format.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/architecture.md</path>
+        <title>System Architecture</title>
+        <section>MCP Server Framework, PostgreSQL + pgvector</section>
+        <snippet>Documents MCP Tool registration pattern, PostgreSQL connection pooling, and date-based query optimization using INTERVAL arithmetic.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/epics.md</path>
+        <title>Epic Breakdown</title>
+        <section>Story 3.2: Model Drift Detection mit Daily Golden Test (lines 923-961)</section>
+        <snippet>User story definition, technical notes on cron job scheduling (2 AM daily), cost estimation (€0.24/mo), and integration with Story 3.1 Golden Test Set.</snippet>
+      </doc>
+      <doc>
+        <path>config.yaml</path>
+        <title>System Configuration</title>
+        <section>Hybrid Search Weights</section>
+        <snippet>Calibrated weights: semantic=0.7, keyword=0.3 from Story 2.8. These weights must be used for consistent Precision@5 calculations.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/stories/3-1-golden-test-set-creation-separate-von-ground-truth.md</path>
+        <title>Story 3.1 Completion Notes</title>
+        <section>Learnings and Infrastructure</section>
+        <snippet>Documents golden_test_set table schema (Migration 006), Streamlit UI pattern, validation scripts, and 50-100 labeled queries ready for use.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact>
+        <path>mcp_server/scripts/validate_precision_at_5.py</path>
+        <kind>script</kind>
+        <symbol>calculate_precision_at_5</symbol>
+        <lines>52-69</lines>
+        <reason>Reusable Precision@5 calculation function from Story 2.9. Implements formula: (relevant_docs_in_top5) / 5.0</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/scripts/validate_precision_at_5.py</path>
+        <kind>script</kind>
+        <symbol>classify_query_type</symbol>
+        <lines>77-99</lines>
+        <reason>Query classification by word count (Short/Medium/Long). Used for stratification in Golden Test Set.</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/db/connection.py</path>
+        <kind>module</kind>
+        <symbol>Database Connection Pool</symbol>
+        <lines></lines>
+        <reason>PostgreSQL connection pool established in Epic 1. Reuse for model_drift_log queries.</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/db/migrations/006_golden_test_set.sql</path>
+        <kind>migration</kind>
+        <symbol>golden_test_set table</symbol>
+        <lines></lines>
+        <reason>Golden Test Set schema from Story 3.1. Contains 50-100 labeled queries with expected_docs arrays.</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/external/openai_client.py</path>
+        <kind>module</kind>
+        <symbol>OpenAI Embeddings Client</symbol>
+        <lines></lines>
+        <reason>Embedding API client from Story 1.2. Used to create embeddings for all Golden queries.</reason>
+      </artifact>
+      <artifact>
+        <path>mcp_server/tools/</path>
+        <kind>directory</kind>
+        <symbol>MCP Tools</symbol>
+        <lines></lines>
+        <reason>MCP Tool directory. Story 3.2 will create get_golden_test_results.py here following existing patterns.</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <python>
+        <package name="mcp" version="^1.0.0" usage="MCP SDK for tool registration and stdio transport" />
+        <package name="psycopg2-binary" version="^2.9.0" usage="PostgreSQL database driver" />
+        <package name="pgvector" version="^0.2.0" usage="Vector similarity operations (hybrid search)" />
+        <package name="openai" version="^1.0.0" usage="Embeddings API for query vectorization" />
+        <package name="pyyaml" version="^6.0" usage="Load calibrated weights from config.yaml" />
+        <package name="python-dotenv" version="^1.0.0" usage="Environment variable management" />
+      </python>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint>Use calibrated hybrid search weights from config.yaml (semantic=0.7, keyword=0.3) for all Golden Test queries</constraint>
+    <constraint>Implement UPSERT logic using INSERT ON CONFLICT (date) DO UPDATE to prevent duplicate daily entries</constraint>
+    <constraint>7-day rolling average calculation: AVG(precision_at_5) WHERE date >= CURRENT_DATE - INTERVAL '7 days'</constraint>
+    <constraint>Drift detection threshold: Absolute 5% drop (0.05) not relative percentage (baseline_p5 - current_p5 > 0.05)</constraint>
+    <constraint>Edge case handling: If less than 7 days of data exist, set drift_detected = FALSE and baseline_p5 = NULL</constraint>
+    <constraint>Hybrid Pattern: Core function execute_golden_test() must be callable both via MCP Tool and direct Python import for cron</constraint>
+    <constraint>MCP Tool Registration: Add get_golden_test_results to mcp_server/main.py with empty input schema</constraint>
+    <constraint>Cron job timing: 2 AM daily (0 2 * * *) to avoid user-facing latency impact</constraint>
+    <constraint>Error handling: Tool must HALT with clear message if golden_test_set table is empty</constraint>
+  </constraints>
+  <interfaces>
+    <interface>
+      <name>calculate_precision_at_5</name>
+      <kind>function</kind>
+      <signature>calculate_precision_at_5(retrieved_ids: list[int], expected_ids: list[int]) -> float</signature>
+      <path>mcp_server/scripts/validate_precision_at_5.py:52-69</path>
+      <description>Reusable function from Story 2.9. Calculates Precision@5 metric by counting relevant docs in top-5 results.</description>
+    </interface>
+    <interface>
+      <name>hybrid_search</name>
+      <kind>MCP Tool</kind>
+      <signature>hybrid_search(embedding: list[float], query: str, top_k: int = 5) -> list[int]</signature>
+      <path>mcp_server/tools/ (Story 1.6)</path>
+      <description>MCP Tool for hybrid semantic + keyword search. Returns list of L2 Insight IDs ranked by RRF fusion score.</description>
+    </interface>
+    <interface>
+      <name>get_golden_test_results</name>
+      <kind>MCP Tool (NEW)</kind>
+      <signature>get_golden_test_results() -> dict</signature>
+      <path>mcp_server/tools/get_golden_test_results.py (to be created)</path>
+      <description>New MCP Tool for daily Golden Test execution. Returns JSON with date, precision_at_5, drift_detected, baseline_p5, current_p5, drop_percentage, avg_retrieval_time.</description>
+    </interface>
+    <interface>
+      <name>execute_golden_test</name>
+      <kind>function (NEW)</kind>
+      <signature>execute_golden_test() -> dict</signature>
+      <path>mcp_server/tools/get_golden_test_results.py (to be created)</path>
+      <description>Core function for Golden Test execution. Callable directly from cron job bypassing MCP protocol overhead.</description>
+    </interface>
+    <interface>
+      <name>model_drift_log table</name>
+      <kind>PostgreSQL table (NEW)</kind>
+      <signature>CREATE TABLE model_drift_log (date DATE PRIMARY KEY, precision_at_5 FLOAT, num_queries INTEGER, avg_retrieval_time FLOAT, embedding_model_version VARCHAR, drift_detected BOOLEAN, baseline_p5 FLOAT)</signature>
+      <path>mcp_server/db/migrations/007_model_drift_log.sql (to be created)</path>
+      <description>New table for daily metrics tracking. Date-based PRIMARY KEY enforces one entry per day with UPSERT logic.</description>
+    </interface>
+  </interfaces>
+  <tests>
+    <standards>Story 3.2 follows manual testing approach similar to Story 1.6 (hybrid_search MCP Tool). Focus on: (1) Schema migration validation with psql, (2) MCP Tool execution via Claude Code, (3) Drift detection logic with mock baseline data, (4) UPSERT verification by running tool twice same day, (5) 7-day rolling average calculation with test data. Expected P@5 ≥0.75 consistent with Story 2.9 validation results.</standards>
+    <locations>
+      <location>Manual testing: MCP Tool execution via Claude Code interactive session</location>
+      <location>PostgreSQL validation: Direct SQL queries to verify model_drift_log table structure and data</location>
+      <location>Cron script testing: Direct Python import of execute_golden_test() function</location>
+    </locations>
+    <ideas>
+      <test ac="AC-3.2.1">Execute get_golden_test_results via Claude Code and verify JSON response format matches spec (all fields present, types correct)</test>
+      <test ac="AC-3.2.2">Query model_drift_log table after first run: verify all columns populated (date=today, precision_at_5 in [0,1], num_queries=50-100, drift_detected=FALSE if <7 days)</test>
+      <test ac="AC-3.2.3">Insert 7 mock rows with declining P@5 values (0.80, 0.79, 0.78, 0.77, 0.76, 0.75, 0.70), run tool, verify drift_detected=TRUE when current drops >0.05 from baseline</test>
+      <test ac="AC-3.2.4">Run tool twice same day, verify second run UPDATEs existing entry (SELECT COUNT(*) WHERE date=CURRENT_DATE should be 1, not 2)</test>
+      <test ac="ALL">Edge case: Empty golden_test_set table should HALT with clear error message before attempting embeddings/search</test>
+      <test ac="ALL">Edge case: First 6 days of data (baseline_p5=NULL) should set drift_detected=FALSE and not crash on NULL comparison</test>
+    </ideas>
+  </tests>
+</story-context>

@@ -1,0 +1,158 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>4</epicId>
+    <storyId>1</storyId>
+    <title>Graph Schema Migration (Nodes + Edges Tabellen)</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-27</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>/home/ethr/01-projects/ai-experiments/cognitive-memory/bmad-docs/stories/4-1-graph-schema-migration-nodes-edges-tabellen.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Als Entwickler</asA>
+    <iWant>möchte ich die PostgreSQL-Tabellen für Graph-Speicherung erstellen</iWant>
+    <soThat>sodass Entitäten und Beziehungen persistent gespeichert werden können</soThat>
+    <tasks>
+### Task 1: Create nodes Tabelle (AC: 4.1.1)
+
+- [ ] Subtask 1.1: Erstelle Migration-File `mcp_server/db/migrations/003_add_graph_tables.sql`
+  - UUID PRIMARY KEY für id
+  - VARCHAR für label (255 chars)
+  - VARCHAR für name (255 chars)
+  - JSONB für properties (flexible Metadaten)
+  - UUID FK für vector_id (optional, Verweis zu l2_insights)
+  - TIMESTAMP für created_at (default NOW())
+- [ ] Subtask 1.2: Füge UNIQUE Constraint hinzu (label, name)
+  - Stellt Idempotenz sicher für gleichartige Entitäten
+- [ ] Subtask 1.3: Erstelle Indexes für Performance
+  - Index auf label für schnelle Filterung
+  - Index auf name für schnelle Suche
+  - GIN Index auf properties für JSONB Queries
+- [ ] Subtask 1.4: Füge FK Constraint hinzu (vector_id → l2_insights.id)
+  - Optionaler Verweis zu L2 Insights für Verbindungen
+
+### Task 2: Create edges Tabelle (AC: 4.1.1)
+
+- [ ] Subtask 2.1: Erstelle edges Tabelle in Migration
+  - UUID PRIMARY KEY für id
+  - UUID FK für source_id (Referenz zu nodes.id)
+  - UUID FK für target_id (Referenz zu nodes.id)
+  - VARCHAR für relation (255 chars)
+  - FLOAT für weight (default 1.0)
+  - JSONB für properties (flexible Metadaten)
+  - TIMESTAMP für created_at (default NOW())
+- [ ] Subtask 2.2: Füge UNIQUE Constraint hinzu (source_id, target_id, relation)
+  - Verhindert doppelte Kanten zwischen gleichen Nodes
+- [ ] Subtask 2.3: Erstelle Indexes für Performance
+  - Index auf source_id für schnelle Outbound-Queries
+  - Index auf target_id für schnelle Inbound-Queries
+  - Index auf relation für gefilterte Traversals
+  - GIN Index auf properties für JSONB Queries
+- [ ] Subtask 2.4: Füge FK Constraints hinzu mit CASCADE
+  - source_id → nodes.id mit ON DELETE CASCADE
+  - target_id → nodes.id mit ON DELETE CASCADE
+
+### Task 3: Create Rollback-Script (AC: 4.1.2)
+
+- [ ] Subtask 3.1: Erstelle `mcp_server/db/migrations/003_add_graph_tables_rollback.sql`
+  - DROP TABLE edges (wegen FK Dependencies zuerst)
+  - DROP TABLE nodes
+  - DROP INDEXES (falls manuell erstellt)
+- [ ] Subtask 3.2: Teste Rollback-Script
+  - Führe Migration aus
+  - Führe Rollback aus
+  - Verifiziere sauberes Rollback ohne Reste
+
+### Task 4: Schema-Validation (AC: 4.1.2)
+
+- [ ] Subtask 4.1: Erstelle Validation Queries
+  - `\d nodes` - Tabellenstruktur anzeigen
+  - `\d edges` - Tabellenstruktur anzeigen
+  - Test INSERT für beide Tabellen
+- [ ] Subtask 4.2: Performance-Test
+  - INSERT Benchmark (1000 nodes, 2000 edges)
+  - Query Performance Test für Indexes
+- [ ] Subtask 4.3: Dokumentiere Schema
+  - Füge Schema-Dokumentation zu README.md hinzu
+  - Erkläre Graph-Konzepte und Usage Patterns
+</tasks>
+  </story>
+
+  <acceptanceCriteria>
+### AC-4.1.1: PostgreSQL Tabellen für Graph-Speicherung
+
+**Given** PostgreSQL läuft mit cognitive_memory Datenbank
+**When** ich die Migration ausführe
+**Then** existieren folgende Tabellen:
+
+- `nodes` (id UUID, label VARCHAR, name VARCHAR, properties JSONB, vector_id FK, created_at)
+- `edges` (id UUID, source_id FK, target_id FK, relation VARCHAR, weight FLOAT, properties JSONB, created_at)
+- UNIQUE Constraints für Idempotenz (label+name bei nodes, source+target+relation bei edges)
+- Indexes auf label, name, relation für schnelle Lookups
+- FK Constraint von nodes.vector_id zu l2_insights.id (optional)
+
+### AC-4.1.2: Migration-Script
+
+**Given** das Graph-Schema ist definiert
+**When** ich die Datenbank migrieren möchte
+**Then** existiert ein vollständiges Migration-Script:
+
+- Datei: `mcp_server/db/migrations/003_add_graph_tables.sql`
+- Kann mit `psql -f` ausgeführt werden
+- Rollback-Script vorhanden (`003_add_graph_tables_rollback.sql`)
+- Schema-Validation nach Migration
+</acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="bmad-docs/architecture.md" title="Cognitive Memory System v3.1.0-Hybrid - Architektur" section="Datenbank-Schema (PostgreSQL + pgvector)" snippet="Das Cognitive Memory System v3.1.0-Hybrid ist ein MCP-basiertes Gedächtnissystem mit PostgreSQL+pgvector als Datenbank-Grundlage. Enthält bereits Schema für nodes und edges Tabellen (Zeilen 337-368) als Grundlage für GraphRAG Integration."/>
+      <doc path="bmad-docs/architecture.md" title="Cognitive Memory System v3.1.0-Hybrid - Architektur" section="ADR-006: PostgreSQL Adjacency List für GraphRAG" snippet="Entscheidung für PostgreSQL Adjacency List Pattern (nodes + edges Tabellen) statt Neo4j/Apache AGE. Rationale: Keine neue Dependency, konsistent mit pgvector, einfache Migration, direkte Integration mit l2_insights via vector_id FK."/>
+      <doc path="bmad-docs/epics.md" title="Epic 4: GraphRAG Integration (v3.2-GraphRAG)" section="Story 4.1: Graph Schema Migration (nodes + edges Tabellen)" snippet="Epic 4 Goal: Erweitere cognitive-memory um Graph-basierte Speicherung und Abfrage von Entitäten und Beziehungen via PostgreSQL Adjacency List Pattern. Story 4.1 erstellt die Grundlage mit nodes und edges Tabellen für alle nachfolgenden Graph-Tools."/>
+    </docs>
+    <code>
+      <artifact path="mcp_server/db/migrations/001_initial_schema.sql" kind="migration" symbol="CREATE TABLE l2_insights" lines="30-37" reason="Referenz für FOREIGN KEY Constraint von nodes.vector_id zu l2_insights.id"/>
+      <artifact path="mcp_server/db/migrations/011_io_system_metadata.sql" kind="migration" symbol="ALTER TABLE l2_insights ADD COLUMN" lines="5-7" reason="Zeigt Pattern für Schema-Erweiterungen mit IF NOT EXISTS"/>
+      <artifact path="mcp_server/db/connection.py" kind="database" symbol="get_connection()" lines="96-135" reason="Connection Pooling Pattern für neue Graph Queries"/>
+      <artifact path="mcp_server/tools/get_golden_test_results.py" kind="tool" symbol="load_config()" lines="40-50" reason="Pattern für Konfigurations-Loading aus config.yaml"/>
+    </code>
+    <dependencies>
+      <ecosystem name="postgresql">
+        <package name="postgresql" version="15+" required="true"/>
+        <package name="pgvector" version="latest" required="true"/>
+      </ecosystem>
+      <ecosystem name="python">
+        <package name="psycopg2-binary" version="2.9+" required="true"/>
+        <package name="pgvector" version="0.2+" required="true"/>
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+      <constraint type="naming" description="Tables: snake_case, Columns: snake_case, Foreign Keys: {table}_id"/>
+      <constraint type="schema" description="Follow established migration pattern: 003_add_graph_tables.sql with corresponding rollback script"/>
+      <constraint type="indexing" description="Create appropriate indexes for performance: label, name, relation, properties (GIN), source_id, target_id"/>
+      <constraint type="constraints" description="UNIQUE constraints for idempotency: (label, name) for nodes, (source_id, target_id, relation) for edges"/>
+      <constraint type="foreign_keys" description="FK from nodes.vector_id to l2_insights.id (optional), edges FKs with ON DELETE CASCADE"/>
+      <constraint type="uuid" description="Use UUID PRIMARY KEY for nodes and edges (consistent with distributed system design)"/>
+      <constraint type="jsonb" description="Use JSONB for properties with GIN index for flexible metadata queries"/>
+    </constraints>
+  <interfaces>
+      <interface name="Database Connection Pool" kind="python_context_manager" signature="get_connection() -> Iterator[connection]" path="mcp_server/db/connection.py"/>
+      <interface name="Environment Configuration" kind="env_var" signature="DATABASE_URL (postgresql://user:pass@host:5432/dbname)" path="config/.env.development"/>
+      <interface name="Migration Execution" kind="shell_command" signature="psql -U mcp_user -d cognitive_memory -f migrations/003_add_graph_tables.sql" path="command_line"/>
+      <interface name="Schema Validation" kind="psql_command" signature="\d nodes, \d edges" path="postgresql_client"/>
+    </interfaces>
+  <tests>
+    <standards>Database Story Testing fokussiert auf Schema-Integrität und Performance-Validation. Testing Methoden: Schema Validation (Migration läuft fehlerfrei, Tabellen-Struktur matches Specification), Performance Testing (INSERT Performance für Bulk-Operations, Query Performance mit Indexes), Migration Testing (Forward Migration, Rollback Testing, Data Integrity), Integration Testing (MCP Server kann neue Tabellen erreichen, Connection Pooling funktioniert).</standards>
+    <locations>mcp_server/db/migrations/ (Verzeichnis für Migration-Files), tests/ (Verzeichnis für Test-Files, falls vorhanden)</locations>
+    <ideas>
+      <test idea="Test AC-4.1.1: Schema Validation" ac="4.1.1" description="Migration ausführen und Tabellen-Struktur mit \d nodes und \d edges validieren"/>
+      <test idea="Test AC-4.1.2: Migration Script Execution" ac="4.1.2" description="psql -f Befehl ausführen und auf Fehler prüfen"/>
+      <test idea="Performance Test: INSERT Benchmark" ac="4.1.1" description="INSERT von 1000 nodes und 2000 edges und Zeit messen (&lt;5s Ziel)"/>
+      <test idea="Performance Test: Query Performance" ac="4.1.1" description="Queries mit und ohne Indexes vergleichen (&lt;50ms Ziel)"/>
+      <test idea="Rollback Test: Schema Cleanup" ac="4.1.2" description="Rollback-Script ausführen und sauberes Rollback validieren"/>
+      <test idea="Integration Test: MCP Connection" ac="4.1.1" description="MCP Server kann neue Tabellen über Connection Pool erreichen"/>
+    </ideas>
+  </tests>
+</story-context>

@@ -1,0 +1,229 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context/template" v="1.0">
+  <metadata>
+    <epicId>5</epicId>
+    <storyId>1</storyId>
+    <title>Core Library Package Setup</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-30</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>bmad-docs/stories/5-1-core-library-package-setup.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Ecosystem-Entwickler</asA>
+    <iWant>ein `cognitive_memory` Python Package</iWant>
+    <soThat>ich `from cognitive_memory import MemoryStore` nutzen kann</soThat>
+    <tasks>
+      <task id="1" title="Package-Verzeichnis erstellen" ac="5.1.1">
+        <subtask id="1.1">Erstelle `cognitive_memory/` Verzeichnis im Projekt-Root</subtask>
+        <subtask id="1.2">Erstelle `cognitive_memory/__init__.py` mit Version Export, MemoryStore Import, Public API `__all__` Liste</subtask>
+        <subtask id="1.3">Erstelle `cognitive_memory/store.py` mit MemoryStore Klassen-Stub, Docstrings, Context Manager Protocol</subtask>
+        <subtask id="1.4">Erstelle `cognitive_memory/connection.py` mit ConnectionManager Stub, Re-Export von mcp_server/db/connection.py</subtask>
+      </task>
+      <task id="2" title="pyproject.toml aktualisieren" ac="5.1.4">
+        <subtask id="2.1">Füge `cognitive_memory` zur `packages` Liste hinzu</subtask>
+        <subtask id="2.2">Verifiziere Version-Synchronisation</subtask>
+        <subtask id="2.3">Prüfe Dependencies auf Kompatibilität</subtask>
+        <subtask id="2.4">Füge optionale `[library]` Extra-Dependencies hinzu (falls benötigt)</subtask>
+      </task>
+      <task id="3" title="Import-Tests und Verifikation" ac="5.1.2,5.1.3">
+        <subtask id="3.1">Erstelle `tests/library/test_imports.py` (BEREITS VORHANDEN - ATDD RED Phase)</subtask>
+        <subtask id="3.2">Teste Basic Import: `from cognitive_memory import MemoryStore`</subtask>
+        <subtask id="3.3">Teste Version Import: `from cognitive_memory import __version__`</subtask>
+        <subtask id="3.4">Teste Koexistenz: `import cognitive_memory; import mcp_server`</subtask>
+        <subtask id="3.5">Verifiziere keine Namespace-Kollisionen</subtask>
+      </task>
+      <task id="4" title="Editable Installation testen" ac="5.1.1">
+        <subtask id="4.1">Deinstalliere vorherige Installation (falls vorhanden)</subtask>
+        <subtask id="4.2">Führe `pip install -e .` aus</subtask>
+        <subtask id="4.3">Verifiziere Installation mit `pip show cognitive-memory`</subtask>
+        <subtask id="4.4">Verifiziere Import in neuer Python-Session</subtask>
+      </task>
+    </tasks>
+  </story>
+
+  <acceptanceCriteria>
+    <criterion id="AC-5.1.1" title="Package-Struktur existiert">
+      <given>das bestehende cognitive-memory Repository</given>
+      <when>ich das Package installiere mit `pip install -e .`</when>
+      <then>existiert das Package `cognitive_memory/`:
+        - `cognitive_memory/__init__.py` mit Public API Exports
+        - `cognitive_memory/store.py` (Hauptklasse MemoryStore)
+        - `cognitive_memory/connection.py` (DB Connection Management)
+        - Package ist in `pyproject.toml` konfiguriert</then>
+    </criterion>
+    <criterion id="AC-5.1.2" title="Import funktioniert korrekt">
+      <given>Package-Installation erfolgt</given>
+      <when>ich `from cognitive_memory import MemoryStore` aufrufe</when>
+      <then>wird die MemoryStore-Klasse korrekt importiert:
+        - Kein ImportError
+        - Klasse hat korrekten Namen und Docstring
+        - Weitere Imports möglich: `from cognitive_memory import __version__`</then>
+    </criterion>
+    <criterion id="AC-5.1.3" title="Koexistenz mit mcp_server">
+      <given>das Package ist installiert</given>
+      <when>ich sowohl `cognitive_memory` als auch `mcp_server` importiere</when>
+      <then>gibt es keine Konflikte:
+        - Keine Namespace-Kollisionen
+        - Shared Dependencies werden wiederverwendet (psycopg2, openai, etc.)
+        - Beide Packages können gleichzeitig genutzt werden</then>
+    </criterion>
+    <criterion id="AC-5.1.4" title="pyproject.toml Integration">
+      <given>bestehende pyproject.toml mit Poetry-Konfiguration</given>
+      <when>`cognitive_memory` als zusätzliches Package konfiguriert wird</when>
+      <then>ist die Konfiguration korrekt:
+        - Package in `packages` Liste enthalten
+        - Version synchron mit Projekt-Version
+        - Dependencies stimmen mit mcp_server überein (keine Duplizierung)</then>
+    </criterion>
+  </acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc>
+        <path>bmad-docs/epic-5-tech-context.md</path>
+        <title>Epic 5 Technical Context</title>
+        <section>Package Structure, Public API Design, Wrapper Pattern</section>
+        <snippet>Epic 5 creates a Python Library API (`cognitive_memory` package) that wraps the existing `mcp_server/` tools. ADR-007 specifies a Wrapper Pattern where `cognitive_memory/` imports directly from `mcp_server/`, ensuring no code duplication.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/architecture.md</path>
+        <title>Cognitive Memory System v3.1.0-Hybrid - Architektur</title>
+        <section>Epic 5: Library API Architecture, ADR-007</section>
+        <snippet>Die Library API ermöglicht direkten programmatischen Zugriff auf cognitive-memory Storage-Funktionen ohne MCP Protocol. `cognitive_memory/` Package als Wrapper um `mcp_server/` Module mit direkten Imports.</snippet>
+      </doc>
+      <doc>
+        <path>bmad-docs/epics.md</path>
+        <title>Epic 5: Library API for Ecosystem Integration</title>
+        <section>Story 5.1 Definition</section>
+        <snippet>Story 5.1 ist die Foundation Story für Epic 5. Sie legt die Package-Struktur für `cognitive_memory` fest, die in den folgenden Stories mit Funktionalität gefüllt wird.</snippet>
+      </doc>
+    </docs>
+
+    <code>
+      <file>
+        <path>mcp_server/db/connection.py</path>
+        <kind>module</kind>
+        <symbol>initialize_pool, get_connection, close_all_connections, PoolError</symbol>
+        <lines>1-246</lines>
+        <reason>Zu wrappende Connection Pool Logik - cognitive_memory/connection.py soll diese Funktionen re-exportieren</reason>
+      </file>
+      <file>
+        <path>mcp_server/__init__.py</path>
+        <kind>package</kind>
+        <symbol>Package Entry Point</symbol>
+        <lines>1-*</lines>
+        <reason>Reference für Package-Struktur Pattern - wie mcp_server seine Public API exportiert</reason>
+      </file>
+      <file>
+        <path>tests/library/test_imports.py</path>
+        <kind>test</kind>
+        <symbol>TestLibraryImports</symbol>
+        <lines>1-126</lines>
+        <reason>ATDD RED Phase Tests - diese Tests müssen nach Story 5.1 Implementation grün werden</reason>
+      </file>
+      <file>
+        <path>tests/library/__init__.py</path>
+        <kind>test-package</kind>
+        <symbol>Test Package Init</symbol>
+        <lines>1-*</lines>
+        <reason>Bereits vorhandenes Test-Package für Library API Tests</reason>
+      </file>
+      <file>
+        <path>pyproject.toml</path>
+        <kind>config</kind>
+        <symbol>packages = [{include = "mcp_server"}]</symbol>
+        <lines>7</lines>
+        <reason>Muss erweitert werden: packages = [{include = "mcp_server"}, {include = "cognitive_memory"}]</reason>
+      </file>
+    </code>
+
+    <dependencies>
+      <python version="^3.11">
+        <package name="psycopg2-binary" version="^2.9.0" reason="PostgreSQL Connection - shared mit mcp_server"/>
+        <package name="openai" version="^1.0.0" reason="Embeddings API - shared mit mcp_server"/>
+        <package name="anthropic" version="^0.25.0" reason="Haiku API - shared mit mcp_server"/>
+        <package name="numpy" version="^1.24.0" reason="Array Operations - shared mit mcp_server"/>
+      </python>
+      <devDependencies>
+        <package name="pytest" version="^7.4.0" reason="ATDD Tests"/>
+        <package name="ruff" version="^0.1.0" reason="Code Quality"/>
+        <package name="mypy" version="^1.7.0" reason="Type Checking"/>
+      </devDependencies>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint source="ADR-007">
+      <title>Wrapper Pattern</title>
+      <description>cognitive_memory/ muss als Wrapper um mcp_server/ Module fungieren. Direkte Imports von mcp_server/tools/, mcp_server/db/, mcp_server/external/. Keine Code-Duplizierung.</description>
+    </constraint>
+    <constraint source="Risk R-001">
+      <title>Import Cycle Prevention</title>
+      <description>Dependency Direction: cognitive_memory/ → mcp_server/, niemals umgekehrt. Lazy Imports in cognitive_memory/__init__.py verwenden.</description>
+    </constraint>
+    <constraint source="Dev Notes">
+      <title>Type Hints Required</title>
+      <description>Vollständige Type Hints mit `from __future__ import annotations`. Docstrings für alle Public-Klassen/Methoden. `__all__` Liste für explizite Public API.</description>
+    </constraint>
+    <constraint source="Architecture">
+      <title>Sync API Only</title>
+      <description>Synchrone API (kein async) - i-o-system StorageBackend erwartet sync. Keine async/await Patterns.</description>
+    </constraint>
+    <constraint source="pyproject.toml">
+      <title>Poetry Package Config</title>
+      <description>Package muss in pyproject.toml unter [tool.poetry] packages Liste eingetragen werden. Version synchron mit Projekt-Version (1.0.0).</description>
+    </constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="MemoryStore" kind="class">
+      <signature>class MemoryStore:
+    def __init__(self, connection_string: str | None = None) -> None: ...
+    def __enter__(self) -> MemoryStore: ...
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None: ...</signature>
+      <path>cognitive_memory/store.py</path>
+      <note>Stub Implementation für Story 5.1 - vollständige Methods in Story 5.2</note>
+    </interface>
+    <interface name="ConnectionManager" kind="class">
+      <signature>class ConnectionManager:
+    def __init__(self, connection_string: str | None = None) -> None: ...</signature>
+      <path>cognitive_memory/connection.py</path>
+      <note>Wrapper für mcp_server/db/connection.py Funktionen</note>
+    </interface>
+    <interface name="Package __init__" kind="module">
+      <signature>from cognitive_memory import MemoryStore, ConnectionManager, __version__
+__all__ = ["MemoryStore", "ConnectionManager", "__version__"]</signature>
+      <path>cognitive_memory/__init__.py</path>
+      <note>Public API Exports</note>
+    </interface>
+    <interface name="mcp_server.db.connection" kind="module-to-wrap">
+      <signature>initialize_pool(min_connections, max_connections, connection_timeout)
+get_connection() -> Iterator[connection]
+close_all_connections(timeout)
+get_pool_status() -> dict
+PoolError, ConnectionHealthError</signature>
+      <path>mcp_server/db/connection.py</path>
+      <note>Diese Funktionen werden in cognitive_memory/connection.py re-exportiert</note>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>
+      Story 5.1 nutzt ATDD (Acceptance Test Driven Development) mit pytest. Tests sind bereits im RED Phase vorhanden (tests/library/test_imports.py). Implementation muss diese Tests zum Bestehen bringen. Ruff-compliant Code ohne Linting-Errors. Type Hints vollständig.
+    </standards>
+    <locations>
+      <location>tests/library/test_imports.py</location>
+      <location>tests/library/__init__.py</location>
+    </locations>
+    <ideas>
+      <idea ac="5.1.1">Verify cognitive_memory/ directory exists with all required files</idea>
+      <idea ac="5.1.2">Test `from cognitive_memory import MemoryStore` succeeds</idea>
+      <idea ac="5.1.2">Test `from cognitive_memory import __version__` returns "1.0.0"</idea>
+      <idea ac="5.1.3">Test sequential import of mcp_server then cognitive_memory (no cycle)</idea>
+      <idea ac="5.1.3">Test sequential import of cognitive_memory then mcp_server (no cycle)</idea>
+      <idea ac="5.1.4">Test `pip install -e .` completes successfully</idea>
+      <idea ac="5.1.4">Verify package in `pip list` output</idea>
+    </ideas>
+  </tests>
+</story-context>

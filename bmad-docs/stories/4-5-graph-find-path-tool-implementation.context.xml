@@ -1,0 +1,183 @@
+<story-context id="bmad/bmm/workflows/4-implementation/story-context" v="1.0">
+  <metadata>
+    <epicId>4</epicId>
+    <storyId>5</storyId>
+    <title>graph_find_path Tool Implementation</title>
+    <status>drafted</status>
+    <generatedAt>2025-11-30</generatedAt>
+    <generator>BMAD Story Context Workflow</generator>
+    <sourceStoryPath>/home/ethr/01-projects/ai-experiments/cognitive-memory/bmad-docs/stories/4-5-graph-find-path-tool-implementation.md</sourceStoryPath>
+  </metadata>
+
+  <story>
+    <asA>Claude Code</asA>
+    <iWant>den kürzesten Pfad zwischen zwei Nodes finden</iWant>
+    <soThat>ich Fragen wie "Gibt es Verbindung zwischen Kunde X und Problem Y?" beantworten kann</soThat>
+    <tasks>### Task 1: MCP Tool Grundstruktur (AC: 4.5.1, 4.5.2)
+- [ ] Subtask 1.1: Erstelle `mcp_server/tools/graph_find_path.py`
+- [ ] Subtask 1.2: Integriere Tool in `mcp_server/tools/__init__.py`
+- [ ] Subtask 1.3: Parameter-Validierung implementieren
+
+### Task 2: Database Layer - BFS Pathfinding Query (AC: 4.5.1, 4.5.3)
+- [ ] Subtask 2.1: Implementiere `find_path()` Funktion in `mcp_server/db/graph.py`
+- [ ] Subtask 2.2: Implementiere BFS-basierte CTE Query
+- [ ] Subtask 2.3: Implementiere Pfad-Limit und Timeout
+
+### Task 3: Cycle Detection und Edge Cases (AC: 4.5.4, 4.5.5)
+- [ ] Subtask 3.1: Implementiere Cycle Detection in CTE
+- [ ] Subtask 3.2: Implementiere Same-Node Query Handling
+- [ ] Subtask 3.3: Implementiere Error Handling
+
+### Task 4: Response Assembly und Path Details (AC: 4.5.2)
+- [ ] Subtask 4.1: Implementiere Path Reconstruction
+- [ ] Subtask 4.2: Implementiere Response Format
+- [ ] Subtask 4.3: Implementiere Sortierung
+
+### Task 5: Testing und Dokumentation (AC: 4.5.1-4.5.5)
+- [ ] Subtask 5.1: Erstelle `tests/test_graph_find_path.py`
+- [ ] Subtask 5.2: Performance Testing
+- [ ] Subtask 5.3: Manuelles Testing in Claude Code</tasks>
+  </story>
+
+  <acceptanceCriteria>### AC-4.5.1: graph_find_path Tool erstellen mit BFS-basiertem Pathfinding
+
+**Given** Graph mit Nodes und Edges existiert (Stories 4.1-4.4)
+**When** Claude Code `graph_find_path` aufruft mit (start_node, end_node, max_depth)
+**Then** wird der kürzeste Pfad gefunden:
+
+- BFS-basiertes Pathfinding via PostgreSQL WITH RECURSIVE CTE
+- Stoppt wenn end_node erreicht oder max_depth (default 5) überschritten
+- Gibt ALLE Pfade zurück falls mehrere gleichlange existieren (bis Limit 10)
+- Bidirektionale Traversal: Beide Richtungen der Edges werden berücksichtigt
+
+### AC-4.5.2: Response Format
+
+**Given** graph_find_path wurde aufgerufen
+**When** die Operation erfolgreich ist
+**Then** enthält die Response:
+
+- `path_found` (boolean): true wenn mindestens ein Pfad gefunden
+- `path_length` (integer): Anzahl Hops (0 wenn kein Pfad)
+- `paths`: Array von Pfad-Objekten, jedes enthält:
+  - `nodes`: Array von {node_id, label, name, properties}
+  - `edges`: Array von {edge_id, relation, weight}
+  - `total_weight`: Summe aller Edge-Weights im Pfad
+- Bei keinem Pfad: `path_found: false`, `path_length: 0`, leeres paths Array
+
+### AC-4.5.3: Pathfinding-Limits und Performance
+
+**Given** graph_find_path wird aufgerufen
+**When** die Query ausgeführt wird
+**Then** Limits:
+
+- Max 10 Pfade zurückgeben (falls mehrere gleichlange existieren)
+- Max depth: 10 (default 5, Performance-Schutz)
+- Timeout: 1s max für Pathfinding-Query (via PostgreSQL statement_timeout)
+
+**And** Performance:
+
+- &lt;100ms für Pfade mit depth 1-3
+- &lt;500ms für Pfade mit depth 4-5
+- &lt;1000ms für Pfade mit depth 6-10
+
+### AC-4.5.4: Fehlerbehandlung und Cycle Detection
+
+**Given** graph_find_path wird aufgerufen
+**When** Fehler oder Edge Cases auftreten
+**Then**:
+
+- Bei nicht gefundenem Start-Node: Klare Error-Message mit `error_type: "start_node_not_found"`
+- Bei nicht gefundenem End-Node: Klare Error-Message mit `error_type: "end_node_not_found"`
+- Bei ungültigen Parametern (depth &lt;1 oder &gt;10): Klare Error-Message
+- Bei Timeout (&gt;1s): `error_type: "timeout"` mit partiellem Ergebnis falls verfügbar
+- Cycle Detection: Pfade mit Zyklen werden ausgeschlossen (keine Node-Duplikate im Pfad)
+
+### AC-4.5.5: Same-Node Query Support
+
+**Given** start_node == end_node
+**When** graph_find_path aufgerufen wird
+**Then** wird ein spezieller Response zurückgegeben:
+
+- `path_found: true`
+- `path_length: 0`
+- `paths`: Array mit einem Pfad-Objekt, das nur den Start-Node enthält</acceptanceCriteria>
+
+  <artifacts>
+    <docs>
+      <doc path="bmad-docs/epics.md" title="Epic 4: GraphRAG Integration" section="Story 4.5: graph_find_path Tool Implementation">
+        <snippet>Story 4.5 implementiert das graph_find_path Tool, das Claude Code ermöglicht, den kürzesten Pfad zwischen zwei Nodes zu finden. BFS-basiertes Pathfinding via PostgreSQL WITH RECURSIVE CTE mit bidirektionalem Traversal und Performance-Schutz.</snippet>
+      </doc>
+      <doc path="bmad-docs/architecture.md" title="MCP Tools Overview" section="11 MCP Tools">
+        <snippet>graph_find_path Tool als Teil der GraphRAG-Tools (4.2-4.5). Integration in Hybrid Search mit 60% Semantic + 20% Keyword + 20% Graph RRF Fusion in Story 4.6.</snippet>
+      </doc>
+    </docs>
+    <code>
+      <artifact path="mcp_server/tools/graph_query_neighbors.py" kind="tool" symbol="handle_graph_query_neighbors" lines="22-140">
+        <reason>Pattern-Referenz für Tool-Implementierung mit Parameter-Validierung, Error Handling und Performance-Timing. Nutzt bereits get_node_by_name() und WITH RECURSIVE CTE Pattern.</reason>
+      </artifact>
+      <artifact path="mcp_server/db/graph.py" kind="database" symbol="get_node_by_name" lines="199-241">
+        <reason>Wiederverwendbare Funktion für Node-Lookup, bereits implementiert und getestet. Muss in graph_find_path() genutzt werden.</reason>
+      </artifact>
+      <artifact path="mcp_server/db/graph.py" kind="database" symbol="query_neighbors" lines="373-462">
+        <reason>BESTEHENDES WITH RECURSIVE CTE Pattern für Multi-Hop Traversal, kann für BFS Pathfinding adaptiert werden.</reason>
+      </artifact>
+      <artifact path="mcp_server/tools/__init__.py" kind="registration" symbol="register_tools" lines="1372-1685">
+        <reason>Tool-Registrierung Pattern - graph_find_path wird als 12. Tool registriert mit JSON Schema Definition und Handler Mapping.</reason>
+      </artifact>
+      <artifact path="mcp_server/db/migrations/012_add_graph_tables.sql" kind="schema" symbol="nodes_edges_tables" lines="13-69">
+        <reason>PostgreSQL Schema mit nodes (UUID PK, label, name, properties) und edges (source_id, target_id, relation, weight). Basis für Pathfinding Query.</reason>
+      </artifact>
+    </code>
+    <dependencies>
+      <ecosystem name="python" version="^3.11">
+        <packages>
+          <package name="mcp" version="^1.0.0" purpose="MCP Server SDK" />
+          <package name="psycopg2-binary" version="^2.9.0" purpose="PostgreSQL Database Connection" />
+          <package name="pgvector" version="^0.2.0" purpose="Vector Extension Support" />
+          <package name="asyncpg" version="*" purpose="Async PostgreSQL Operations" />
+        </packages>
+      </ecosystem>
+    </dependencies>
+  </artifacts>
+
+  <constraints>
+    <constraint name="Performance Requirements">
+      <description>&lt;100ms für depth 1-3, &lt;500ms für depth 4-5, &lt;1000ms für depth 6-10. Query Timeout von 1s via PostgreSQL statement_timeout.</description>
+    </constraint>
+    <constraint name="Pathfinding Limits">
+      <description>Max 10 Pfade zurückgeben, max depth 10 (default 5). Bidirektionales Traversal mit Cycle Detection via path Array.</description>
+    </constraint>
+    <constraint name="Code Quality Standards">
+      <description>Type Hints mit from __future__ import annotations, Logging (INFO/DEBUG/ERROR), Docstrings, Ruff Compliance, 15-20 Testfälle erwartet.</description>
+    </constraint>
+    <constraint name="Error Handling">
+      <description>Strukturierte Error Responses mit error_type Felder: start_node_not_found, end_node_not_found, timeout, invalid_parameters.</description>
+    </constraint>
+  </constraints>
+
+  <interfaces>
+    <interface name="graph_find_path MCP Tool" kind="REST endpoint" signature="graph_find_path(start_node: str, end_node: str, max_depth: int = 5) -> dict" path="mcp_server/tools/graph_find_path.py">
+      <description>Neues MCP Tool für BFS-basiertes Pathfinding zwischen zwei Graph-Nodes mit Performance-Schutz und Cycle Detection.</description>
+    </interface>
+    <interface name="find_path Database Function" kind="function signature" signature="find_path(start_node_name: str, end_node_name: str, max_depth: int) -> dict" path="mcp_server/db/graph.py">
+      <description>Core Pathfinding Logik mit PostgreSQL WITH RECURSIVE CTE, Timeout Handling und Bidirectional Traversal.</description>
+    </interface>
+  </interfaces>
+
+  <tests>
+    <standards>Unit Testing mit pytest + pytest-asyncio, Mock Database Functions für Isolation, Performance-Testing mit Timing-Validation, Coverage aller Error Cases, Claude Code Integration Testing für End-to-End Validierung. Test-Suite erwartet ~15-20 Testfälle nach Pattern von test_graph_query_neighbors.py.</standards>
+    <locations>tests/test_graph_find_path.py (Tool Tests), tests/test_graph.py (Database Function Tests), Manual Testing in Claude Code Interface, Performance Benchmarking mit time.perf_counter().</locations>
+    <ideas>
+      <test idea="AC-4.5.1 Direct Path (depth=1)">Test direkte Verbindung zwischen zwei Nodes mit BFS Query, prüfe path_found=true, path_length=1.</test>
+      <test idea="AC-4.5.1 Multi-Hop Path (depth=2-3)">Test 2-3 Hop Pfade mit komplexeren Graph-Strukturen, validiere Pfad-Rekonstruktion.</test>
+      <test idea="AC-4.5.1 No Path Found">Test disconnected Nodes, erwartete path_found=false, path_length=0, leeres paths Array.</test>
+      <test idea="AC-4.5.1 Multiple Paths">Test Scenario mit mehreren gleichlangen Pfaden, validiere max 10 zurückgegeben.</test>
+      <test idea="AC-4.5.2 Response Format Validierung">Test vollständiges Response-Format mit path_found, path_length, paths Array mit node/edge Details.</test>
+      <test idea="AC-4.5.3 Performance &lt;100ms">Performance Test für depth=1-3 mit time.perf_counter(), asserting &lt;100ms execution time.</test>
+      <test idea="AC-4.5.4 Start Node Not Found">Test mit nicht-existierendem start_node, erwartete error_type: "start_node_not_found".</test>
+      <test idea="AC-4.5.4 End Node Not Found">Test mit nicht-existierendem end_node, erwartete error_type: "end_node_not_found".</test>
+      <test idea="AC-4.5.4 Invalid Depth Parameter">Test depth &lt;1 oder &gt;10, erwartete strukturierte Error Response.</test>
+      <test idea="AC-4.5.5 Same Node Query">Test start_node == end_node, erwartete path_found=true, path_length=0, single-node path.</test>
+    </ideas>
+  </tests>
+</story-context>
