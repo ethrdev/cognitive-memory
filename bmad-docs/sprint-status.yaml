@@ -140,15 +140,15 @@ development_status:
   epic-8-retrospective: done
 
   # Epic 9: Sector-Aware Retrieval
-  epic-9: in-progress
+  epic-9: done
   9-1-decay-configuration-module: done
   9-2-sector-specific-relevance-scoring: done
   9-3-sector-filter-for-query-neighbors: done
-  9-4-sector-filter-for-hybrid-search: backlog
-  epic-9-retrospective: optional
+  9-4-sector-filter-for-hybrid-search: done
+  epic-9-retrospective: done
 
   # Epic 10: Memory Sector Correction
-  epic-10: backlog
-  10-1-reclassify-memory-sector-tool: backlog
-  10-2-constitutive-edge-protection: backlog
-  epic-10-retrospective: optional
+  epic-10: done
+  10-1-reclassify-memory-sector-tool: done
+  10-2-constitutive-edge-protection: done
+  epic-10-retrospective: done

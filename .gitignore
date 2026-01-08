@@ -113,12 +113,13 @@ ethr/
 *.old
 *.orig
 
-# Project planning (keep local only)
+# BMAD framework (local tooling)
 bmad/
-bmad-docs/
 .bmad/
 _bmad/
 _bmad-output/
+
+# Note: bmad-docs/ is tracked - contains project documentation (PRD, architecture, retrospectives)
 
 # IDE-specific configurations (keep local only)
 .claude/
