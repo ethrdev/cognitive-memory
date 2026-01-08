@@ -2,12 +2,13 @@
 MCP Server Tools Registration Module
 
 Provides tool registration and implementation for the Cognitive Memory System.
-Includes 25 tools: store_raw_dialogue, compress_to_l2_insight, hybrid_search,
+Includes 26 tools: store_raw_dialogue, compress_to_l2_insight, hybrid_search,
 update_working_memory, delete_working_memory, store_episode, store_dual_judge_scores,
 get_golden_test_results, ping, graph_add_node, graph_add_edge, graph_query_neighbors,
 graph_find_path, get_node_by_name, get_edge, count_by_type, list_episodes,
 get_insight_by_id, dissonance_check, resolve_dissonance, smf_pending_proposals,
-smf_review, smf_approve, smf_reject, smf_undo, smf_bulk_approve, and suggest_lateral_edges.
+smf_review, smf_approve, smf_reject, smf_undo, smf_bulk_approve, suggest_lateral_edges,
+and reclassify_memory_sector.
 """
 
 from __future__ import annotations
@@ -52,6 +53,7 @@ from mcp_server.tools.smf_reject import handle_smf_reject
 from mcp_server.tools.smf_undo import handle_smf_undo
 from mcp_server.tools.smf_bulk_approve import handle_smf_bulk_approve
 from mcp_server.tools.suggest_lateral_edges import handle_suggest_lateral_edges
+from mcp_server.tools.reclassify_memory_sector import reclassify_memory_sector
 
 
 def rrf_fusion(
@@ -173,15 +175,23 @@ def _build_filter_clause(filter_params: dict | None) -> tuple[str, list]:
 
 
 async def semantic_search(
-    query_embedding: list[float], top_k: int, conn: Any, filter_params: dict | None = None
+    query_embedding: list[float],
+    top_k: int,
+    conn: Any,
+    filter_params: dict | None = None,
+    sector_filter: list[str] | None = None  # Story 9-4
 ) -> list[dict]:
     """
     Semantic search using pgvector cosine distance.
+
+    Story 9-4: Extended with sector_filter parameter.
 
     Args:
         query_embedding: 1536-dim vector from OpenAI
         top_k: Number of results to return
         conn: PostgreSQL connection
+        filter_params: Optional filter parameters
+        sector_filter: Optional list of memory sectors to filter by (Story 9-4)
 
     Returns:
         List of dicts with id, content, source_ids, distance, rank
@@ -191,8 +201,20 @@ async def semantic_search(
 
     cursor = conn.cursor()
 
+    # Story 9-4: Early return for empty sector_filter
+    if sector_filter is not None and len(sector_filter) == 0:
+        return []
+
     # Build filter clause
     filter_clause, filter_values = _build_filter_clause(filter_params)
+
+    # Story 9-4: Build sector filter clause for L2 insights
+    # L2 insights store memory_sector in metadata JSONB column
+    sector_clause = ""
+    sector_params = []
+    if sector_filter is not None:
+        sector_clause = " AND metadata->>'memory_sector' = ANY(%s::text[])"
+        sector_params = [sector_filter]
 
     # Cosine distance: <=> operator
     # Lower distance = higher similarity
@@ -200,13 +222,13 @@ async def semantic_search(
         SELECT id, content, source_ids, metadata, io_category, is_identity, source_file,
                embedding <=> %s::vector AS distance
         FROM l2_insights
-        WHERE 1=1 {filter_clause}
+        WHERE 1=1 {filter_clause}{sector_clause}
         ORDER BY distance
         LIMIT %s;
         """
-    
-    # Combine parameters: embedding, filter_values, top_k
-    params = [query_embedding] + filter_values + [top_k]
+
+    # Combine parameters: embedding, filter_values, sector_params, top_k
+    params = [query_embedding] + filter_values + sector_params + [top_k]
     
     cursor.execute(query, params)
 
@@ -230,7 +252,11 @@ async def semantic_search(
 
 
 async def keyword_search(
-    query_text: str, top_k: int, conn: Any, filter_params: dict | None = None,
+    query_text: str,
+    top_k: int,
+    conn: Any,
+    filter_params: dict | None = None,
+    sector_filter: list[str] | None = None,  # Story 9-4
     language: str = "simple"
 ) -> list[dict]:
     """
@@ -241,11 +267,14 @@ async def keyword_search(
     does basic tokenization, which works better for German compound words
     like "Identitätsmaterial" or "Task-Completion-Modus".
 
+    Story 9-4: Extended with sector_filter parameter.
+
     Args:
         query_text: Query string (e.g., "consciousness autonomy")
         top_k: Number of results to return
         conn: PostgreSQL connection
         filter_params: Optional filter parameters
+        sector_filter: Optional list of memory sectors to filter by (Story 9-4)
         language: FTS language config ('simple', 'english', 'german', etc.)
                   Default: 'simple' for multi-language support
 
@@ -254,8 +283,20 @@ async def keyword_search(
     """
     cursor = conn.cursor()
 
+    # Story 9-4: Early return for empty sector_filter
+    if sector_filter is not None and len(sector_filter) == 0:
+        return []
+
     # Build filter clause
     filter_clause, filter_values = _build_filter_clause(filter_params)
+
+    # Story 9-4: Build sector filter clause for L2 insights
+    # L2 insights store memory_sector in metadata JSONB column
+    sector_clause = ""
+    sector_params = []
+    if sector_filter is not None:
+        sector_clause = " AND metadata->>'memory_sector' = ANY(%s::text[])"
+        sector_params = [sector_filter]
 
     # ts_rank: Relevance score (higher = better match)
     # plainto_tsquery: Converts plain text to tsquery (handles spaces, punctuation)
@@ -268,13 +309,13 @@ async def keyword_search(
                ) AS rank
         FROM l2_insights
         WHERE to_tsvector('{language}', content) @@ plainto_tsquery('{language}', %s)
-        {filter_clause}
+        {filter_clause}{sector_clause}
         ORDER BY rank DESC
         LIMIT %s;
         """
 
-    # Combine parameters: query_text, query_text, filter_values, top_k
-    params = [query_text, query_text] + filter_values + [top_k]
+    # Combine parameters: query_text, query_text, filter_values, sector_params, top_k
+    params = [query_text, query_text] + filter_values + sector_params + [top_k]
 
     cursor.execute(query, params)
 
@@ -537,23 +578,28 @@ def get_adjusted_weights(is_relational: bool, base_weights: dict | None = None) 
 async def graph_search(
     query_text: str,
     top_k: int,
-    conn: Any
+    conn: Any,
+    sector_filter: list[str] | None = None  # Story 9-4
 ) -> list[dict]:
     """
     Graph-based search with L2 Insight retrieval via node neighbors.
+
+    Story 9-4: Extended with sector_filter parameter.
 
     Steps:
     1. Extract entities from query (capitalized words, quoted strings)
     2. For each entity, lookup node by name
     3. For found nodes, query direct neighbors (depth=1)
     4. For neighbors with vector_id, fetch L2 Insight
-    5. Calculate relevance score based on edge weight
-    6. Return ranked results
+    5. Apply sector filter to results (Story 9-4)
+    6. Calculate relevance score based on edge weight
+    7. Return ranked results
 
     Args:
         query_text: Query text to search for entities
         top_k: Maximum number of results to return
         conn: PostgreSQL connection
+        sector_filter: Optional list of memory sectors to filter by (Story 9-4)
 
     Returns:
         List of L2 Insight dicts with graph-based relevance scores
@@ -561,6 +607,10 @@ async def graph_search(
     from mcp_server.db.graph import get_node_by_name, query_neighbors
 
     logger = logging.getLogger(__name__)
+
+    # Story 9-4: Early return for empty sector_filter
+    if sector_filter is not None and len(sector_filter) == 0:
+        return []
 
     # Step 1: Extract entities from query
     entities = extract_entities_from_query(query_text)
@@ -623,7 +673,14 @@ async def graph_search(
                 )
                 insight = cursor.fetchone()
 
+                # Story 9-4: Apply sector filter to L2 insights from graph search
                 if insight:
+                    if sector_filter is not None:
+                        # Check if insight's memory_sector is in the filter
+                        insight_sector = insight.get("metadata", {}).get("memory_sector") if insight.get("metadata") else None
+                        if insight_sector not in sector_filter:
+                            # Skip this insight if it doesn't match the sector filter
+                            continue
                     # Calculate graph relevance score based on edge weight and distance
                     edge_weight = neighbor.get("weight", 1.0)
                     distance = neighbor.get("distance", 1)
@@ -1154,6 +1211,42 @@ async def handle_hybrid_search(arguments: dict[str, Any]) -> dict[str, Any]:
         top_k = arguments.get("top_k", 5)
         weights = arguments.get("weights")  # Now optional, will be determined by query routing
         filter_params = arguments.get("filter")
+        # Story 9-4: Extract sector_filter parameter
+        sector_filter = arguments.get("sector_filter")
+
+        # Story 9-4: Validate sector_filter parameter
+        if sector_filter is not None:
+            if not isinstance(sector_filter, list):
+                return {
+                    "error": "Parameter validation failed",
+                    "details": "Invalid 'sector_filter' parameter (must be array of sector names)",
+                    "tool": "hybrid_search",
+                }
+            # Valid sector values from MemorySector Literal type
+            valid_sectors = {"emotional", "episodic", "semantic", "procedural", "reflective"}
+            invalid_sectors = set(sector_filter) - valid_sectors
+            if invalid_sectors:
+                return {
+                    "error": "Parameter validation failed",
+                    "details": f"Invalid sector(s): {invalid_sectors}. Must be one of: {valid_sectors}",
+                    "tool": "hybrid_search",
+                }
+
+            # Early return for empty filter (AC #4)
+            if len(sector_filter) == 0:
+                return {
+                    "results": [],
+                    "query_embedding_dimension": len(query_embedding) if query_embedding else 1536,
+                    "semantic_results_count": 0,
+                    "keyword_results_count": 0,
+                    "graph_results_count": 0,
+                    "episode_semantic_count": 0,
+                    "episode_keyword_count": 0,
+                    "final_results_count": 0,
+                    "query_type": "standard",
+                    "sector_filter": sector_filter,
+                    "status": "success",
+                }
 
         # Parameter validation - query_text is required
         if not query_text or not isinstance(query_text, str):
@@ -1234,17 +1327,18 @@ async def handle_hybrid_search(arguments: dict[str, Any]) -> dict[str, Any]:
 
         # Execute searches
         with get_connection() as conn:
-            # Run L2 Insights searches
-            semantic_results = await semantic_search(query_embedding, top_k, conn, filter_params)
-            keyword_results = await keyword_search(query_text, top_k, conn, filter_params)
+            # Run L2 Insights searches (Story 9-4: Pass sector_filter)
+            semantic_results = await semantic_search(query_embedding, top_k, conn, filter_params, sector_filter)
+            keyword_results = await keyword_search(query_text, top_k, conn, filter_params, sector_filter)
 
             # Bug Fix 2025-12-06: Run Episode Memory searches
             # Episodes contain valuable lessons that should be searchable
+            # Story 9-4: Episodes not filtered by sector (future enhancement)
             episode_semantic_results = await episode_semantic_search(query_embedding, top_k, conn)
             episode_keyword_results = await episode_keyword_search(query_text, top_k, conn)
 
-            # Story 4.6: Run graph search
-            graph_results = await graph_search(query_text, top_k, conn)
+            # Story 4.6: Run graph search (Story 9-4: Pass sector_filter)
+            graph_results = await graph_search(query_text, top_k, conn, sector_filter)
 
         # Bug Fix 2025-12-06: Merge episode results with L2 results for RRF fusion
         # Episodes use prefixed IDs ("episode_49") to distinguish from l2_insights IDs
@@ -1285,6 +1379,8 @@ async def handle_hybrid_search(arguments: dict[str, Any]) -> dict[str, Any]:
             "matched_keywords": matched_keywords if is_relational else [],
             "applied_weights": applied_weights,
             "weights": applied_weights,                 # Backwards-compatible alias
+            # Story 9-4: Include sector_filter in response
+            "sector_filter": sector_filter,
             "status": "success",
         }
 
@@ -2118,7 +2214,7 @@ def register_tools(server: Server) -> list[Tool]:
         ),
         Tool(
             name="hybrid_search",
-            description="Perform hybrid semantic + keyword search with RRF fusion. Embedding is generated automatically from query_text if not provided.",
+            description="Perform hybrid semantic + keyword + graph search with RRF fusion. Supports sector filtering by memory type. Embedding is generated automatically from query_text if not provided.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -2161,6 +2257,14 @@ def register_tools(server: Server) -> list[Tool]:
                         },
                         "default": {"semantic": 0.7, "keyword": 0.3},
                         "description": "Weights for fusing semantic and keyword results (must sum to 1.0)",
+                    },
+                    "sector_filter": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "enum": ["emotional", "episodic", "semantic", "procedural", "reflective"],
+                        },
+                        "description": "Optional: Filter results by memory sector(s). If null or omitted, returns all sectors. Empty array returns no results.",
                     },
                 },
                 "required": ["query_text"],
@@ -2682,6 +2786,41 @@ def register_tools(server: Server) -> list[Tool]:
                 "required": ["node_name"],
             },
         ),
+        Tool(
+            name="reclassify_memory_sector",
+            description="Reclassify an edge to a different memory sector. Story 10.1: Manual correction of automatic sector classification.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "source_name": {
+                        "type": "string",
+                        "description": "Name of the source node",
+                    },
+                    "target_name": {
+                        "type": "string",
+                        "description": "Name of the target node",
+                    },
+                    "relation": {
+                        "type": "string",
+                        "description": "Relationship type (e.g., 'KNOWS', 'DISCUSSED')",
+                    },
+                    "new_sector": {
+                        "type": "string",
+                        "description": "Target memory sector (must be one of: emotional, episodic, semantic, procedural, reflective)",
+                        "enum": ["emotional", "episodic", "semantic", "procedural", "reflective"],
+                    },
+                    "edge_id": {
+                        "type": "string",
+                        "description": "Optional UUID for disambiguation when multiple edges match source/target/relation",
+                    },
+                    "actor": {
+                        "type": "string",
+                        "description": "Who is performing the reclassification (default: 'I/O')",
+                    },
+                },
+                "required": ["source_name", "target_name", "relation", "new_sector"],
+            },
+        ),
     ]
 
     # Tool handler mapping
@@ -2713,6 +2852,7 @@ def register_tools(server: Server) -> list[Tool]:
         "smf_undo": handle_smf_undo,
         "smf_bulk_approve": handle_smf_bulk_approve,
         "suggest_lateral_edges": handle_suggest_lateral_edges,
+        "reclassify_memory_sector": reclassify_memory_sector,
     }
 
     # Register tool call handler (define once, outside the loop)
