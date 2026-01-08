@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from mcp_server.db.connection import get_connection
+from mcp_server.utils.sector_classifier import MemorySector
 from psycopg2.extras import Json
 
 logger = logging.getLogger(__name__)
@@ -821,7 +822,8 @@ def add_edge(
     target_id: str,
     relation: str,
     weight: float = 1.0,
-    properties: str = "{}"
+    properties: str = "{}",
+    memory_sector: MemorySector = "semantic"
 ) -> dict[str, Any]:
     """
     Add an edge between nodes with idempotent operation.
@@ -835,6 +837,7 @@ def add_edge(
         relation: Relationship type (e.g., "USES", "SOLVES", "CREATED_BY")
         weight: Edge weight for relevance scoring (0.0-1.0, default 1.0)
         properties: JSON string with flexible metadata
+        memory_sector: Memory sector classification (default "semantic")
 
     Returns:
         Dict with:
@@ -844,6 +847,7 @@ def add_edge(
         - target_id: confirmed target node ID
         - relation: confirmed relation type
         - weight: confirmed weight
+        - memory_sector: confirmed memory sector
     """
     import json
 
@@ -873,22 +877,24 @@ def add_edge(
             # Insert edge with idempotent conflict resolution
             # Use xmax = 0 to detect if row was inserted vs updated
             # On UPDATE: Also set last_engaged and modified_at (Decay fix 2026-01-07)
+            # Story 8.3: Add memory_sector for auto-classification
             cursor.execute(
                 """
-                INSERT INTO edges (source_id, target_id, relation, weight, properties)
-                VALUES (%s::uuid, %s::uuid, %s, %s, %s::jsonb)
+                INSERT INTO edges (source_id, target_id, relation, weight, properties, memory_sector)
+                VALUES (%s::uuid, %s::uuid, %s, %s, %s::jsonb, %s)
                 ON CONFLICT (source_id, target_id, relation)
                 DO UPDATE SET
                     weight = EXCLUDED.weight,
                     properties = EXCLUDED.properties,
+                    memory_sector = EXCLUDED.memory_sector,
                     modified_at = NOW(),
                     last_engaged = NOW(),
                     last_accessed = NOW(),
                     access_count = GREATEST(COALESCE(edges.access_count, 0), 0) + 1
-                RETURNING id, source_id, target_id, relation, weight, created_at,
+                RETURNING id, source_id, target_id, relation, weight, memory_sector, created_at,
                     (xmax = 0) AS was_inserted;
                 """,
-                (source_id, target_id, relation, weight, properties),
+                (source_id, target_id, relation, weight, properties, memory_sector),
             )
 
             result = cursor.fetchone()
@@ -899,6 +905,7 @@ def add_edge(
                 created_target_id = str(result["target_id"])
                 created_relation = result["relation"]
                 created_weight = float(result["weight"])
+                created_memory_sector = result["memory_sector"]
                 # xmax = 0 means row was inserted, not updated
                 created = result["was_inserted"]
 
@@ -908,7 +915,7 @@ def add_edge(
                 # Edge already exists, fetch the existing one
                 cursor.execute(
                     """
-                    SELECT id, source_id, target_id, relation, weight, created_at
+                    SELECT id, source_id, target_id, relation, weight, memory_sector, created_at
                     FROM edges
                     WHERE source_id = %s::uuid AND target_id = %s::uuid AND relation = %s
                     LIMIT 1;
@@ -925,6 +932,7 @@ def add_edge(
                 created_target_id = str(existing_result["target_id"])
                 created_relation = existing_result["relation"]
                 created_weight = float(existing_result["weight"])
+                created_memory_sector = existing_result["memory_sector"]
                 created = False
 
                 logger.debug(f"Found existing edge: id={edge_id}, source={created_source_id}, target={created_target_id}, relation={created_relation}")
@@ -939,6 +947,7 @@ def add_edge(
                 "target_id": created_target_id,
                 "relation": created_relation,
                 "weight": created_weight,
+                "memory_sector": created_memory_sector,
             }
 
     except Exception as e:

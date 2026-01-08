@@ -14,6 +14,7 @@ import logging
 from typing import Any
 
 from mcp_server.db.graph import add_edge, get_or_create_node
+from mcp_server.utils.sector_classifier import classify_memory_sector
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +115,9 @@ async def handle_graph_add_edge(arguments: dict[str, Any]) -> dict[str, Any]:
         # Convert properties to JSON string for JSONB storage
         properties_json = json.dumps(properties) if properties else "{}"
 
+        # Story 8.3: Classify memory sector based on relation and properties
+        memory_sector = classify_memory_sector(relation, properties or {})
+
         # Database operation with auto-upsert logic
         try:
             # Get or create source node
@@ -127,18 +131,21 @@ async def handle_graph_add_edge(arguments: dict[str, Any]) -> dict[str, Any]:
             target_created = target_result["created"]
 
             # Create edge between nodes
+            # Story 8.3: Pass classified memory_sector to add_edge()
             edge_result = add_edge(
                 source_id=source_id,
                 target_id=target_id,
                 relation=relation,
                 weight=weight,
-                properties=properties_json
+                properties=properties_json,
+                memory_sector=memory_sector
             )
 
             logger.info(
                 f"Edge {'created' if edge_result['created'] else 'updated'}: "
                 f"id={edge_result['edge_id']}, source={source_name} ({source_id}), "
-                f"target={target_name} ({target_id}), relation={relation}"
+                f"target={target_name} ({target_id}), relation={relation}, "
+                f"memory_sector={memory_sector}"
             )
 
             # Add node creation info for transparency
@@ -155,6 +162,7 @@ async def handle_graph_add_edge(arguments: dict[str, Any]) -> dict[str, Any]:
                 "target_id": edge_result["target_id"],
                 "relation": edge_result["relation"],
                 "weight": edge_result["weight"],
+                "memory_sector": edge_result["memory_sector"],  # Story 8.3
                 "status": "success",
             }
 
