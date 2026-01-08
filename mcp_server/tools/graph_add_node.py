@@ -5,6 +5,13 @@ MCP tool for creating or finding graph nodes with idempotent operations.
 Supports properties metadata and optional vector linking to L2 insights.
 
 Story 4.2: graph_add_node Tool Implementation
+Story 8.4: FR25 Documentation for Future Node-Edge Classification
+
+FR25 (Epic 8): If edge creation is added in the future, edges must be
+classified using classify_memory_sector() from mcp_server.utils.sector_classifier.
+See Story 8-4 for implementation pattern.
+
+Current implementation: Node-only operation (no edge creation).
 """
 
 from __future__ import annotations
