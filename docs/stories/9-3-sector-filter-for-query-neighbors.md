@@ -1,6 +1,6 @@
 # Story 9.3: Sector Filter for query_neighbors
 
-Status: review
+Status: done
 
 ## Story
 
