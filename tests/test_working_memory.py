@@ -1,5 +1,5 @@
 """
-Unit tests for update_working_memory tool.
+Unit tests for update_working_memory and delete_working_memory tools.
 
 Tests cover:
 - Valid item insertion
@@ -7,6 +7,7 @@ Tests cover:
 - Importance override protection
 - Stale memory archival
 - Edge cases and error handling
+- Idempotent deletion of working memory entries
 """
 
 import asyncio
@@ -30,6 +31,7 @@ from mcp_server.tools import (
     evict_lru_item,
     force_evict_oldest_critical,
     handle_update_working_memory,
+    handle_delete_working_memory,
 )
 
 
@@ -564,3 +566,149 @@ class TestUpdateWorkingMemoryTool:
             assert archived["importance"] == 0.9
 
             conn.commit()
+
+
+class TestDeleteWorkingMemory:
+    """Test delete_working_memory tool (idempotent deletion)."""
+
+    def test_delete_existing_entry(self):
+        """Test: Delete existing entry - returns {deleted_id: int, status: 'success'}."""
+        with get_connection() as conn:
+            # Clean up
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM working_memory;")
+            conn.commit()
+
+            # Add an item
+            add_result = asyncio.run(
+                handle_update_working_memory(
+                    {"content": "To be deleted", "importance": 0.6}
+                )
+            )
+            item_id = add_result["added_id"]
+
+            # Delete the item
+            delete_result = asyncio.run(
+                handle_delete_working_memory({"id": item_id})
+            )
+
+            assert delete_result["status"] == "success"
+            assert delete_result["deleted_id"] == item_id
+
+            # Verify item is actually deleted
+            cursor.execute(
+                "SELECT id FROM working_memory WHERE id = %s;", (item_id,)
+            )
+            assert cursor.fetchone() is None
+
+    def test_delete_nonexistent_entry(self):
+        """Test: Delete non-existent entry - returns {deleted_id: null, status: 'not_found'} (idempotent)."""
+        # Use a very high ID that won't exist
+        delete_result = asyncio.run(
+            handle_delete_working_memory({"id": 999999})
+        )
+
+        assert delete_result["status"] == "not_found"
+        assert delete_result["deleted_id"] is None
+
+    def test_delete_idempotent_double_delete(self):
+        """Test: Double delete - second delete returns not_found (idempotent behavior)."""
+        with get_connection() as conn:
+            # Clean up
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM working_memory;")
+            conn.commit()
+
+            # Add an item
+            add_result = asyncio.run(
+                handle_update_working_memory(
+                    {"content": "Double delete test", "importance": 0.5}
+                )
+            )
+            item_id = add_result["added_id"]
+
+            # First delete - should succeed
+            first_delete = asyncio.run(
+                handle_delete_working_memory({"id": item_id})
+            )
+            assert first_delete["status"] == "success"
+            assert first_delete["deleted_id"] == item_id
+
+            # Second delete - should return not_found (idempotent)
+            second_delete = asyncio.run(
+                handle_delete_working_memory({"id": item_id})
+            )
+            assert second_delete["status"] == "not_found"
+            assert second_delete["deleted_id"] is None
+
+    def test_delete_missing_id_parameter(self):
+        """Test: Missing id parameter - returns error."""
+        delete_result = asyncio.run(
+            handle_delete_working_memory({})
+        )
+
+        assert "error" in delete_result
+        assert "Missing required 'id' parameter" in delete_result["details"]
+        assert delete_result["tool"] == "delete_working_memory"
+
+    def test_delete_invalid_id_type(self):
+        """Test: Invalid id type (string) - returns error."""
+        delete_result = asyncio.run(
+            handle_delete_working_memory({"id": "not-an-int"})
+        )
+
+        assert "error" in delete_result
+        assert "'id' must be an integer" in delete_result["details"]
+        assert delete_result["tool"] == "delete_working_memory"
+
+    def test_delete_invalid_id_negative(self):
+        """Test: Invalid id (negative) - returns error."""
+        delete_result = asyncio.run(
+            handle_delete_working_memory({"id": -5})
+        )
+
+        assert "error" in delete_result
+        assert "'id' must be >= 1" in delete_result["details"]
+        assert delete_result["tool"] == "delete_working_memory"
+
+    def test_delete_invalid_id_zero(self):
+        """Test: Invalid id (zero) - returns error."""
+        delete_result = asyncio.run(
+            handle_delete_working_memory({"id": 0})
+        )
+
+        assert "error" in delete_result
+        assert "'id' must be >= 1" in delete_result["details"]
+        assert delete_result["tool"] == "delete_working_memory"
+
+    def test_delete_no_archival(self):
+        """Test: Deleted items are NOT archived (hard delete, no stale_memory entry)."""
+        with get_connection() as conn:
+            # Clean up both tables
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM working_memory;")
+            cursor.execute("DELETE FROM stale_memory;")
+            conn.commit()
+
+            # Get initial stale_memory count
+            cursor.execute("SELECT COUNT(*) as count FROM stale_memory;")
+            initial_stale_count = cursor.fetchone()["count"]
+
+            # Add an item
+            add_result = asyncio.run(
+                handle_update_working_memory(
+                    {"content": "No archive test", "importance": 0.7}
+                )
+            )
+            item_id = add_result["added_id"]
+
+            # Delete the item (should NOT archive)
+            delete_result = asyncio.run(
+                handle_delete_working_memory({"id": item_id})
+            )
+            assert delete_result["status"] == "success"
+
+            # Verify stale_memory count is unchanged (no archival)
+            cursor.execute("SELECT COUNT(*) as count FROM stale_memory;")
+            final_stale_count = cursor.fetchone()["count"]
+            assert final_stale_count == initial_stale_count

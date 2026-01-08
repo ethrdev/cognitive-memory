@@ -2,12 +2,12 @@
 MCP Server Tools Registration Module
 
 Provides tool registration and implementation for the Cognitive Memory System.
-Includes 24 tools: store_raw_dialogue, compress_to_l2_insight, hybrid_search,
-update_working_memory, store_episode, store_dual_judge_scores, get_golden_test_results,
-ping, graph_add_node, graph_add_edge, graph_query_neighbors, graph_find_path,
-get_node_by_name, get_edge, count_by_type, list_episodes, get_insight_by_id,
-dissonance_check, resolve_dissonance, smf_pending_proposals, smf_review,
-smf_approve, smf_reject, smf_undo, smf_bulk_approve, and suggest_lateral_edges.
+Includes 25 tools: store_raw_dialogue, compress_to_l2_insight, hybrid_search,
+update_working_memory, delete_working_memory, store_episode, store_dual_judge_scores,
+get_golden_test_results, ping, graph_add_node, graph_add_edge, graph_query_neighbors,
+graph_find_path, get_node_by_name, get_edge, count_by_type, list_episodes,
+get_insight_by_id, dissonance_check, resolve_dissonance, smf_pending_proposals,
+smf_review, smf_approve, smf_reject, smf_undo, smf_bulk_approve, and suggest_lateral_edges.
 """
 
 from __future__ import annotations
@@ -1573,6 +1573,91 @@ async def handle_update_working_memory(arguments: dict[str, Any]) -> dict[str, A
         }
 
 
+async def handle_delete_working_memory(arguments: dict[str, Any]) -> dict[str, Any]:
+    """
+    Delete item from Working Memory by ID (idempotent).
+
+    Args:
+        arguments: Tool arguments containing 'id' (integer)
+
+    Returns:
+        {deleted_id: int, status: "success"} if entry was deleted,
+        {deleted_id: null, status: "not_found"} if entry did not exist.
+        Idempotent: goal (entry not present) is achieved in both cases.
+    """
+    logger = logging.getLogger(__name__)
+
+    try:
+        # Extract parameters
+        item_id = arguments.get("id")
+
+        # Validate input
+        if item_id is None:
+            return {
+                "error": "Parameter validation failed",
+                "details": "Missing required 'id' parameter",
+                "tool": "delete_working_memory",
+            }
+
+        if not isinstance(item_id, int):
+            return {
+                "error": "Parameter validation failed",
+                "details": "'id' must be an integer",
+                "tool": "delete_working_memory",
+            }
+
+        if item_id < 1:
+            return {
+                "error": "Parameter validation failed",
+                "details": "'id' must be >= 1",
+                "tool": "delete_working_memory",
+            }
+
+        # Delete operation
+        with get_connection() as conn:
+            cursor: cursor_type = conn.cursor()
+
+            # Check if entry exists before delete
+            cursor.execute(
+                "SELECT id FROM working_memory WHERE id = %s;", (item_id,)
+            )
+            exists = cursor.fetchone() is not None
+
+            if exists:
+                # Delete the entry (hard delete, no archiving)
+                cursor.execute(
+                    "DELETE FROM working_memory WHERE id = %s;", (item_id,)
+                )
+                conn.commit()
+                logger.info(f"Deleted working memory entry: id={item_id}")
+                return {
+                    "deleted_id": item_id,
+                    "status": "success",
+                }
+            else:
+                # Entry did not exist - idempotent success with not_found status
+                logger.debug(f"Working memory entry not found: id={item_id}")
+                return {
+                    "deleted_id": None,
+                    "status": "not_found",
+                }
+
+    except psycopg2.Error as e:
+        logger.error(f"Database error in delete_working_memory: {e}")
+        return {
+            "error": "Database operation failed",
+            "details": str(e),
+            "tool": "delete_working_memory",
+        }
+    except Exception as e:
+        logger.error(f"Unexpected error in delete_working_memory: {e}")
+        return {
+            "error": "Tool execution failed",
+            "details": str(e),
+            "tool": "delete_working_memory",
+        }
+
+
 async def add_episode(
     query: str, reward: float, reflection: str, conn: Any
 ) -> dict[str, Any]:
@@ -2103,6 +2188,21 @@ def register_tools(server: Server) -> list[Tool]:
             },
         ),
         Tool(
+            name="delete_working_memory",
+            description="Delete item from Working Memory by ID (idempotent). Returns {deleted_id: int, status: 'success'} if deleted, or {deleted_id: null, status: 'not_found'} if entry did not exist.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "ID of the working memory entry to delete",
+                    },
+                },
+                "required": ["id"],
+            },
+        ),
+        Tool(
             name="store_episode",
             description="Store episode memory with query, reward, and reflection for verbal reinforcement learning",
             inputSchema={
@@ -2590,6 +2690,7 @@ def register_tools(server: Server) -> list[Tool]:
         "compress_to_l2_insight": handle_compress_to_l2_insight,
         "hybrid_search": handle_hybrid_search,
         "update_working_memory": handle_update_working_memory,
+        "delete_working_memory": handle_delete_working_memory,
         "store_episode": handle_store_episode,
         "store_dual_judge_scores": handle_store_dual_judge_scores,
         "get_golden_test_results": handle_get_golden_test_results,
