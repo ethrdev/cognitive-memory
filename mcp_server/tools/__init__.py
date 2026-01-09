@@ -44,6 +44,7 @@ from mcp_server.tools.get_edge import handle_get_edge
 from mcp_server.tools.count_by_type import handle_count_by_type
 from mcp_server.tools.list_episodes import handle_list_episodes
 from mcp_server.tools.get_insight_by_id import handle_get_insight_by_id
+from mcp_server.tools.insights.update import handle_update_insight
 from mcp_server.tools.dissonance_check import handle_dissonance_check as handle_dissonance_check_impl, DISSONANCE_CHECK_TOOL
 from mcp_server.tools.resolve_dissonance import handle_resolve_dissonance, RESOLVE_DISSONANCE_TOOL
 from mcp_server.tools.smf_pending_proposals import handle_smf_pending_proposals
@@ -2676,6 +2677,40 @@ def register_tools(server: Server) -> list[Tool]:
                 "required": ["id"],
             },
         ),
+        Tool(
+            name="update_insight",
+            description="Update an existing L2 insight. I/O can update directly, ethr requires bilateral consent via SMF. Implements EP-1 (Consent-Aware) and EP-3 (History-on-Mutation) patterns.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "insight_id": {
+                        "type": "integer",
+                        "description": "ID of the insight to update",
+                        "minimum": 1,
+                    },
+                    "actor": {
+                        "type": "string",
+                        "enum": ["I/O", "ethr"],
+                        "description": "Who is initiating this update",
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": "Why this update is being made (required for audit)",
+                    },
+                    "new_content": {
+                        "type": "string",
+                        "description": "New content for the insight (optional if only updating strength)",
+                    },
+                    "new_memory_strength": {
+                        "type": "number",
+                        "minimum": 0.0,
+                        "maximum": 1.0,
+                        "description": "New memory strength (optional if only updating content)",
+                    },
+                },
+                "required": ["insight_id", "actor", "reason"],
+            },
+        ),
         DISSONANCE_CHECK_TOOL,
         RESOLVE_DISSONANCE_TOOL,
         Tool(
@@ -2882,6 +2917,7 @@ def register_tools(server: Server) -> list[Tool]:
         "count_by_type": handle_count_by_type,
         "list_episodes": handle_list_episodes,
         "get_insight_by_id": handle_get_insight_by_id,
+        "update_insight": handle_update_insight,
         "dissonance_check": handle_dissonance_check,
         "resolve_dissonance": handle_resolve_dissonance,
         "smf_pending_proposals": handle_smf_pending_proposals,

@@ -168,6 +168,18 @@ class ProposalStatus(Enum):
     REJECTED = "REJECTED"
 
 
+class SMFAction(str, Enum):
+    """SMF proposal action types for constitutive changes.
+
+    Story 26.2: UPDATE_INSIGHT action for insight updates via SMF.
+    Story 26.3: DELETE_INSIGHT action for insight soft-deletes via SMF.
+    """
+    UPDATE_EDGE = "UPDATE_EDGE"      # Existing (Epic 7)
+    DELETE_EDGE = "DELETE_EDGE"      # Existing (Epic 7)
+    UPDATE_INSIGHT = "UPDATE_INSIGHT"  # NEW Story 26.2
+    DELETE_INSIGHT = "DELETE_INSIGHT"  # Story 26.3 (future)
+
+
 @dataclass
 class SMFProposal:
     """Self-Modification Framework proposal."""
