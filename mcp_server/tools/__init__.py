@@ -2,13 +2,13 @@
 MCP Server Tools Registration Module
 
 Provides tool registration and implementation for the Cognitive Memory System.
-Includes 26 tools: store_raw_dialogue, compress_to_l2_insight, hybrid_search,
+Includes 27 tools: store_raw_dialogue, compress_to_l2_insight, hybrid_search,
 update_working_memory, delete_working_memory, store_episode, store_dual_judge_scores,
 get_golden_test_results, ping, graph_add_node, graph_add_edge, graph_query_neighbors,
 graph_find_path, get_node_by_name, get_edge, count_by_type, list_episodes,
-get_insight_by_id, dissonance_check, resolve_dissonance, smf_pending_proposals,
-smf_review, smf_approve, smf_reject, smf_undo, smf_bulk_approve, suggest_lateral_edges,
-and reclassify_memory_sector.
+get_insight_by_id, update_insight, delete_insight, submit_insight_feedback,
+dissonance_check, resolve_dissonance, smf_pending_proposals, smf_review, smf_approve,
+smf_reject, smf_undo, smf_bulk_approve, suggest_lateral_edges, and reclassify_memory_sector.
 """
 
 from __future__ import annotations
@@ -46,6 +46,7 @@ from mcp_server.tools.list_episodes import handle_list_episodes
 from mcp_server.tools.get_insight_by_id import handle_get_insight_by_id
 from mcp_server.tools.insights.update import handle_update_insight
 from mcp_server.tools.insights.delete import handle_delete_insight
+from mcp_server.tools.insights.feedback import handle_submit_insight_feedback
 from mcp_server.tools.dissonance_check import handle_dissonance_check as handle_dissonance_check_impl, DISSONANCE_CHECK_TOOL
 from mcp_server.tools.resolve_dissonance import handle_resolve_dissonance, RESOLVE_DISSONANCE_TOOL
 from mcp_server.tools.smf_pending_proposals import handle_smf_pending_proposals
@@ -147,6 +148,9 @@ def rrf_fusion(
 
     # Story 26.1: Apply memory_strength multiplier for IEF Integration
     # Insights with higher memory_strength rank higher in results
+    # Story 26.4: Apply Context Critic feedback adjustments (EP-4 Lazy Evaluation)
+    from mcp_server.analysis.ief import apply_insight_feedback_to_score
+
     for result in sorted_results:
         # Only apply to l2_insights (not episode memories or graph results)
         if isinstance(result.get("id"), int) and result.get("source_type") != "episode_memory":
@@ -156,7 +160,15 @@ def rrf_fusion(
             result["rrf_score"] = result["score"]  # Store original RRF score
             result["score"] = result["score"] * memory_strength  # Apply multiplier
 
-    # Re-sort by final score (after memory_strength multiplier applied)
+            # Story 26.4: Apply IEF feedback adjustment (lazy evaluation)
+            insight_id = result.get("id")
+            if insight_id:
+                result["score"] = apply_insight_feedback_to_score(
+                    base_score=result["score"],
+                    insight_id=insight_id
+                )
+
+    # Re-sort by final score (after memory_strength multiplier and feedback applied)
     sorted_results = sorted(
         sorted_results, key=lambda x: x.get("score", 0), reverse=True
     )
@@ -2738,6 +2750,30 @@ def register_tools(server: Server) -> list[Tool]:
                 "required": ["insight_id", "actor", "reason"],
             },
         ),
+        Tool(
+            name="submit_insight_feedback",
+            description="Submit feedback about whether a recalled L2 insight was helpful. Implements EP-4 (Lazy Evaluation) - feedback is stored, IEF updates on next query.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "insight_id": {
+                        "type": "integer",
+                        "description": "ID of the insight that was recalled",
+                        "minimum": 1
+                    },
+                    "feedback_type": {
+                        "type": "string",
+                        "enum": ["helpful", "not_relevant", "not_now"],
+                        "description": "Type of feedback: helpful (positive), not_relevant (negative), not_now (neutral/skip)"
+                    },
+                    "context": {
+                        "type": "string",
+                        "description": "Optional context explaining the feedback"
+                    }
+                },
+                "required": ["insight_id", "feedback_type"]
+            },
+        ),
         DISSONANCE_CHECK_TOOL,
         RESOLVE_DISSONANCE_TOOL,
         Tool(
@@ -2946,6 +2982,7 @@ def register_tools(server: Server) -> list[Tool]:
         "get_insight_by_id": handle_get_insight_by_id,
         "update_insight": handle_update_insight,
         "delete_insight": handle_delete_insight,
+        "submit_insight_feedback": handle_submit_insight_feedback,
         "dissonance_check": handle_dissonance_check,
         "resolve_dissonance": handle_resolve_dissonance,
         "smf_pending_proposals": handle_smf_pending_proposals,

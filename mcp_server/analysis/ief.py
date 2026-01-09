@@ -406,3 +406,64 @@ def get_feedback_count() -> int:
 def register_feedback_callback(callback: Callable[[str, bool, Optional[str]], None]) -> None:
     """Register a callback to be notified on feedback received."""
     _on_feedback_callbacks.append(callback)
+
+
+# =============================================================================
+# Context Critic Feedback (Story 26.4 - EP-4 Lazy Evaluation)
+# =============================================================================
+
+def apply_insight_feedback_to_score(
+    base_score: float,
+    insight_id: int
+) -> float:
+    """
+    Apply Context Critic feedback adjustments to IEF score.
+
+    Story 26.4 EP-4 (Lazy Evaluation):
+    - Feedback is stored in insight_feedback table
+    - IEF reads feedback on NEXT query (not synchronous)
+    - This function is called during IEF calculation to incorporate feedback
+
+    Note: Uses 'insight_feedback' table (NOT 'ief_feedback' which is for Story 7.7 ICAI)
+    These are separate concepts with different schemas.
+
+    Feedback weights (from Architecture):
+    - helpful: +0.1 weight boost
+    - not_relevant: -0.1 weight reduction
+    - not_now: 0 (no effect)
+
+    Args:
+        base_score: Original IEF score before feedback adjustment
+        insight_id: L2 insight ID to look up feedback for
+
+    Returns:
+        Adjusted IEF score (clamped to [0.0, 1.5] range)
+    """
+    from mcp_server.db.connection import get_connection
+
+    # Query all feedback for this insight
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT feedback_type
+            FROM insight_feedback
+            WHERE insight_id = %s;
+            """,
+            (insight_id,)
+        )
+        feedbacks = cursor.fetchall()
+
+    # Aggregate feedback adjustments
+    feedback_adjustment = 0.0
+    for fb in feedbacks:
+        feedback_type = fb["feedback_type"]
+        if feedback_type == "helpful":
+            feedback_adjustment += 0.1
+        elif feedback_type == "not_relevant":
+            feedback_adjustment -= 0.1
+        # not_now: no adjustment
+
+    # Apply adjustment (clamped to valid range)
+    final_score = max(0.0, min(1.5, base_score + feedback_adjustment))
+    return final_score
