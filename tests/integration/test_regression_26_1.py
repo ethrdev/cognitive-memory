@@ -17,17 +17,18 @@ async def test_io_save_still_works(conn):
     from mcp_server.tools import handle_compress_to_l2_insight
     from unittest.mock import patch, AsyncMock
 
-    # Mock OpenAI client
-    with patch("mcp_server.tools.handle_compress_to_l2_insight.OpenAI") as mock_openai:
+    # Mock OpenAI client (module-level import)
+    with patch("mcp_server.tools.OpenAI") as mock_openai:
         mock_client = AsyncMock()
         mock_openai.return_value = mock_client
 
-        # Mock embedding generation
+        # Mock embedding generation (module-level import)
         with patch(
-            "mcp_server.tools.handle_compress_to_l2_insight.get_embedding_with_retry",
+            "mcp_server.tools.get_embedding_with_retry",
             return_value=[0.1] * 1536
         ):
-            with patch("mcp_server.tools.handle_compress_to_l2_insight.get_connection") as mock_get_conn:
+            with patch("mcp_server.tools.get_connection") as mock_get_conn, \
+             patch("mcp_server.tools.register_vector"):  # Mock pgvector registration
                 # Use real connection
                 mock_get_conn.return_value.__enter__.return_value = conn
 
@@ -70,7 +71,8 @@ async def test_existing_insights_unaffected(conn):
             "mcp_server.tools.handle_compress_to_l2_insight.get_embedding_with_retry",
             return_value=[0.1] * 1536
         ):
-            with patch("mcp_server.tools.handle_compress_to_l2_insight.get_connection") as mock_get_conn:
+            with patch("mcp_server.tools.get_connection") as mock_get_conn, \
+             patch("mcp_server.tools.register_vector"):  # Mock pgvector registration
                 mock_get_conn.return_value.__enter__.return_value = conn
 
                 result = await handle_compress_to_l2_insight({
@@ -131,7 +133,8 @@ async def test_metadata_includes_memory_strength(conn):
             "mcp_server.tools.handle_compress_to_l2_insight.get_embedding_with_retry",
             return_value=[0.1] * 1536
         ):
-            with patch("mcp_server.tools.handle_compress_to_l2_insight.get_connection") as mock_get_conn:
+            with patch("mcp_server.tools.get_connection") as mock_get_conn, \
+             patch("mcp_server.tools.register_vector"):  # Mock pgvector registration
                 mock_get_conn.return_value.__enter__.return_value = conn
 
                 result = await handle_compress_to_l2_insight({
@@ -176,7 +179,8 @@ async def test_multiple_insights_different_strengths(conn):
             "mcp_server.tools.handle_compress_to_l2_insight.get_embedding_with_retry",
             return_value=[0.1] * 1536
         ):
-            with patch("mcp_server.tools.handle_compress_to_l2_insight.get_connection") as mock_get_conn:
+            with patch("mcp_server.tools.get_connection") as mock_get_conn, \
+             patch("mcp_server.tools.register_vector"):  # Mock pgvector registration
                 mock_get_conn.return_value.__enter__.return_value = conn
 
                 for strength in strengths:
@@ -270,7 +274,8 @@ async def test_memory_strength_boundary_values(conn):
             "mcp_server.tools.handle_compress_to_l2_insight.get_embedding_with_retry",
             return_value=[0.1] * 1536
         ):
-            with patch("mcp_server.tools.handle_compress_to_l2_insight.get_connection") as mock_get_conn:
+            with patch("mcp_server.tools.get_connection") as mock_get_conn, \
+             patch("mcp_server.tools.register_vector"):  # Mock pgvector registration
                 mock_get_conn.return_value.__enter__.return_value = conn
 
                 # Test 0.0 (weakest)

@@ -1032,7 +1032,10 @@ async def handle_compress_to_l2_insight(arguments: dict[str, Any]) -> dict[str, 
         # Extract parameters
         content = arguments.get("content")
         source_ids = arguments.get("source_ids")
-        memory_strength = arguments.get("memory_strength", 0.5)  # Default 0.5 for backward compatibility
+        memory_strength = arguments.get("memory_strength", 0.5)
+        # Fix: Explicit None should also use default (not just missing key)
+        if memory_strength is None:
+            memory_strength = 0.5
 
         # Parameter validation
         if not content or not isinstance(content, str):

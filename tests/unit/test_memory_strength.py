@@ -20,24 +20,26 @@ class TestMemoryStrengthValidation:
     @pytest.mark.asyncio
     async def test_memory_strength_valid_range(self):
         """Test that valid memory_strength values are accepted."""
-        # Mock OpenAI client
-        with patch("mcp_server.tools.handle_compress_to_l2_insight.OpenAI") as mock_openai:
+        # Mock OpenAI client (module-level import)
+        with patch("mcp_server.tools.OpenAI") as mock_openai:
             mock_client = AsyncMock()
             mock_openai.return_value = mock_client
 
-            # Mock embedding generation
+            # Mock embedding generation (module-level import)
             with patch(
-                "mcp_server.tools.handle_compress_to_l2_insight.get_embedding_with_retry",
+                "mcp_server.tools.get_embedding_with_retry",
                 return_value=[0.1] * 1536
             ):
-                # Mock database connection
-                with patch("mcp_server.tools.handle_compress_to_l2_insight.get_connection") as mock_get_conn:
+                # Mock database connection (module-level import)
+                with patch("mcp_server.tools.get_connection") as mock_get_conn, \
+                     patch("mcp_server.tools.register_vector"):  # Mock pgvector registration
                     mock_conn = MagicMock()
                     mock_cursor = MagicMock()
                     mock_conn.cursor.return_value = mock_cursor
                     mock_cursor.fetchone.return_value = {
                         "id": 1,
-                        "created_at": MagicMock(isoformat=lambda: "2026-01-09T00:00:00Z")
+                        "created_at": MagicMock(isoformat=lambda: "2026-01-09T00:00:00Z"),
+                        "memory_strength": 0.5  # Include in mock response
                     }
                     mock_get_conn.return_value.__enter__.return_value = mock_conn
 
@@ -79,24 +81,26 @@ class TestMemoryStrengthValidation:
     @pytest.mark.asyncio
     async def test_memory_strength_default_on_missing(self):
         """Test backward compatibility - missing parameter uses 0.5."""
-        # Mock OpenAI client
-        with patch("mcp_server.tools.handle_compress_to_l2_insight.OpenAI") as mock_openai:
+        # Mock OpenAI client (module-level import)
+        with patch("mcp_server.tools.OpenAI") as mock_openai:
             mock_client = AsyncMock()
             mock_openai.return_value = mock_client
 
-            # Mock embedding generation
+            # Mock embedding generation (module-level import)
             with patch(
-                "mcp_server.tools.handle_compress_to_l2_insight.get_embedding_with_retry",
+                "mcp_server.tools.get_embedding_with_retry",
                 return_value=[0.1] * 1536
             ):
-                # Mock database connection
-                with patch("mcp_server.tools.handle_compress_to_l2_insight.get_connection") as mock_get_conn:
+                # Mock database connection (module-level import)
+                with patch("mcp_server.tools.get_connection") as mock_get_conn, \
+                     patch("mcp_server.tools.register_vector"):  # Mock pgvector registration
                     mock_conn = MagicMock()
                     mock_cursor = MagicMock()
                     mock_conn.cursor.return_value = mock_cursor
                     mock_cursor.fetchone.return_value = {
                         "id": 1,
-                        "created_at": MagicMock(isoformat=lambda: "2026-01-09T00:00:00Z")
+                        "created_at": MagicMock(isoformat=lambda: "2026-01-09T00:00:00Z"),
+                        "memory_strength": 0.5  # Include in mock response
                     }
                     mock_get_conn.return_value.__enter__.return_value = mock_conn
 
@@ -112,24 +116,26 @@ class TestMemoryStrengthValidation:
     @pytest.mark.asyncio
     async def test_memory_strength_explicit_none_uses_default(self):
         """Test that explicit None uses default 0.5."""
-        # Mock OpenAI client
-        with patch("mcp_server.tools.handle_compress_to_l2_insight.OpenAI") as mock_openai:
+        # Mock OpenAI client (module-level import)
+        with patch("mcp_server.tools.OpenAI") as mock_openai:
             mock_client = AsyncMock()
             mock_openai.return_value = mock_client
 
-            # Mock embedding generation
+            # Mock embedding generation (module-level import)
             with patch(
-                "mcp_server.tools.handle_compress_to_l2_insight.get_embedding_with_retry",
+                "mcp_server.tools.get_embedding_with_retry",
                 return_value=[0.1] * 1536
             ):
-                # Mock database connection
-                with patch("mcp_server.tools.handle_compress_to_l2_insight.get_connection") as mock_get_conn:
+                # Mock database connection (module-level import)
+                with patch("mcp_server.tools.get_connection") as mock_get_conn, \
+                     patch("mcp_server.tools.register_vector"):  # Mock pgvector registration
                     mock_conn = MagicMock()
                     mock_cursor = MagicMock()
                     mock_conn.cursor.return_value = mock_cursor
                     mock_cursor.fetchone.return_value = {
                         "id": 1,
-                        "created_at": MagicMock(isoformat=lambda: "2026-01-09T00:00:00Z")
+                        "created_at": MagicMock(isoformat=lambda: "2026-01-09T00:00:00Z"),
+                        "memory_strength": 0.5  # Include in mock response
                     }
                     mock_get_conn.return_value.__enter__.return_value = mock_conn
 
@@ -146,24 +152,26 @@ class TestMemoryStrengthValidation:
     @pytest.mark.asyncio
     async def test_memory_strength_in_metadata(self):
         """Test that memory_strength is included in metadata."""
-        # Mock OpenAI client
-        with patch("mcp_server.tools.handle_compress_to_l2_insight.OpenAI") as mock_openai:
+        # Mock OpenAI client (module-level import)
+        with patch("mcp_server.tools.OpenAI") as mock_openai:
             mock_client = AsyncMock()
             mock_openai.return_value = mock_client
 
-            # Mock embedding generation
+            # Mock embedding generation (module-level import)
             with patch(
-                "mcp_server.tools.handle_compress_to_l2_insight.get_embedding_with_retry",
+                "mcp_server.tools.get_embedding_with_retry",
                 return_value=[0.1] * 1536
             ):
-                # Mock database connection
-                with patch("mcp_server.tools.handle_compress_to_l2_insight.get_connection") as mock_get_conn:
+                # Mock database connection (module-level import)
+                with patch("mcp_server.tools.get_connection") as mock_get_conn, \
+                     patch("mcp_server.tools.register_vector"):  # Mock pgvector registration
                     mock_conn = MagicMock()
                     mock_cursor = MagicMock()
                     mock_conn.cursor.return_value = mock_cursor
                     mock_cursor.fetchone.return_value = {
                         "id": 1,
-                        "created_at": MagicMock(isoformat=lambda: "2026-01-09T00:00:00Z")
+                        "created_at": MagicMock(isoformat=lambda: "2026-01-09T00:00:00Z"),
+                        "memory_strength": 0.8  # Match test input
                     }
                     mock_get_conn.return_value.__enter__.return_value = mock_conn
 
