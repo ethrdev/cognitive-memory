@@ -45,6 +45,7 @@ from mcp_server.tools.count_by_type import handle_count_by_type
 from mcp_server.tools.list_episodes import handle_list_episodes
 from mcp_server.tools.get_insight_by_id import handle_get_insight_by_id
 from mcp_server.tools.insights.update import handle_update_insight
+from mcp_server.tools.insights.delete import handle_delete_insight
 from mcp_server.tools.dissonance_check import handle_dissonance_check as handle_dissonance_check_impl, DISSONANCE_CHECK_TOOL
 from mcp_server.tools.resolve_dissonance import handle_resolve_dissonance, RESOLVE_DISSONANCE_TOOL
 from mcp_server.tools.smf_pending_proposals import handle_smf_pending_proposals
@@ -239,7 +240,7 @@ async def semantic_search(
         SELECT id, content, source_ids, metadata, io_category, is_identity, source_file, memory_strength,
                embedding <=> %s::vector AS distance
         FROM l2_insights
-        WHERE 1=1 {filter_clause}{sector_clause}
+        WHERE is_deleted = FALSE {filter_clause}{sector_clause}
         ORDER BY distance
         LIMIT %s;
         """
@@ -326,7 +327,8 @@ async def keyword_search(
                    plainto_tsquery('{language}', %s)
                ) AS rank
         FROM l2_insights
-        WHERE to_tsvector('{language}', content) @@ plainto_tsquery('{language}', %s)
+        WHERE is_deleted = FALSE
+          AND to_tsvector('{language}', content) @@ plainto_tsquery('{language}', %s)
         {filter_clause}{sector_clause}
         ORDER BY rank DESC
         LIMIT %s;
@@ -2711,6 +2713,31 @@ def register_tools(server: Server) -> list[Tool]:
                 "required": ["insight_id", "actor", "reason"],
             },
         ),
+        Tool(
+            name="delete_insight",
+            description="Delete an existing L2 insight (soft-delete). I/O can delete directly, ethr requires bilateral consent via SMF. Implements EP-2 (Soft-Delete) and EP-3 (History-on-Mutation) patterns.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "insight_id": {
+                        "type": "integer",
+                        "description": "ID of the insight to delete",
+                        "minimum": 1,
+                    },
+                    "actor": {
+                        "type": "string",
+                        "enum": ["I/O", "ethr"],
+                        "description": "Who is initiating this deletion",
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": "Why this insight is being deleted (required for audit)",
+                        "minLength": 1,
+                    },
+                },
+                "required": ["insight_id", "actor", "reason"],
+            },
+        ),
         DISSONANCE_CHECK_TOOL,
         RESOLVE_DISSONANCE_TOOL,
         Tool(
@@ -2918,6 +2945,7 @@ def register_tools(server: Server) -> list[Tool]:
         "list_episodes": handle_list_episodes,
         "get_insight_by_id": handle_get_insight_by_id,
         "update_insight": handle_update_insight,
+        "delete_insight": handle_delete_insight,
         "dissonance_check": handle_dissonance_check,
         "resolve_dissonance": handle_resolve_dissonance,
         "smf_pending_proposals": handle_smf_pending_proposals,

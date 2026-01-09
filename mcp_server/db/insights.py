@@ -343,3 +343,116 @@ def execute_update_with_history(
         logger.error(f"Failed to execute update with history: {e}")
         raise
 
+
+def execute_delete_with_history(
+    insight_id: int,
+    actor: str = "I/O",
+    reason: str = ""
+) -> dict[str, Any]:
+    """
+    Execute an insight soft-delete with atomic history write (EP-3).
+
+    This combines the soft-delete and history write in a SINGLE transaction.
+    If either operation fails, both are rolled back (atomic).
+
+    Args:
+        insight_id: The ID of the insight to soft-delete
+        actor: Who is making the change ("I/O" or "ethr")
+        reason: Reason for the deletion (required for audit)
+
+    Returns:
+        Dict with success status, insight_id, history_id, deletion info
+
+    Raises:
+        ValueError: If validation fails (not found, already deleted, no reason)
+        Exception: If database operation fails
+    """
+    # AC-6: Reason required
+    if not reason:
+        raise ValueError("reason required")
+
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Start transaction
+            cursor.execute("BEGIN")
+
+            try:
+                # Step 1: Get current state (for history)
+                cursor.execute(
+                    """
+                    SELECT content, memory_strength, is_deleted
+                    FROM l2_insights
+                    WHERE id = %s
+                    """,
+                    (insight_id,),
+                )
+
+                row = cursor.fetchone()
+                if row is None:
+                    raise ValueError(f"Insight {insight_id} not found")
+
+                if row["is_deleted"]:
+                    raise ValueError("already deleted")
+
+                old_content = row["content"]
+                old_memory_strength = row.get("memory_strength", 0.5)
+
+                # Step 2: Write history FIRST (EP-3)
+                cursor.execute(
+                    """
+                    INSERT INTO l2_insight_history
+                    (insight_id, action, actor, old_content, new_content,
+                     old_memory_strength, new_memory_strength, reason)
+                    VALUES (%s, 'DELETE', %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                    """,
+                    (insight_id, actor, old_content, None,
+                     old_memory_strength, None, reason),
+                )
+
+                history_row = cursor.fetchone()
+                history_id = history_row[0] if history_row else None
+
+                # Step 3: Execute soft-delete (EP-2)
+                cursor.execute(
+                    """
+                    UPDATE l2_insights
+                    SET is_deleted = TRUE,
+                        deleted_at = NOW(),
+                        deleted_by = %s,
+                        deleted_reason = %s
+                    WHERE id = %s
+                    """,
+                    (actor, reason, insight_id),
+                )
+
+                # Commit transaction
+                cursor.execute("COMMIT")
+                conn.commit()
+
+                logger.info(f"Executed soft-delete with history: insight_id={insight_id}, history_id={history_id}")
+                return {
+                    "success": True,
+                    "insight_id": insight_id,
+                    "history_id": history_id,
+                    "status": "deleted",
+                    "recoverable": True
+                }
+
+            except Exception as e:
+                # Rollback on any error
+                cursor.execute("ROLLBACK")
+                raise
+
+            finally:
+                cursor.close()
+
+    except ValueError:
+        # Re-raise validation errors
+        raise
+    except Exception as e:
+        logger.error(f"Failed to execute delete with history: {e}")
+        raise
+
