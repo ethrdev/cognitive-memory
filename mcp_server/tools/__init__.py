@@ -143,6 +143,22 @@ def rrf_fusion(
         merged_scores.values(), key=lambda x: x["score"], reverse=True
     )
 
+    # Story 26.1: Apply memory_strength multiplier for IEF Integration
+    # Insights with higher memory_strength rank higher in results
+    for result in sorted_results:
+        # Only apply to l2_insights (not episode memories or graph results)
+        if isinstance(result.get("id"), int) and result.get("source_type") != "episode_memory":
+            # Get memory_strength from result if available, default to 0.5
+            memory_strength = result.get("memory_strength", 0.5)
+            # Calculate final score: rrf_score * memory_strength
+            result["rrf_score"] = result["score"]  # Store original RRF score
+            result["score"] = result["score"] * memory_strength  # Apply multiplier
+
+    # Re-sort by final score (after memory_strength multiplier applied)
+    sorted_results = sorted(
+        sorted_results, key=lambda x: x.get("score", 0), reverse=True
+    )
+
     return sorted_results
 
 
@@ -219,7 +235,7 @@ async def semantic_search(
     # Cosine distance: <=> operator
     # Lower distance = higher similarity
     query = f"""
-        SELECT id, content, source_ids, metadata, io_category, is_identity, source_file,
+        SELECT id, content, source_ids, metadata, io_category, is_identity, source_file, memory_strength,
                embedding <=> %s::vector AS distance
         FROM l2_insights
         WHERE 1=1 {filter_clause}{sector_clause}
@@ -244,6 +260,7 @@ async def semantic_search(
             "io_category": row["io_category"],
             "is_identity": row["is_identity"],
             "source_file": row["source_file"],
+            "memory_strength": row["memory_strength"],  # Story 26.1: I/O's Bedeutungszuweisung
             "distance": row["distance"],
             "rank": idx + 1,
         }
@@ -302,7 +319,7 @@ async def keyword_search(
     # plainto_tsquery: Converts plain text to tsquery (handles spaces, punctuation)
     # Using parameterized language config for multi-language support
     query = f"""
-        SELECT id, content, source_ids, metadata, io_category, is_identity, source_file,
+        SELECT id, content, source_ids, metadata, io_category, is_identity, source_file, memory_strength,
                ts_rank(
                    to_tsvector('{language}', content),
                    plainto_tsquery('{language}', %s)
@@ -331,6 +348,7 @@ async def keyword_search(
             "io_category": row["io_category"],
             "is_identity": row["is_identity"],
             "source_file": row["source_file"],
+            "memory_strength": row["memory_strength"],  # Story 26.1: I/O's Bedeutungszuweisung
             "rank": row["rank"],
             "rank_position": idx + 1,
         }
@@ -1014,6 +1032,7 @@ async def handle_compress_to_l2_insight(arguments: dict[str, Any]) -> dict[str, 
         # Extract parameters
         content = arguments.get("content")
         source_ids = arguments.get("source_ids")
+        memory_strength = arguments.get("memory_strength", 0.5)  # Default 0.5 for backward compatibility
 
         # Parameter validation
         if not content or not isinstance(content, str):
@@ -1028,6 +1047,14 @@ async def handle_compress_to_l2_insight(arguments: dict[str, Any]) -> dict[str, 
             return {
                 "error": "Parameter validation failed",
                 "details": "Missing or invalid 'source_ids' parameter (must be array of integers)",
+                "tool": "compress_to_l2_insight",
+            }
+
+        # Validate memory_strength range (0.0 to 1.0)
+        if memory_strength is not None and not (0.0 <= memory_strength <= 1.0):
+            return {
+                "error": "Parameter validation failed",
+                "details": "memory_strength must be between 0.0 and 1.0",
                 "tool": "compress_to_l2_insight",
             }
 
@@ -1060,6 +1087,7 @@ async def handle_compress_to_l2_insight(arguments: dict[str, Any]) -> dict[str, 
         metadata: dict[str, Any] = {
             "fidelity_score": fidelity_score,
             "fidelity_warning": fidelity_score < fidelity_threshold,
+            "memory_strength": memory_strength,  # I/O's Bedeutungszuweisung
         }
 
         if fidelity_score < fidelity_threshold:
@@ -1092,11 +1120,11 @@ async def handle_compress_to_l2_insight(arguments: dict[str, Any]) -> dict[str, 
                 # Insert insight with embedding and metadata
                 cursor.execute(
                     """
-                    INSERT INTO l2_insights (content, embedding, source_ids, metadata)
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO l2_insights (content, embedding, source_ids, metadata, memory_strength)
+                    VALUES (%s, %s, %s, %s, %s)
                     RETURNING id, created_at;
                     """,
-                    (content, embedding, source_ids, json.dumps(metadata)),
+                    (content, embedding, source_ids, json.dumps(metadata), memory_strength),
                 )
 
                 result = cursor.fetchone()
@@ -1112,6 +1140,7 @@ async def handle_compress_to_l2_insight(arguments: dict[str, Any]) -> dict[str, 
                     "id": insight_id,
                     "embedding_status": embedding_status,
                     "fidelity_score": fidelity_score,
+                    "memory_strength": memory_strength,
                     "timestamp": created_at,
                 }
 
@@ -2207,6 +2236,13 @@ def register_tools(server: Server) -> list[Tool]:
                         "type": "array",
                         "items": {"type": "integer"},
                         "description": "Array of L0 raw memory IDs that were compressed into this insight",
+                    },
+                    "memory_strength": {
+                        "type": "number",
+                        "minimum": 0.0,
+                        "maximum": 1.0,
+                        "default": 0.5,
+                        "description": "I/O's memory strength (0.0=weak, 1.0=strong, 0.5=neutral default)",
                     },
                 },
                 "required": ["content", "source_ids"],
