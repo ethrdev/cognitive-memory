@@ -6,6 +6,7 @@ import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import psycopg2
+from psycopg2.extras import DictCursor
 import pytest
 from dotenv import load_dotenv
 
@@ -34,9 +35,12 @@ def conn(database_url: str) -> connection:
 
     Uses DATABASE_URL from environment. Each test gets a fresh connection
     that is rolled back after the test to avoid side effects.
+
+    IMPORTANT: Uses DictCursor to match production behavior where
+    cursor results are accessed as dictionaries (e.g., result["id"]).
     """
     try:
-        connection = psycopg2.connect(database_url)
+        connection = psycopg2.connect(database_url, cursor_factory=DictCursor)
         connection.autocommit = False
         yield connection
         connection.rollback()

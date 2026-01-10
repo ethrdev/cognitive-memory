@@ -6,16 +6,21 @@ verifying IEF integration in hybrid_search.
 
 Author: Epic 26 Implementation
 Story: 26.1 - Memory Strength Field für I/O's Bedeutungszuweisung
+
+Code Review Fix (2026-01-10):
+- Fixed import paths: use handle_* functions
+- Fixed mock paths: OpenAI is module-level import
+- Added proper mocking for hybrid_search tests
 """
 
 import pytest
+from unittest.mock import patch, AsyncMock, MagicMock
 
 
 @pytest.mark.asyncio
 async def test_compress_with_memory_strength_high(conn):
     """Test creating an insight with high memory_strength (0.9)."""
     from mcp_server.tools import handle_compress_to_l2_insight
-    from unittest.mock import patch, AsyncMock, MagicMock
 
     # Mock OpenAI client (module-level import)
     with patch("mcp_server.tools.OpenAI") as mock_openai:
@@ -28,7 +33,7 @@ async def test_compress_with_memory_strength_high(conn):
             return_value=[0.1] * 1536
         ):
             with patch("mcp_server.tools.get_connection") as mock_get_conn, \
-             patch("mcp_server.tools.register_vector"):  # Mock pgvector registration
+                 patch("mcp_server.tools.register_vector"):
                 # Use real connection for INSERT
                 mock_get_conn.return_value.__enter__.return_value = conn
 
@@ -58,8 +63,7 @@ async def test_compress_with_memory_strength_high(conn):
 @pytest.mark.asyncio
 async def test_compress_with_memory_strength_low(conn):
     """Test creating an insight with low memory_strength (0.2)."""
-    from mcp_server.tools import compress_to_l2_insight
-    from unittest.mock import patch, AsyncMock
+    from mcp_server.tools import handle_compress_to_l2_insight
 
     # Mock OpenAI client (module-level import)
     with patch("mcp_server.tools.OpenAI") as mock_openai:
@@ -72,7 +76,7 @@ async def test_compress_with_memory_strength_low(conn):
             return_value=[0.1] * 1536
         ):
             with patch("mcp_server.tools.get_connection") as mock_get_conn, \
-             patch("mcp_server.tools.register_vector"):  # Mock pgvector registration
+                 patch("mcp_server.tools.register_vector"):
                 # Use real connection for INSERT
                 mock_get_conn.return_value.__enter__.return_value = conn
 
@@ -100,8 +104,7 @@ async def test_compress_with_memory_strength_low(conn):
 @pytest.mark.asyncio
 async def test_compress_without_memory_strength_uses_default(conn):
     """Test backward compatibility - creating insight without memory_strength uses 0.5."""
-    from mcp_server.tools import compress_to_l2_insight
-    from unittest.mock import patch, AsyncMock
+    from mcp_server.tools import handle_compress_to_l2_insight
 
     # Mock OpenAI client (module-level import)
     with patch("mcp_server.tools.OpenAI") as mock_openai:
@@ -114,7 +117,7 @@ async def test_compress_without_memory_strength_uses_default(conn):
             return_value=[0.1] * 1536
         ):
             with patch("mcp_server.tools.get_connection") as mock_get_conn, \
-             patch("mcp_server.tools.register_vector"):  # Mock pgvector registration
+                 patch("mcp_server.tools.register_vector"):
                 # Use real connection for INSERT
                 mock_get_conn.return_value.__enter__.return_value = conn
 
@@ -143,21 +146,18 @@ async def test_compress_without_memory_strength_uses_default(conn):
 async def test_ief_score_incorporates_memory_strength(conn):
     """Test that insights with higher memory_strength rank higher in hybrid_search."""
     from mcp_server.tools import handle_compress_to_l2_insight, handle_hybrid_search
-    from unittest.mock import patch, AsyncMock
 
-    # Mock OpenAI client for compression
-    with patch("mcp_server.tools.handle_compress_to_l2_insight.OpenAI") as mock_openai:
+    # First, create insights with different memory_strength
+    with patch("mcp_server.tools.OpenAI") as mock_openai:
         mock_client = AsyncMock()
         mock_openai.return_value = mock_client
 
-        # Mock embedding generation (module-level import)
         with patch(
             "mcp_server.tools.get_embedding_with_retry",
             return_value=[0.1] * 1536
         ):
             with patch("mcp_server.tools.get_connection") as mock_get_conn, \
-             patch("mcp_server.tools.register_vector"):  # Mock pgvector registration
-                # Use real connection
+                 patch("mcp_server.tools.register_vector"):
                 mock_get_conn.return_value.__enter__.return_value = conn
 
                 # Create two insights with SAME content but different memory_strength
@@ -180,13 +180,22 @@ async def test_ief_score_incorporates_memory_strength(conn):
                 strong_id = result_strong["id"]
 
     # Now perform hybrid_search to see ranking
-    search_result = await hybrid_search({
-        "query_text": "test content for memory strength ranking",
-        "top_k": 10
-    })
+    with patch("mcp_server.tools.OpenAI") as mock_openai:
+        mock_client = AsyncMock()
+        mock_openai.return_value = mock_client
+
+        with patch("mcp_server.tools.generate_query_embedding", return_value=[0.1] * 1536):
+            with patch("mcp_server.tools.get_connection") as mock_get_conn, \
+                 patch("mcp_server.tools.register_vector"):
+                mock_get_conn.return_value.__enter__.return_value = conn
+
+                search_result = await handle_hybrid_search({
+                    "query_text": "test content for memory strength ranking",
+                    "top_k": 10
+                })
 
     assert "error" not in search_result
-    results = search_result["results"]
+    results = search_result.get("results", [])
 
     # Find positions of our insights
     weak_pos = None
@@ -215,11 +224,19 @@ async def test_hybrid_search_includes_memory_strength_in_results(conn):
     """Test that hybrid_search results include memory_strength field."""
     from mcp_server.tools import handle_hybrid_search
 
-    # Perform a search
-    result = await handle_hybrid_search({
-        "query_text": "test",
-        "top_k": 5
-    })
+    with patch("mcp_server.tools.OpenAI") as mock_openai:
+        mock_client = AsyncMock()
+        mock_openai.return_value = mock_client
+
+        with patch("mcp_server.tools.generate_query_embedding", return_value=[0.1] * 1536):
+            with patch("mcp_server.tools.get_connection") as mock_get_conn, \
+                 patch("mcp_server.tools.register_vector"):
+                mock_get_conn.return_value.__enter__.return_value = conn
+
+                result = await handle_hybrid_search({
+                    "query_text": "test",
+                    "top_k": 5
+                })
 
     assert "error" not in result
     assert "results" in result
@@ -244,15 +261,24 @@ async def test_hybrid_search_includes_memory_strength_in_results(conn):
 @pytest.mark.asyncio
 async def test_rrf_score_preserved_after_memory_strength_multiplier(conn):
     """Test that original RRF score is preserved when memory_strength is applied."""
-    from mcp_server.tools import hybrid_search
+    from mcp_server.tools import handle_hybrid_search
 
-    result = await hybrid_search({
-        "query_text": "test",
-        "top_k": 5
-    })
+    with patch("mcp_server.tools.OpenAI") as mock_openai:
+        mock_client = AsyncMock()
+        mock_openai.return_value = mock_client
+
+        with patch("mcp_server.tools.generate_query_embedding", return_value=[0.1] * 1536):
+            with patch("mcp_server.tools.get_connection") as mock_get_conn, \
+                 patch("mcp_server.tools.register_vector"):
+                mock_get_conn.return_value.__enter__.return_value = conn
+
+                result = await handle_hybrid_search({
+                    "query_text": "test",
+                    "top_k": 5
+                })
 
     assert "error" not in result
-    results = result["results"]
+    results = result.get("results", [])
 
     # Check that l2_insights have both score (final) and rrf_score (original)
     l2_results = [
