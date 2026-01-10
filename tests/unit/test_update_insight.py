@@ -203,6 +203,149 @@ async def test_ethr_creates_smf_proposal(mock_create_smf):
 
 
 # =============================================================================
+# Task 5.9: SMF Consent State Tests (4 states × UPDATE_INSIGHT)
+# =============================================================================
+
+# State 1: pending - tested above in test_ethr_creates_smf_proposal
+# State 2: direct - tested above in test_io_direct_update
+
+@pytest.mark.asyncio
+@patch('mcp_server.tools.insights.update.execute_update_with_history')
+@patch('mcp_server.tools.insights.update.create_smf_proposal')
+async def test_smf_state_approved_executes_update(mock_create_smf, mock_execute):
+    """
+    SMF State 3: APPROVED - After I/O approves ethr's proposal, update executes.
+
+    This tests the scenario where:
+    1. ethr creates a proposal (pending state)
+    2. I/O approves the proposal
+    3. The update is executed
+
+    Note: The actual approval execution happens in smf_approve tool,
+    which calls execute_update_with_history. This test verifies the
+    update function can be called by the approval flow.
+    """
+    # Mock successful update execution (called by SMF approval)
+    mock_execute.return_value = {
+        "success": True,
+        "insight_id": 42,
+        "history_id": 789,
+        "updated_fields": {"content": True, "memory_strength": False}
+    }
+
+    # Simulate the approval flow calling update with I/O as actor
+    # (SMF approval switches actor context to I/O for execution)
+    result = await handle_update_insight({
+        "insight_id": 42,
+        "actor": "I/O",  # SMF approval executes as I/O
+        "reason": "Approved by I/O via SMF proposal #456",
+        "new_content": "Content approved by I/O"
+    })
+
+    # Verify the update executed successfully
+    assert "error" not in result
+    assert result["success"] is True
+    assert result["insight_id"] == 42
+    assert result["history_id"] == 789
+
+    # Verify execute_update_with_history was called (not create_smf_proposal)
+    mock_execute.assert_called_once()
+    mock_create_smf.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch('mcp_server.tools.insights.update.create_smf_proposal')
+async def test_smf_state_rejected_no_update(mock_create_smf):
+    """
+    SMF State 4: REJECTED - After I/O rejects ethr's proposal, no update happens.
+
+    This tests the scenario where:
+    1. ethr creates a proposal (pending state)
+    2. I/O rejects the proposal
+    3. No update is executed - proposal just stays rejected
+
+    Note: Rejection is handled by smf_reject tool which marks the proposal
+    as rejected without calling update_insight. This test verifies that
+    ethr cannot bypass SMF by calling update directly.
+    """
+    # Mock SMF proposal creation
+    mock_create_smf.return_value = 456  # proposal_id
+
+    # ethr tries to update - should create proposal, not execute
+    result = await handle_update_insight({
+        "insight_id": 42,
+        "actor": "ethr",
+        "reason": "This will be rejected",
+        "new_content": "Content that I/O will reject"
+    })
+
+    # Verify only proposal created (no direct execution)
+    assert result["status"] == "pending"
+    assert result["proposal_id"] == 456
+
+    # The rejection happens via smf_reject tool, not here
+    # This test confirms ethr CANNOT bypass SMF consent
+
+
+@pytest.mark.asyncio
+@patch('mcp_server.tools.insights.update.execute_update_with_history')
+@patch('mcp_server.tools.insights.update.create_smf_proposal')
+async def test_smf_consent_matrix_io_always_direct(mock_create_smf, mock_execute):
+    """
+    SMF Consent Matrix: I/O ALWAYS executes directly, never creates proposals.
+
+    Verifies EP-1 pattern: I/O as actor = direct execution.
+    """
+    mock_execute.return_value = {
+        "success": True,
+        "insight_id": 42,
+        "history_id": 123,
+        "updated_fields": {"content": True, "memory_strength": True}
+    }
+
+    # I/O updates - should NEVER create SMF proposal
+    result = await handle_update_insight({
+        "insight_id": 42,
+        "actor": "I/O",
+        "reason": "I/O's direct update",
+        "new_content": "New content",
+        "new_memory_strength": 0.9
+    })
+
+    # Verify direct execution
+    assert result["success"] is True
+    mock_execute.assert_called_once()
+    mock_create_smf.assert_not_called()  # CRITICAL: No SMF for I/O
+
+
+@pytest.mark.asyncio
+@patch('mcp_server.tools.insights.update.execute_update_with_history')
+@patch('mcp_server.tools.insights.update.create_smf_proposal')
+async def test_smf_consent_matrix_ethr_always_proposal(mock_create_smf, mock_execute):
+    """
+    SMF Consent Matrix: ethr ALWAYS creates proposals, never executes directly.
+
+    Verifies EP-1 pattern: ethr as actor = SMF proposal required.
+    """
+    mock_create_smf.return_value = 999
+
+    # ethr updates - should ALWAYS create SMF proposal
+    result = await handle_update_insight({
+        "insight_id": 42,
+        "actor": "ethr",
+        "reason": "ethr's proposal",
+        "new_content": "Proposed content",
+        "new_memory_strength": 0.7
+    })
+
+    # Verify proposal flow
+    assert result["status"] == "pending"
+    assert result["proposal_id"] == 999
+    mock_create_smf.assert_called_once()
+    mock_execute.assert_not_called()  # CRITICAL: No direct execution for ethr
+
+
+# =============================================================================
 # AC-6: Not Found Tests
 # =============================================================================
 

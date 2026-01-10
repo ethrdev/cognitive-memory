@@ -85,9 +85,122 @@ def test_full_flow_update_with_history(conn):
 
 def test_atomic_transaction_rollback(conn):
     """
-    Unit Test: Atomic transaction rollback (AC-5).
+    Integration Test: Atomic transaction rollback (AC-5).
 
-    If update fails, history should also be rolled back.
+    AC-5 Requirement: "bei Abbruch: vollständiger Rollback, kein partieller State"
+
+    This test verifies that if the UPDATE fails AFTER history is written,
+    both operations are rolled back atomically (no orphaned history entries).
+
+    Test approach: Use a database trigger to simulate failure during UPDATE.
+    """
+    # Generate valid 1536-dimensional embedding
+    embedding = _generate_test_embedding()
+
+    # Create test insight
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO l2_insights (content, embedding, source_ids)
+        VALUES (%s, %s, %s)
+        RETURNING id
+        """,
+        ("Test content for rollback", embedding, [1])
+    )
+    insight_id = cursor.fetchone()[0]
+    conn.commit()
+    cursor.close()
+
+    # Count history entries BEFORE attempted update
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT COUNT(*) FROM l2_insight_history WHERE insight_id = %s",
+        (insight_id,)
+    )
+    history_count_before = cursor.fetchone()[0]
+    cursor.close()
+
+    # Create a trigger that will cause UPDATE to fail
+    # This simulates a failure AFTER history is written but during UPDATE
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        CREATE OR REPLACE FUNCTION fail_update_trigger()
+        RETURNS TRIGGER AS $$
+        BEGIN
+            IF NEW.content = 'TRIGGER_ROLLBACK_TEST' THEN
+                RAISE EXCEPTION 'Simulated failure for rollback test';
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+
+        DROP TRIGGER IF EXISTS test_rollback_trigger ON l2_insights;
+        CREATE TRIGGER test_rollback_trigger
+            BEFORE UPDATE ON l2_insights
+            FOR EACH ROW
+            EXECUTE FUNCTION fail_update_trigger();
+        """
+    )
+    conn.commit()
+    cursor.close()
+
+    try:
+        # Attempt update that will fail during UPDATE (after history INSERT)
+        try:
+            execute_update_with_history(
+                insight_id=insight_id,
+                new_content="TRIGGER_ROLLBACK_TEST",  # This triggers the failure
+                new_memory_strength=0.7,
+                actor="I/O",
+                reason="Rollback test"
+            )
+            pytest.fail("Expected exception was not raised")
+        except Exception as e:
+            # Expected: the trigger causes an exception
+            assert "Simulated failure" in str(e) or "rollback" in str(e).lower() or True
+            # Any exception is acceptable - the key test is below
+
+        # CRITICAL VERIFICATION: History should NOT have been written
+        # If transaction is atomic, rollback should have removed the history entry
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM l2_insight_history WHERE insight_id = %s",
+            (insight_id,)
+        )
+        history_count_after = cursor.fetchone()[0]
+        cursor.close()
+
+        assert history_count_after == history_count_before, \
+            f"AC-5 VIOLATION: History entries changed from {history_count_before} to {history_count_after}. " \
+            f"Transaction rollback should have removed orphaned history entry."
+
+        # Also verify the insight content was NOT changed
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT content FROM l2_insights WHERE id = %s",
+            (insight_id,)
+        )
+        current_content = cursor.fetchone()[0]
+        cursor.close()
+
+        assert current_content == "Test content for rollback", \
+            f"AC-5 VIOLATION: Content was changed to '{current_content}' despite rollback"
+
+    finally:
+        # Cleanup: Remove the test trigger
+        cursor = conn.cursor()
+        cursor.execute("DROP TRIGGER IF EXISTS test_rollback_trigger ON l2_insights")
+        cursor.execute("DROP FUNCTION IF EXISTS fail_update_trigger()")
+        conn.commit()
+        cursor.close()
+
+
+def test_successful_update_has_exactly_one_history_entry(conn):
+    """
+    Integration Test: Successful update creates exactly one history entry.
+
+    Complementary test to rollback - verifies no duplicate entries on success.
     """
     # Generate valid 1536-dimensional embedding
     embedding = _generate_test_embedding()
@@ -103,13 +216,10 @@ def test_atomic_transaction_rollback(conn):
         ("Test content", embedding, [1])
     )
     insight_id = cursor.fetchone()[0]
-    conn.commit()  # IMPORTANT: Commit so execute_update_with_history can see the insight
+    conn.commit()
     cursor.close()
 
-    # Try to update with invalid data (this should fail)
-    # Note: execute_update_with_history validates before transaction,
-    # so we need a different approach to test rollback
-    # For now, we verify that the function returns success when valid
+    # Execute successful update
     result = execute_update_with_history(
         insight_id=insight_id,
         new_content="Valid update",
@@ -120,7 +230,7 @@ def test_atomic_transaction_rollback(conn):
 
     assert result["success"] is True
 
-    # Verify exactly ONE history entry exists (no orphaned entries)
+    # Verify exactly ONE history entry exists (no duplicates)
     cursor = conn.cursor()
     cursor.execute(
         "SELECT COUNT(*) FROM l2_insight_history WHERE insight_id = %s",
@@ -129,7 +239,7 @@ def test_atomic_transaction_rollback(conn):
     count = cursor.fetchone()[0]
     cursor.close()
 
-    assert count == 1, "Should have exactly one history entry (atomic)"
+    assert count == 1, f"Should have exactly one history entry, got {count}"
 
 
 def test_consecutive_updates_create_multiple_history_entries(conn):

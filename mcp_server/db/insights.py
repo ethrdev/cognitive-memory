@@ -37,11 +37,13 @@ def get_insight_by_id(insight_id: int) -> dict[str, Any] | None:
             cursor = conn.cursor()
 
             # Simple SELECT by ID - no embedding (too large)
+            # Filter out soft-deleted insights (is_deleted = FALSE)
+            # Consistent with execute_update_with_history behavior
             cursor.execute(
                 """
                 SELECT id, content, source_ids, metadata, created_at, memory_strength
                 FROM l2_insights
-                WHERE id = %s
+                WHERE id = %s AND is_deleted = FALSE
                 """,
                 (insight_id,),
             )
