@@ -12,7 +12,7 @@ packages = [
 [tool.poetry.dependencies]
 python = "^3.11"
 mcp = "^1.23.0"  # CVE fix: DNS rebinding protection
-urllib3 = "^2.6.0"  # CVE fix: compressed data handling
+urllib3 = "^2.6.3"  # CVE fix: compressed data handling
 psycopg2-binary = "^2.9.0"
 pgvector = "^0.2.0"
 openai = "^1.0.0"
