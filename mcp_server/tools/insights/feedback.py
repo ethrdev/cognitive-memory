@@ -106,7 +106,7 @@ async def handle_submit_insight_feedback(arguments: dict[str, Any]) -> dict[str,
 
         # Check if insight exists and is not soft-deleted (EP-2)
         # Use same pattern as update_insight and delete_insight
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
 
             cursor.execute(

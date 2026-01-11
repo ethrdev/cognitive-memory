@@ -21,7 +21,7 @@ async def test_io_integration():
     insight_id = None
     
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             register_vector(conn)
             cursor = conn.cursor()
             cursor.execute(
@@ -95,7 +95,7 @@ async def test_io_integration():
     finally:
         # Cleanup
         if insight_id:
-            with get_connection() as conn:
+            async with get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute("DELETE FROM l2_insights WHERE id = %s", (insight_id,))
                 conn.commit()

@@ -47,6 +47,7 @@ from mcp_server.tools.get_insight_by_id import handle_get_insight_by_id
 from mcp_server.tools.insights.update import handle_update_insight
 from mcp_server.tools.insights.delete import handle_delete_insight
 from mcp_server.tools.insights.feedback import handle_submit_insight_feedback
+from mcp_server.tools.insights.history import handle_get_insight_history
 from mcp_server.tools.dissonance_check import handle_dissonance_check as handle_dissonance_check_impl, DISSONANCE_CHECK_TOOL
 from mcp_server.tools.resolve_dissonance import handle_resolve_dissonance, RESOLVE_DISSONANCE_TOOL
 from mcp_server.tools.smf_pending_proposals import handle_smf_pending_proposals
@@ -660,7 +661,7 @@ async def graph_search(
     # Step 2-4: For each entity, lookup nodes and neighbors
     for entity in entities:
         # Lookup node by name
-        node = get_node_by_name(entity)
+        node = await get_node_by_name(entity)
 
         if not node:
             logger.debug(f"No node found for entity: {entity}")
@@ -670,7 +671,7 @@ async def graph_search(
 
         # Query neighbors (depth=1 for performance)
         try:
-            neighbors = query_neighbors(node["id"], relation_type=None, max_depth=1)
+            neighbors = await query_neighbors(node["id"], relation_type=None, max_depth=1)
         except Exception as e:
             logger.warning(f"Failed to query neighbors for node {node['id']}: {e}")
             continue
@@ -681,7 +682,7 @@ async def graph_search(
 
             # Also check if the node itself has a vector_id
             # Need to look up the actual node to get its vector_id
-            neighbor_node = get_node_by_name(neighbor["name"])
+            neighbor_node = await get_node_by_name(neighbor["name"])
             if neighbor_node and neighbor_node.get("vector_id"):
                 vector_id = neighbor_node["vector_id"]
 
@@ -986,7 +987,7 @@ async def handle_store_raw_dialogue(arguments: dict[str, Any]) -> dict[str, Any]
         metadata_json = json.dumps(metadata) if metadata else None
 
         # Insert into database
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor: cursor_type = conn.cursor()
             cursor.execute(
                 """
@@ -1129,7 +1130,7 @@ async def handle_compress_to_l2_insight(arguments: dict[str, Any]) -> dict[str, 
 
         # Store in database
         try:
-            with get_connection() as conn:
+            async with get_connection() as conn:
                 # Register vector type for pgvector
                 register_vector(conn)
 
@@ -1373,7 +1374,7 @@ async def handle_hybrid_search(arguments: dict[str, Any]) -> dict[str, Any]:
             applied_weights = get_adjusted_weights(is_relational)
 
         # Execute searches
-        with get_connection() as conn:
+        async with get_connection() as conn:
             # Run L2 Insights searches (Story 9-4: Pass sector_filter)
             semantic_results = await semantic_search(query_embedding, top_k, conn, filter_params, sector_filter)
             keyword_results = await keyword_search(query_text, top_k, conn, filter_params, sector_filter)
@@ -1644,7 +1645,7 @@ async def handle_update_working_memory(arguments: dict[str, Any]) -> dict[str, A
             }
 
         # ENTIRE operation in single transaction to prevent race conditions
-        with get_connection() as conn:
+        async with get_connection() as conn:
             try:
                 cursor: cursor_type = conn.cursor()
 
@@ -1757,7 +1758,7 @@ async def handle_delete_working_memory(arguments: dict[str, Any]) -> dict[str, A
             }
 
         # Delete operation
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor: cursor_type = conn.cursor()
 
             # Check if entry exists before delete
@@ -1928,7 +1929,7 @@ async def handle_store_episode(arguments: dict[str, Any]) -> dict[str, Any]:
 
     # Store episode in database
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             result = await add_episode(query, reward, reflection, conn)
             logger.info(f"Successfully stored episode with ID: {result['id']}")
             return result
@@ -2751,6 +2752,21 @@ def register_tools(server: Server) -> list[Tool]:
             },
         ),
         Tool(
+            name="get_insight_history",
+            description="Retrieve the complete revision history of an L2 insight. Returns all historical versions chronologically (oldest first). Works for both active and soft-deleted insights (Archäologie-Prinzip). Story 26.7: Revision History.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "insight_id": {
+                        "type": "integer",
+                        "description": "ID of the L2 insight to get history for",
+                        "minimum": 1
+                    }
+                },
+                "required": ["insight_id"],
+            },
+        ),
+        Tool(
             name="submit_insight_feedback",
             description="Submit feedback about whether a recalled L2 insight was helpful. Implements EP-4 (Lazy Evaluation) - feedback is stored, IEF updates on next query.",
             inputSchema={
@@ -2983,6 +2999,7 @@ def register_tools(server: Server) -> list[Tool]:
         "update_insight": handle_update_insight,
         "delete_insight": handle_delete_insight,
         "submit_insight_feedback": handle_submit_insight_feedback,
+        "get_insight_history": handle_get_insight_history,
         "dissonance_check": handle_dissonance_check,
         "resolve_dissonance": handle_resolve_dissonance,
         "smf_pending_proposals": handle_smf_pending_proposals,

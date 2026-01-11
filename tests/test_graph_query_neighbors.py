@@ -937,7 +937,7 @@ class TestSectorFilter:
         from mcp_server.db.graph import query_neighbors
 
         # Empty list should return immediately without DB query
-        result = query_neighbors(
+        result = await query_neighbors(
             node_id="some-id",
             sector_filter=[]
         )

@@ -17,7 +17,7 @@ from mcp_server.db.connection import get_connection
 logger = logging.getLogger(__name__)
 
 
-def list_episodes(
+async def list_episodes(
     limit: int = 50,
     offset: int = 0,
     since: datetime | None = None,
@@ -41,7 +41,7 @@ def list_episodes(
         Exception: If database operation fails
     """
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
 
             # Data Query - get_connection() returns RealDictCursor

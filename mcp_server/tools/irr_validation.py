@@ -110,7 +110,7 @@ async def handle_get_validation_summary(arguments: dict[str, Any]) -> dict[str, 
     try:
         from mcp_server.db.connection import get_connection
 
-        with get_connection() as conn:
+        async with get_connection() as conn:
             with conn.cursor() as cursor:
                 # Get all validation results
                 cursor.execute(

@@ -62,7 +62,7 @@ async def handle_get_edge(arguments: dict[str, Any]) -> dict[str, Any]:
 
         # Database lookup
         try:
-            edge = get_edge_by_names(source_name, target_name, relation)
+            edge = await get_edge_by_names(source_name, target_name, relation)
 
             if edge:
                 logger.debug(

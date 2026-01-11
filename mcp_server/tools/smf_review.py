@@ -57,7 +57,7 @@ async def handle_smf_review(arguments: dict[str, Any]) -> dict[str, Any]:
         affected_edges_details = []
         for edge_id in proposal.get("affected_edges", []):
             try:
-                edge = get_edge_by_id(edge_id)
+                edge = await get_edge_by_id(edge_id)
                 if edge:
                     edge_details = {
                         "edge_id": edge["id"],

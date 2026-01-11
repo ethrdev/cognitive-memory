@@ -17,7 +17,7 @@ from mcp_server.db.connection import get_connection
 logger = logging.getLogger(__name__)
 
 
-def get_insight_by_id(insight_id: int) -> dict[str, Any] | None:
+async def get_insight_by_id(insight_id: int) -> dict[str, Any] | None:
     """
     Get an L2 insight by its ID.
 
@@ -33,7 +33,7 @@ def get_insight_by_id(insight_id: int) -> dict[str, Any] | None:
         Exception: If database operation fails
     """
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
 
             # Simple SELECT by ID - no embedding (too large)
@@ -72,7 +72,7 @@ def get_insight_by_id(insight_id: int) -> dict[str, Any] | None:
         raise
 
 
-def update_insight_in_db(
+async def update_insight_in_db(
     insight_id: int,
     new_content: str | None = None,
     new_memory_strength: float | None = None
@@ -96,7 +96,7 @@ def update_insight_in_db(
         Exception: If database operation fails
     """
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
 
             # Check if insight exists and is not deleted (AC-6, AC-7)
@@ -155,7 +155,7 @@ def update_insight_in_db(
         raise
 
 
-def write_insight_history(
+async def write_insight_history(
     insight_id: int,
     action: str,
     actor: str,
@@ -188,7 +188,7 @@ def write_insight_history(
         Exception: If database operation fails
     """
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
 
             # Insert history entry
@@ -218,7 +218,7 @@ def write_insight_history(
         raise
 
 
-def execute_update_with_history(
+async def execute_update_with_history(
     insight_id: int,
     new_content: str | None = None,
     new_memory_strength: float | None = None,
@@ -258,7 +258,7 @@ def execute_update_with_history(
         raise ValueError("new_content cannot be empty")
 
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
 
             # Start transaction
@@ -346,7 +346,7 @@ def execute_update_with_history(
         raise
 
 
-def execute_delete_with_history(
+async def execute_delete_with_history(
     insight_id: int,
     actor: str = "I/O",
     reason: str = ""
@@ -374,7 +374,7 @@ def execute_delete_with_history(
         raise ValueError("reason required")
 
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
 
             # Start transaction

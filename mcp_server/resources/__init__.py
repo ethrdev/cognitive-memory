@@ -168,7 +168,7 @@ async def handle_l2_insights(uri: str) -> list[dict[str, Any]] | dict[str, Any]:
     client = OpenAI(api_key=api_key)
 
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             # Register pgvector type
             register_vector(conn)
 
@@ -243,7 +243,7 @@ async def handle_working_memory(uri: str) -> list[dict[str, Any]] | dict[str, An
         }
 
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -322,7 +322,7 @@ async def handle_episode_memory(uri: str) -> list[dict[str, Any]] | dict[str, An
     client = OpenAI(api_key=api_key)
 
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             # Register pgvector type
             register_vector(conn)
 
@@ -417,7 +417,7 @@ async def handle_l0_raw(uri: str) -> list[dict[str, Any]] | dict[str, Any]:
             }
 
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             # Build query with optional filters
             query = """
                 SELECT id, session_id, timestamp, speaker, content, metadata
@@ -513,7 +513,7 @@ async def handle_stale_memory(uri: str) -> list[dict[str, Any]] | dict[str, Any]
         }
 
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             # Build query with optional importance filter
             query = """
                 SELECT id, original_content, archived_at, importance, reason

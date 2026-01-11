@@ -7,11 +7,12 @@ and graceful shutdown capabilities.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import time
-from collections.abc import Iterator
-from contextlib import contextmanager
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager, contextmanager
 
 import psycopg2
 from psycopg2 import pool
@@ -37,7 +38,7 @@ _connection_pool: pool.SimpleConnectionPool | None = None
 _logger = logging.getLogger(__name__)
 
 
-def initialize_pool(
+async def initialize_pool(
     min_connections: int = 1,
     max_connections: int = 10,
     connection_timeout: int = 5,
@@ -79,7 +80,7 @@ def initialize_pool(
         )
 
         # Test initial connection
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT 1 as test")
             result = cursor.fetchone()
@@ -110,8 +111,8 @@ def _is_transient_error(error: Exception) -> bool:
     return any(pattern.lower() in error_str for pattern in _TRANSIENT_ERROR_PATTERNS)
 
 
-@contextmanager
-def get_connection(max_retries: int = 3, retry_delay: float = 0.5) -> Iterator[connection]:
+@asynccontextmanager
+async def get_connection(max_retries: int = 3, retry_delay: float = 0.5) -> AsyncIterator[connection]:
     """
     Get a database connection from the pool with retry logic for transient errors.
 
@@ -135,9 +136,9 @@ def get_connection(max_retries: int = 3, retry_delay: float = 0.5) -> Iterator[c
 
     last_error: Exception | None = None
     current_delay = retry_delay
+    conn = None
 
     for attempt in range(max_retries + 1):
-        conn = None
         try:
             # Get connection from pool
             conn = _connection_pool.getconn()
@@ -162,7 +163,7 @@ def get_connection(max_retries: int = 3, retry_delay: float = 0.5) -> Iterator[c
                 # Check if error is transient and we should retry
                 if _is_transient_error(e) and attempt < max_retries:
                     _logger.info(f"Transient error detected, retrying in {current_delay:.1f}s...")
-                    time.sleep(current_delay)
+                    await asyncio.sleep(current_delay)
                     current_delay *= 2  # Exponential backoff
                     last_error = e
                     continue
@@ -170,21 +171,19 @@ def get_connection(max_retries: int = 3, retry_delay: float = 0.5) -> Iterator[c
                 raise ConnectionHealthError(f"Connection health check failed: {e}") from e
 
             _logger.debug("Database connection acquired from pool")
+            yield conn
+            return  # Success - exit the retry loop
 
-            try:
-                yield conn
-                return  # Success - exit the retry loop
-            except psycopg2.Error as e:
-                # Check if the error during operation is transient
-                if _is_transient_error(e) and attempt < max_retries:
-                    _logger.warning(f"Transient database error (attempt {attempt + 1}/{max_retries + 1}): {e}")
-                    _logger.info(f"Retrying in {current_delay:.1f}s...")
-                    time.sleep(current_delay)
-                    current_delay *= 2
-                    last_error = e
-                    continue
-                raise
-
+        except psycopg2.Error as e:
+            # Check if the error during operation is transient
+            if _is_transient_error(e) and attempt < max_retries:
+                _logger.warning(f"Transient database error (attempt {attempt + 1}/{max_retries + 1}): {e}")
+                _logger.info(f"Retrying in {current_delay:.1f}s...")
+                time.sleep(current_delay)
+                current_delay *= 2
+                last_error = e
+                continue
+            raise
         except pool.PoolError as e:
             if attempt < max_retries:
                 _logger.warning(f"Pool error (attempt {attempt + 1}/{max_retries + 1}): {e}")
@@ -194,15 +193,6 @@ def get_connection(max_retries: int = 3, retry_delay: float = 0.5) -> Iterator[c
                 continue
             _logger.error("Connection pool exhausted after all retries")
             raise PoolError("Connection pool exhausted - no available connections") from e
-        except psycopg2.Error as e:
-            if _is_transient_error(e) and attempt < max_retries:
-                _logger.warning(f"Transient connection error (attempt {attempt + 1}/{max_retries + 1}): {e}")
-                time.sleep(current_delay)
-                current_delay *= 2
-                last_error = e
-                continue
-            _logger.error(f"Database connection error: {e}")
-            raise PoolError(f"Database connection failed: {e}") from e
         finally:
             # Always return connection to pool if it was successfully acquired
             if conn is not None:
@@ -211,6 +201,7 @@ def get_connection(max_retries: int = 3, retry_delay: float = 0.5) -> Iterator[c
                     _logger.debug("Database connection returned to pool")
                 except Exception as e:
                     _logger.error(f"Error returning connection to pool: {e}")
+                conn = None
 
     # All retries exhausted
     if last_error:
@@ -280,15 +271,12 @@ def get_pool_status() -> dict:
     }
 
 
-def test_database_connection() -> bool:
+async def _test_database_connection_async() -> bool:
     """
-    Test database connection with a simple query.
-
-    Returns:
-        True if connection is successful, False otherwise
+    Async version of database connection test.
     """
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT version() as version, current_database() as database"
@@ -303,11 +291,54 @@ def test_database_connection() -> bool:
         return False
 
 
-# Initialize pool when module is imported (if environment is ready)
-try:
-    if os.getenv("DATABASE_URL"):
-        initialize_pool()
-    else:
-        _logger.warning("DATABASE_URL not set, connection pool not initialized")
-except Exception as e:
-    _logger.error(f"Failed to auto-initialize connection pool: {e}")
+def test_database_connection() -> bool:
+    """
+    Test database connection with a simple query.
+
+    Note: This is a sync wrapper. Use _test_database_connection_async() for async code.
+
+    Returns:
+        True if connection is successful, False otherwise
+    """
+    import asyncio
+    try:
+        return asyncio.run(_test_database_connection_async())
+    except Exception as e:
+        _logger.error(f"Database test failed: {e}")
+        return False
+
+
+# Note: Connection pool initialization is now async.
+# Use initialize_pool_sync() for sync code or await initialize_pool() for async code.
+
+
+def initialize_pool_sync(
+    min_connections: int = 1,
+    max_connections: int = 10,
+    connection_timeout: int = 5,
+) -> None:
+    """
+    Sync wrapper for initialize_pool().
+
+    For async code, use: await initialize_pool()
+
+    Args:
+        min_connections: Minimum number of connections to maintain
+        max_connections: Maximum number of connections allowed
+        connection_timeout: Timeout in seconds for connection attempts
+
+    Raises:
+        PoolError: If pool initialization fails
+    """
+    import asyncio
+    try:
+        asyncio.run(
+            initialize_pool(
+                min_connections=min_connections,
+                max_connections=max_connections,
+                connection_timeout=connection_timeout,
+            )
+        )
+    except Exception as e:
+        _logger.error(f"Failed to initialize connection pool: {e}")
+        raise

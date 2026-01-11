@@ -97,7 +97,7 @@ class DissonanceEngine:
     constitutive knowledge graphs.
     """
 
-    def __init__(self, haiku_client: Optional[HaikuClient] = None):
+    async def __init__(self, haiku_client: Optional[HaikuClient] = None):
         """Initialize the dissonance engine."""
         self.haiku_client = haiku_client or HaikuClient()
 
@@ -325,7 +325,7 @@ class DissonanceEngine:
 
             return [dict(row) for row in cursor.fetchall()]
 
-    def _get_memory_strength(self, edge_id: str) -> Optional[float]:
+    async def _get_memory_strength(self, edge_id: str) -> Optional[float]:
         """
         Get memory strength for an edge from related l2_insights.
 
@@ -428,7 +428,7 @@ class DissonanceEngine:
                 requires_review=False
             )
 
-    def create_nuance_review(self, dissonance: DissonanceResult) -> NuanceReviewProposal:
+    async def create_nuance_review(self, dissonance: DissonanceResult) -> NuanceReviewProposal:
         """Erstellt einen Review-Proposal für NUANCE-Klassifikation."""
         proposal = NuanceReviewProposal(
             id=str(uuid.uuid4()),
@@ -724,7 +724,7 @@ def _mark_edge_as_superseded(edge_id: str, superseded_at: str, superseded_by: st
         return False
 
 
-def resolve_dissonance(
+async def resolve_dissonance(
     review_id: str,  # KORRIGIERT: review_id statt dissonance_id
     resolution_type: str,  # "EVOLUTION" | "CONTRADICTION" | "NUANCE"
     context: str,
@@ -795,7 +795,7 @@ def resolve_dissonance(
         base_properties["affected_edges"] = [str(edge_a_id), str(edge_b_id)]
 
     # 5. Erstelle Resolution-Node (als Hyperedge-Anker)
-    resolution_node = get_or_create_node(
+    resolution_node = await get_or_create_node(
         name=f"Resolution-{review_id[:8]}",
         label="Resolution"
     )
@@ -806,11 +806,11 @@ def resolve_dissonance(
     # Die target_id verwendet Edge-UUIDs statt Node-UUIDs. Das PostgreSQL-Schema
     # erlaubt dies technisch (beide sind UUIDs), aber es ist semantisch nicht korrekt.
     # Die Resolution-Properties (supersedes, affected_edges) enthalten die Edge-IDs
-    # als Referenzen. Für query_neighbors() Traversal ist dies NICHT nutzbar -
+    # als Referenzen. Für await query_neighbors() Traversal ist dies NICHT nutzbar -
     # stattdessen wird _mark_edge_as_superseded() verwendet um Edges direkt zu markieren.
     #
     # Future Enhancement (Epic 8): Echtes Hypergraph-Schema mit Edge-zu-Edge Relationen.
-    resolution_edge = add_edge(
+    resolution_edge = await add_edge(
         source_id=resolution_node["node_id"],
         target_id=edge_a_id,  # MVP: Edge-ID als Pseudo-Node-Target
         relation="RESOLVES",
@@ -819,7 +819,7 @@ def resolve_dissonance(
     )
 
     # 7. Erstelle zweite RESOLVES-Edge zu Edge B (vollständige Hyperedge)
-    add_edge(
+    await add_edge(
         source_id=resolution_node["node_id"],
         target_id=edge_b_id,  # MVP: Edge-ID als Pseudo-Node-Target
         relation="RESOLVES",
@@ -856,7 +856,7 @@ def resolve_dissonance(
     }
 
 
-def get_resolutions_for_node(node_name: str) -> list[dict[str, Any]]:
+async def get_resolutions_for_node(node_name: str) -> list[dict[str, Any]]:
     """
     Findet alle Resolution-Hyperedges die einen Node betreffen.
 
@@ -871,13 +871,13 @@ def get_resolutions_for_node(node_name: str) -> list[dict[str, Any]]:
     # Import here to avoid circular import
     from mcp_server.db.graph import query_neighbors, get_node_by_name
 
-    node = get_node_by_name(node_name)
+    node = await get_node_by_name(node_name)
     if not node:
         return []
 
-    # MEDIUM-3 FIX: get_node_by_name() returns "id", not "node_id"
+    # MEDIUM-3 FIX: await get_node_by_name() returns "id", not "node_id"
     # Suche alle RESOLVES-Edges die auf diesen Node zeigen
-    neighbors = query_neighbors(
+    neighbors = await query_neighbors(
         node_id=node["id"],  # Fixed: was node["node_id"]
         relation_type="RESOLVES",
         direction="incoming",

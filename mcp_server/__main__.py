@@ -45,7 +45,7 @@ except Exception as e:
     sys.exit(1)
 
 # Local imports (after environment is loaded)
-from mcp_server.db.connection import close_all_connections, get_connection  # noqa: E402
+from mcp_server.db.connection import close_all_connections, get_connection, initialize_pool  # noqa: E402
 from mcp_server.health.haiku_health_check import periodic_health_check  # noqa: E402
 from mcp_server.resources import register_resources  # noqa: E402
 from mcp_server.tools import register_tools  # noqa: E402
@@ -172,9 +172,17 @@ async def main() -> None:
 
         logger.info(f"Registered {len(tools)} tools and {len(resources)} resources")
 
+        # Initialize database connection pool
+        try:
+            await initialize_pool()
+            logger.info("Database connection pool initialized")
+        except Exception as e:
+            logger.error(f"Failed to initialize connection pool: {e}")
+            logger.warning("Server will continue but database operations may fail")
+
         # Test database connection
         try:
-            with get_connection() as conn:
+            async with get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT version()")
                 version = cursor.fetchone()[0]

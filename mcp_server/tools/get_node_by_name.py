@@ -43,7 +43,7 @@ async def handle_get_node_by_name(arguments: dict[str, Any]) -> dict[str, Any]:
 
         # Database lookup
         try:
-            node = get_node_by_name(name)
+            node = await get_node_by_name(name)
 
             if node:
                 logger.debug(f"Node found: id={node['id']}, name={name}")

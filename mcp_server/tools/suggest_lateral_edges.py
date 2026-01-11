@@ -95,7 +95,7 @@ async def handle_suggest_lateral_edges(arguments: dict[str, Any]) -> dict[str, A
             }
 
         # 1. Verify the node exists
-        source_node = get_node_by_name(node_name)
+        source_node = await get_node_by_name(node_name)
         if not source_node:
             return {
                 "error": "Node not found",
@@ -106,7 +106,7 @@ async def handle_suggest_lateral_edges(arguments: dict[str, Any]) -> dict[str, A
         source_node_id = source_node["id"]
 
         # 2. Get already-connected nodes (to exclude them)
-        connected_neighbors = query_neighbors(
+        connected_neighbors = await query_neighbors(
             node_id=source_node_id,
             relation_type=None,  # All relations
             max_depth=1,
@@ -130,7 +130,7 @@ async def handle_suggest_lateral_edges(arguments: dict[str, Any]) -> dict[str, A
             }
 
         # Search for semantically similar L2 insights and check if they have graph connections
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
 
             # First, search L2 insights for semantic matches
@@ -192,7 +192,7 @@ async def handle_suggest_lateral_edges(arguments: dict[str, Any]) -> dict[str, A
             similarity = float(row["similarity"])
 
             # Search for nodes mentioned in the L2 content
-            with get_connection() as conn:
+            async with get_connection() as conn:
                 cursor = conn.cursor()
                 # Find nodes whose names appear in this insight's content
                 cursor.execute(

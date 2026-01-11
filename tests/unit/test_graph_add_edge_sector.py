@@ -217,7 +217,7 @@ class TestEdgeUpdatePreservesClassification:
         assert result1["memory_sector"] == "semantic"
 
         # Verify database state after initial insert
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT memory_sector FROM edges WHERE source_id = %s::uuid",
@@ -240,7 +240,7 @@ class TestEdgeUpdatePreservesClassification:
         assert result2["memory_sector"] == "emotional"  # Reclassified!
 
         # Verify database state was actually updated (AC #8)
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT memory_sector FROM edges WHERE source_id = %s::uuid",
@@ -265,7 +265,7 @@ class TestEdgeUpdatePreservesClassification:
         assert result1["memory_sector"] == "emotional"
 
         # Verify database state after initial insert
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT memory_sector FROM edges WHERE source_id = %s::uuid",
@@ -287,7 +287,7 @@ class TestEdgeUpdatePreservesClassification:
         assert result2["memory_sector"] == "semantic"  # Reclassified back to default
 
         # Verify database state was actually updated (AC #8)
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT memory_sector FROM edges WHERE source_id = %s::uuid",

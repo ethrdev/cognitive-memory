@@ -282,7 +282,7 @@ class TestGetInsightByIdIntegration:
 
         try:
             # Insert test insight
-            with get_connection() as conn:
+            async with get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
@@ -309,7 +309,7 @@ class TestGetInsightByIdIntegration:
         finally:
             # Cleanup
             if test_id:
-                with get_connection() as conn:
+                async with get_connection() as conn:
                     cursor = conn.cursor()
                     cursor.execute(
                         "DELETE FROM l2_insights WHERE id = %s",

@@ -203,7 +203,7 @@ class TestGetAllCountsDBFunction:
             ]
             mock_conn.return_value.__enter__.return_value.cursor.return_value = mock_cursor
 
-            result = get_all_counts()
+            result = await get_all_counts()
 
             assert result["graph_nodes"] == 10
             assert result["graph_edges"] == 20
@@ -228,7 +228,7 @@ class TestGetAllCountsDBFunction:
             ]
             mock_conn.return_value.__enter__.return_value.cursor.return_value = mock_cursor
 
-            result = get_all_counts()
+            result = await get_all_counts()
 
             assert all(v == 0 for v in result.values())
 
@@ -276,7 +276,7 @@ class TestCountByTypeIntegration:
 
         finally:
             # Cleanup: Delete test node
-            with get_connection() as conn:
+            async with get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute("DELETE FROM nodes WHERE name = %s", (test_node_name,))
                 conn.commit()

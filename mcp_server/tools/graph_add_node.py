@@ -88,7 +88,7 @@ async def handle_graph_add_node(arguments: dict[str, Any]) -> dict[str, Any]:
 
         # Database operation with retry logic
         try:
-            result = add_node(
+            result = await add_node(
                 label=label,
                 name=name,
                 properties=properties_json,

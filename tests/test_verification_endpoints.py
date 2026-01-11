@@ -98,7 +98,7 @@ async def test_write_then_verify_node(require_database: Generator[None, None, No
     finally:
         # CLEANUP
         if created_node_id:
-            with get_connection() as conn:
+            async with get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute("DELETE FROM nodes WHERE id = %s", (created_node_id,))
                 conn.commit()
@@ -159,7 +159,7 @@ async def test_write_then_verify_edge(require_database: Generator[None, None, No
 
     finally:
         # CLEANUP: Edges BEFORE nodes (FK constraint!)
-        with get_connection() as conn:
+        async with get_connection() as conn:
             with conn.cursor() as cur:
                 if source_id and target_id:
                     cur.execute(
@@ -212,7 +212,7 @@ async def test_count_sanity_check(require_database: Generator[None, None, None])
         assert after_insert["graph_nodes"] == initial_nodes + 1
 
         # CLEANUP
-        with get_connection() as conn:
+        async with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("DELETE FROM nodes WHERE id = %s", (created_node_id,))
             conn.commit()
@@ -225,7 +225,7 @@ async def test_count_sanity_check(require_database: Generator[None, None, None])
     finally:
         # Safety cleanup in case of early failure
         if created_node_id:
-            with get_connection() as conn:
+            async with get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute("DELETE FROM nodes WHERE id = %s", (created_node_id,))
                 conn.commit()
@@ -275,7 +275,7 @@ async def test_list_episodes_verification(
     finally:
         # CLEANUP
         if episode_id:
-            with get_connection() as conn:
+            async with get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute("DELETE FROM episode_memory WHERE id = %s", (episode_id,))
                 conn.commit()
@@ -323,7 +323,7 @@ async def test_get_insight_by_id_verification(
     finally:
         # CLEANUP
         if insight_id:
-            with get_connection() as conn:
+            async with get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute("DELETE FROM l2_insights WHERE id = %s", (insight_id,))
                 conn.commit()
@@ -436,7 +436,7 @@ async def test_complete_verification_workflow(
         # ====================================================================
 
         # Delete edges BEFORE nodes (FK-Constraint!)
-        with get_connection() as conn:
+        async with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     "DELETE FROM edges WHERE source_id = %s OR target_id = %s",
@@ -456,7 +456,7 @@ async def test_complete_verification_workflow(
 
     finally:
         # Safety cleanup in case of early failure
-        with get_connection() as conn:
+        async with get_connection() as conn:
             with conn.cursor() as cur:
                 if node1_id or node2_id:
                     cur.execute(

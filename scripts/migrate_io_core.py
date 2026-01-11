@@ -48,7 +48,7 @@ async def process_file(client, filename, category, is_identity=False):
         chunks.append((current_header, '\n'.join(current_chunk)))
 
     # Insert chunks
-    with get_connection() as conn:
+    async with get_connection() as conn:
         register_vector(conn)
         cursor = conn.cursor()
         

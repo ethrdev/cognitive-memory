@@ -26,7 +26,7 @@ from psycopg2.extras import Json
 logger = logging.getLogger(__name__)
 
 
-def _build_properties_filter_sql(
+async def _build_properties_filter_sql(
     properties_filter: dict[str, Any]
 ) -> tuple[list[str], list[Any]]:
     """
@@ -112,7 +112,7 @@ class ConstitutiveEdgeProtectionError(Exception):
     - Bilateral consent means both I/O and ethr must agree
     """
 
-    def __init__(self, edge_id: str, relation: str, message: str | None = None):
+    async def __init__(self, edge_id: str, relation: str, message: str | None = None):
         self.edge_id = edge_id
         self.relation = relation
         self.message = message or (
@@ -124,7 +124,7 @@ class ConstitutiveEdgeProtectionError(Exception):
 
 
 
-def add_node(
+async def add_node(
     label: str,
     name: str,
     properties: str = "{}",
@@ -152,7 +152,7 @@ def add_node(
     logger = logging.getLogger(__name__)
 
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
 
             # Attempt to insert new node with idempotent conflict resolution
@@ -224,7 +224,7 @@ def add_node(
         raise
 
 
-def get_node_by_id(node_id: str) -> dict[str, Any] | None:
+async def get_node_by_id(node_id: str) -> dict[str, Any] | None:
     """
     Retrieve a node by its UUID.
 
@@ -237,7 +237,7 @@ def get_node_by_id(node_id: str) -> dict[str, Any] | None:
     logger = logging.getLogger(__name__)
 
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
 
             cursor.execute(
@@ -267,7 +267,7 @@ def get_node_by_id(node_id: str) -> dict[str, Any] | None:
         raise
 
 
-def get_nodes_by_label(label: str) -> list[dict[str, Any]]:
+async def get_nodes_by_label(label: str) -> list[dict[str, Any]]:
     """
     Retrieve all nodes with a specific label.
 
@@ -280,7 +280,7 @@ def get_nodes_by_label(label: str) -> list[dict[str, Any]]:
     logger = logging.getLogger(__name__)
 
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
 
             cursor.execute(
@@ -311,7 +311,7 @@ def get_nodes_by_label(label: str) -> list[dict[str, Any]]:
         raise
 
 
-def get_node_by_name(name: str) -> dict[str, Any] | None:
+async def get_node_by_name(name: str) -> dict[str, Any] | None:
     """
     Retrieve a node by its name.
 
@@ -324,7 +324,7 @@ def get_node_by_name(name: str) -> dict[str, Any] | None:
     logger = logging.getLogger(__name__)
 
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
 
             cursor.execute(
@@ -355,7 +355,7 @@ def get_node_by_name(name: str) -> dict[str, Any] | None:
         raise
 
 
-def update_node_properties(node_id: str, new_properties: dict[str, Any]) -> dict[str, Any]:
+async def update_node_properties(node_id: str, new_properties: dict[str, Any]) -> dict[str, Any]:
     """
     Update a node's properties by merging with existing properties.
 
@@ -374,7 +374,7 @@ def update_node_properties(node_id: str, new_properties: dict[str, Any]) -> dict
     logger = logging.getLogger(__name__)
 
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
 
             # Merge new properties with existing using jsonb concatenation
@@ -409,7 +409,7 @@ def update_node_properties(node_id: str, new_properties: dict[str, Any]) -> dict
         raise
 
 
-def get_default_importance(edge_data: dict) -> str:
+async def get_default_importance(edge_data: dict) -> str:
     """
     Default-Heuristik für importance Property (Story 7.3, AC Zeile 209-218).
 
@@ -450,7 +450,7 @@ def get_default_importance(edge_data: dict) -> str:
     return "medium"
 
 
-def _update_edge_access_stats(edge_ids: list[str], conn: Any) -> None:
+async def _update_edge_access_stats(edge_ids: list[str], conn: Any) -> None:
     """
     Update last_accessed and access_count for edges (TGN Minimal Story 7.2).
 
@@ -507,7 +507,7 @@ def _update_edge_access_stats(edge_ids: list[str], conn: Any) -> None:
         # Don't re-raise - access stats are non-critical
 
 
-def _update_edge_engagement(edge_ids: list[str], conn: Any) -> None:
+async def _update_edge_engagement(edge_ids: list[str], conn: Any) -> None:
     """
     Update last_engaged for edges when they are ACTIVELY used.
 
@@ -569,7 +569,7 @@ def _update_edge_engagement(edge_ids: list[str], conn: Any) -> None:
         # Don't re-raise - engagement stats are non-critical
 
 
-def _filter_superseded_edges(neighbors: list[dict[str, Any]]) -> list[dict[str, Any]]:
+async def _filter_superseded_edges(neighbors: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
     Filtert Edges die in einer EVOLUTION-Resolution als 'supersedes' markiert sind.
 
@@ -604,7 +604,7 @@ def _filter_superseded_edges(neighbors: list[dict[str, Any]]) -> list[dict[str, 
     return filtered
 
 
-def _is_edge_superseded(edge_id: str, properties: dict) -> bool:
+async def _is_edge_superseded(edge_id: str, properties: dict) -> bool:
     """
     Prüft ob eine Edge superseded wurde.
 
@@ -630,7 +630,7 @@ def _is_edge_superseded(edge_id: str, properties: dict) -> bool:
     return False
 
 
-def get_edge_by_id(edge_id: str) -> dict[str, Any] | None:
+async def get_edge_by_id(edge_id: str) -> dict[str, Any] | None:
     """
     Hole Edge-Details für relevance_score Berechnung.
 
@@ -641,7 +641,7 @@ def get_edge_by_id(edge_id: str) -> dict[str, Any] | None:
         Edge data dict oder None
     """
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -665,7 +665,7 @@ def get_edge_by_id(edge_id: str) -> dict[str, Any] | None:
         raise
 
 
-def get_edge_by_names(
+async def get_edge_by_names(
     source_name: str, target_name: str, relation: str
 ) -> dict[str, Any] | None:
     """
@@ -687,7 +687,7 @@ def get_edge_by_names(
     logger = logging.getLogger(__name__)
 
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
 
             # SQL with JOINs to resolve node names to IDs
@@ -732,7 +732,7 @@ def get_edge_by_names(
         raise
 
 
-def get_or_create_node(name: str, label: str = "Entity") -> dict[str, Any]:
+async def get_or_create_node(name: str, label: str = "Entity") -> dict[str, Any]:
     """
     Get or create a node by name and label.
 
@@ -749,7 +749,7 @@ def get_or_create_node(name: str, label: str = "Entity") -> dict[str, Any]:
     logger = logging.getLogger(__name__)
 
     try:
-        result = add_node(label=label, name=name, properties="{}", vector_id=None)
+        result = await add_node(label=label, name=name, properties="{}", vector_id=None)
         return {
             "node_id": result["node_id"],
             "created": result["created"]
@@ -759,7 +759,7 @@ def get_or_create_node(name: str, label: str = "Entity") -> dict[str, Any]:
         raise
 
 
-def add_edge(
+async def add_edge(
     source_id: str,
     target_id: str,
     relation: str,
@@ -813,7 +813,7 @@ def add_edge(
     properties = json.dumps(props)
 
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
 
             # Insert edge with idempotent conflict resolution
@@ -897,7 +897,7 @@ def add_edge(
         raise
 
 
-def query_neighbors(
+async def query_neighbors(
     node_id: str,
     relation_type: str | None = None,
     max_depth: int = 1,
@@ -951,7 +951,7 @@ def query_neighbors(
         return []
 
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
 
             # Build direction conditions for SQL
@@ -1205,7 +1205,7 @@ def query_neighbors(
             # NEU: Nach relevance_score Berechnung (vor Zeile 853)
             # MVP: Python-basierte Filterung (einfacher als SQL-Subquery)
             if not include_superseded:
-                neighbors = _filter_superseded_edges(neighbors)
+                neighbors = await _filter_superseded_edges(neighbors)
 
             # Sortierung: IEF wenn aktiviert, sonst relevance_score
             if use_ief:
@@ -1247,7 +1247,7 @@ def query_neighbors(
         raise
 
 
-def find_path(
+async def find_path(
     start_node_name: str,
     end_node_name: str,
     max_depth: int = 5,
@@ -1279,7 +1279,7 @@ def find_path(
     start_time = time.time()
 
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             from psycopg2.extras import DictCursor
             cursor = conn.cursor(cursor_factory=DictCursor)
 
@@ -1507,7 +1507,7 @@ def find_path(
         raise
 
 
-def delete_edge(
+async def delete_edge(
     edge_id: str,
     consent_given: bool = False
 ) -> dict[str, Any]:
@@ -1539,7 +1539,7 @@ def delete_edge(
     logger = logging.getLogger(__name__)
 
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
 
             # First, fetch the edge to check its properties
@@ -1644,7 +1644,7 @@ def delete_edge(
         raise
 
 
-def _log_audit_entry(
+async def _log_audit_entry(
     edge_id: str,
     action: str,
     blocked: bool,
@@ -1654,7 +1654,7 @@ def _log_audit_entry(
 ) -> None:
     """Log audit entry for constitutive edge operations to database."""
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -1669,7 +1669,7 @@ def _log_audit_entry(
         logger.error(f"Failed to persist audit log entry: edge_id={edge_id}, error={e}")
 
 
-def get_audit_log(
+async def get_audit_log(
     edge_id: str | None = None,
     action: str | None = None,
     actor: str | None = None,
@@ -1677,7 +1677,7 @@ def get_audit_log(
 ) -> list[dict[str, Any]]:
     """Retrieve audit log entries from database."""
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             query_parts = ["SELECT id, edge_id, action, blocked, reason, actor, properties, created_at FROM audit_log"]
             conditions, params = [], []
@@ -1716,10 +1716,10 @@ def get_audit_log(
         return []
 
 
-def clear_audit_log() -> int:
+async def clear_audit_log() -> int:
     """Clear all audit log entries. Only for testing purposes."""
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) as count FROM audit_log;")
             count = cursor.fetchone()["count"] or 0

@@ -227,7 +227,8 @@ class TestListEpisodesDBFunction:
         from mcp_server.db.episodes import list_episodes
         assert callable(list_episodes)
 
-    def test_list_episodes_db_returns_dict(self):
+    @pytest.mark.asyncio
+    async def test_list_episodes_db_returns_dict(self):
         """Test DB function returns expected dict structure."""
         from mcp_server.db.episodes import list_episodes
 
@@ -237,7 +238,7 @@ class TestListEpisodesDBFunction:
             mock_cursor.fetchone.return_value = {"count": 0}
             mock_conn.return_value.__enter__.return_value.cursor.return_value = mock_cursor
 
-            result = list_episodes()
+            result = await list_episodes()
 
             assert isinstance(result, dict)
             assert "episodes" in result
@@ -261,7 +262,7 @@ class TestListEpisodesIntegration:
 
         try:
             # Insert test episode
-            with get_connection() as conn:
+            async with get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
@@ -286,7 +287,7 @@ class TestListEpisodesIntegration:
 
         finally:
             # Cleanup
-            with get_connection() as conn:
+            async with get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     "DELETE FROM episode_memory WHERE query = %s",

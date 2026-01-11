@@ -207,7 +207,7 @@ class TestGetNodeByNameIntegration:
         finally:
             # Cleanup: Delete test node
             from mcp_server.db.connection import get_connection
-            with get_connection() as conn:
+            async with get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute("DELETE FROM nodes WHERE name = %s", (test_name,))
                 conn.commit()

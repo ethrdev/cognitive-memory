@@ -44,7 +44,7 @@ async def log_fallback_activation(
         ... )
     """
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
 
             # Convert metadata to JSONB
@@ -94,7 +94,7 @@ async def log_fallback_recovery(
         >>> await log_fallback_recovery('haiku_evaluation', 'health_check_success')
     """
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
 
             # Include recovery method in metadata
@@ -151,7 +151,7 @@ async def get_current_fallback_status() -> List[Dict[str, Any]]:
         ...     print(f"{s['service_name']}: {s['status']}")
     """
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
 
             # Get most recent status for each service
@@ -243,7 +243,7 @@ async def get_fallback_history(
         ...     print(f"{event['timestamp']}: {event['status']} - {event['reason']}")
     """
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
 
             if service_name:

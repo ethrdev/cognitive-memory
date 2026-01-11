@@ -154,7 +154,7 @@ async def handle_update_insight(arguments: dict[str, Any]) -> dict[str, Any]:
             logger.info(f"I/O updating insight {insight_id} directly")
 
             try:
-                result = execute_update_with_history(
+                result = await execute_update_with_history(
                     insight_id=insight_id,
                     new_content=new_content,
                     new_memory_strength=new_memory_strength,

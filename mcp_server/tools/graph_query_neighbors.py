@@ -151,7 +151,7 @@ async def handle_graph_query_neighbors(arguments: dict[str, Any]) -> dict[str, A
         # Database operation with retry logic
         try:
             # First, find the start node by name
-            start_node = get_node_by_name(name=node_name)
+            start_node = await get_node_by_name(name=node_name)
             if not start_node:
                 return {
                     "error": "Start node not found",
@@ -162,7 +162,7 @@ async def handle_graph_query_neighbors(arguments: dict[str, Any]) -> dict[str, A
             # Query neighbors with the specified parameters
             # Story 7.6: Added properties_filter parameter
             # Story 9-3: Added sector_filter parameter
-            result = query_neighbors(
+            result = await query_neighbors(
                 node_id=start_node["id"],
                 relation_type=relation_type,
                 max_depth=depth,

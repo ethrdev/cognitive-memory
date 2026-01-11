@@ -121,18 +121,18 @@ async def handle_graph_add_edge(arguments: dict[str, Any]) -> dict[str, Any]:
         # Database operation with auto-upsert logic
         try:
             # Get or create source node
-            source_result = get_or_create_node(name=source_name, label=source_label or "Entity")
+            source_result = await get_or_create_node(name=source_name, label=source_label or "Entity")
             source_id = source_result["node_id"]
             source_created = source_result["created"]
 
             # Get or create target node
-            target_result = get_or_create_node(name=target_name, label=target_label or "Entity")
+            target_result = await get_or_create_node(name=target_name, label=target_label or "Entity")
             target_id = target_result["node_id"]
             target_created = target_result["created"]
 
             # Create edge between nodes
-            # Story 8.3: Pass classified memory_sector to add_edge()
-            edge_result = add_edge(
+            # Story 8.3: Pass classified memory_sector to await add_edge()
+            edge_result = await add_edge(
                 source_id=source_id,
                 target_id=target_id,
                 relation=relation,

@@ -66,7 +66,7 @@ async def handle_list_episodes(arguments: dict[str, Any]) -> dict[str, Any]:
 
     # Database lookup
     try:
-        result = list_episodes(limit=limit, offset=offset, since=since)
+        result = await list_episodes(limit=limit, offset=offset, since=since)
 
         logger.debug(f"Listed {len(result['episodes'])} episodes")
 

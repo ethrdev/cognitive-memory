@@ -435,7 +435,7 @@ class TestGetEdgeIntegration:
         finally:
             # Cleanup: Delete test edge and nodes
             from mcp_server.db.connection import get_connection
-            with get_connection() as conn:
+            async with get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute("DELETE FROM edges WHERE relation = %s", (test_relation,))
                     cur.execute("DELETE FROM nodes WHERE name IN (%s, %s)", (test_source, test_target))

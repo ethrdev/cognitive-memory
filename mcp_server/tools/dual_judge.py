@@ -561,7 +561,7 @@ class DualJudgeEvaluator:
         import json
 
         try:
-            with get_connection() as conn:
+            async with get_connection() as conn:
                 cursor = conn.cursor()
 
                 # Build metadata JSONB with spot_check flag

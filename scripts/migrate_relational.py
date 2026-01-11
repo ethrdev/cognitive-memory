@@ -43,7 +43,7 @@ async def process_file(client, filename):
     if current_chunk:
         chunks.append((current_header, '\n'.join(current_chunk)))
 
-    with get_connection() as conn:
+    async with get_connection() as conn:
         register_vector(conn)
         cursor = conn.cursor()
         

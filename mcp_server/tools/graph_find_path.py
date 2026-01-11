@@ -108,7 +108,7 @@ async def handle_graph_find_path(arguments: dict[str, Any]) -> dict[str, Any]:
         # Database operation with timeout and retry logic
         try:
             # First, find the start and end nodes by name
-            start_node_data = get_node_by_name(name=start_node)
+            start_node_data = await get_node_by_name(name=start_node)
             if not start_node_data:
                 return {
                     "error": "Start node not found",
@@ -117,7 +117,7 @@ async def handle_graph_find_path(arguments: dict[str, Any]) -> dict[str, Any]:
                     "tool": "graph_find_path",
                 }
 
-            end_node_data = get_node_by_name(name=end_node)
+            end_node_data = await get_node_by_name(name=end_node)
             if not end_node_data:
                 return {
                     "error": "End node not found",
@@ -152,7 +152,7 @@ async def handle_graph_find_path(arguments: dict[str, Any]) -> dict[str, Any]:
                 }
 
             # Find path with the specified parameters
-            result = find_path(
+            result = await find_path(
                 start_node_name=start_node,
                 end_node_name=end_node,
                 max_depth=max_depth,

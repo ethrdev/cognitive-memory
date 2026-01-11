@@ -33,7 +33,7 @@ async def setup_test_data():
 
     client = OpenAI(api_key=api_key)
 
-    with get_connection() as conn:
+    async with get_connection() as conn:
         cursor = conn.cursor()
 
         # Clear existing test data
@@ -531,7 +531,7 @@ class TestReadOnlyVerification:
     @pytest.mark.asyncio
     async def test_read_only_verification(self, setup_test_data):
         """Test that all resources are read-only (no database mutations)."""
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
 
             # Count rows before resource calls
@@ -559,7 +559,7 @@ class TestReadOnlyVerification:
         await handle_l0_raw("memory://l0-raw?limit=10")
         await handle_stale_memory("memory://stale-memory?importance_min=0.5")
 
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
 
             # Count rows after resource calls

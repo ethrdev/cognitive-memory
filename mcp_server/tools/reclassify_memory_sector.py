@@ -217,7 +217,7 @@ async def _check_smf_approval(
     try:
         # Query smf_proposals table for APPROVED proposal
         # that affects our edge_id and is for reclassification
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT id, proposed_action, approval_level,
@@ -300,7 +300,7 @@ async def _get_edges_by_names(
 
     Story 10.1, Dev Notes: Multiple Edges Query Pattern
     """
-    with get_connection() as conn:
+    async with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT e.id, e.source_id, e.target_id, e.relation, e.weight,
@@ -360,7 +360,7 @@ async def _update_edge_sector(
             "actor": actor
         }
 
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
 
             # Update memory_sector and merge properties with last_reclassification

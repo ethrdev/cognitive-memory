@@ -235,7 +235,7 @@ async def _log_retry_success(
         retry_count: Number of retry attempts before success (1-4)
     """
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -274,7 +274,7 @@ async def _log_retry_failure(
         retry_count: Total retry attempts made (should be 4)
     """
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """

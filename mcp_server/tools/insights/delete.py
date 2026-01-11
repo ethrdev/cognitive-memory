@@ -113,7 +113,7 @@ async def handle_delete_insight(arguments: dict[str, Any]) -> dict[str, Any]:
             logger.info(f"I/O deleting insight {insight_id} directly")
 
             try:
-                result = execute_delete_with_history(
+                result = await execute_delete_with_history(
                     insight_id=insight_id,
                     actor="I/O",
                     reason=reason
