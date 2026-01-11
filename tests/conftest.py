@@ -19,6 +19,25 @@ from psycopg2.extensions import connection
 load_dotenv(".env.development")
 
 
+def pytest_configure(config):
+    """
+    Register custom pytest markers.
+
+    This prevents PytestUnknownMarkWarning when using custom markers.
+    """
+    # Standard markers
+    config.addinivalue_line("markers", "asyncio: marks tests as async")
+    config.addinivalue_line("markers", "integration: marks tests as integration tests requiring real database")
+
+    # Priority markers - direct markers for selective execution
+    # Usage: @pytest.mark.P0, @pytest.mark.P1, etc.
+    # Run: pytest -m P0 (runs only P0 tests)
+    config.addinivalue_line("markers", "P0: Critical path - must pass for merge")
+    config.addinivalue_line("markers", "P1: High priority - feature validation")
+    config.addinivalue_line("markers", "P2: Medium priority - edge cases")
+    config.addinivalue_line("markers", "P3: Low priority - nice to have")
+
+
 @pytest.fixture(scope="session")
 def database_url() -> str:
     """Get database URL from environment."""

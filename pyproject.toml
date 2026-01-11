@@ -136,6 +136,10 @@ python_functions = ["test_*"]
 markers = [
     "asyncio: marks tests as async",
     "integration: marks tests as integration tests requiring real database",
+    "P0: Critical path - must pass for merge",
+    "P1: High priority - feature validation",
+    "P2: Medium priority - edge cases",
+    "P3: Low priority - nice to have",
 ]
 asyncio_mode = "auto"
 

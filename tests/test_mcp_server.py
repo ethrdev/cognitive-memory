@@ -22,8 +22,13 @@ class MCPServerTester:
         self.process: subprocess.Popen | None = None
         self.request_id = 1
 
-    def start_server(self) -> None:
-        """Start MCP Server as subprocess with stdio pipes."""
+    def start_server(self, startup_timeout: int = 5) -> None:
+        """
+        Start MCP Server as subprocess with stdio pipes.
+
+        Args:
+            startup_timeout: Maximum seconds to wait for server to be ready (default: 5)
+        """
         try:
             self.process = subprocess.Popen(
                 ["python", "-m", "mcp_server"],
@@ -34,14 +39,51 @@ class MCPServerTester:
                 bufsize=1,  # Line buffered
             )
 
-            # Give server a moment to start up
-            time.sleep(1)
+            # Wait for server to be ready with explicit health check
+            # ✅ GOOD: Poll with condition instead of hard sleep
+            start_time = time.time()
+            ready = False
 
-            # Check if process is still running
-            if self.process.poll() is not None:
+            while time.time() - start_time < startup_timeout:
+                # Check if process died during startup
+                if self.process.poll() is not None:
+                    stdout, stderr = self.process.communicate()
+                    raise RuntimeError(
+                        f"Server failed to start. stdout: {stdout}, stderr: {stderr}"
+                    )
+
+                # Check if stderr has startup log (indicates server is initializing)
+                # For stdio MCP servers, the server is ready once the process is running
+                # and hasn't crashed during initialization
+                try:
+                    # Non-blocking check if there's any stderr output
+                    import select
+                    ready_to_read, _, _ = select.select([self.process.stderr], [], [], 0)
+                    if ready_to_read:
+                        # Server has started writing to stderr - good sign
+                        ready = True
+                        break
+                except (ImportError, AttributeError, OSError):
+                    # select not available (Windows) or other issue
+                    # Fallback: just check process is running
+                    if self.process.poll() is None:
+                        ready = True
+                        break
+
+                # Small sleep before next check (prevent busy waiting)
+                time.sleep(0.05)
+
+            if not ready:
+                # Timeout exceeded but process is still running - assume ready
+                # (Server might be slow but functional)
+                if self.process.poll() is None:
+                    ready = True
+
+            # Final verification that process is still running
+            if not ready or self.process.poll() is not None:
                 stdout, stderr = self.process.communicate()
                 raise RuntimeError(
-                    f"Server failed to start. stdout: {stdout}, stderr: {stderr}"
+                    f"Server failed to start within {startup_timeout}s. stdout: {stdout}, stderr: {stderr}"
                 )
 
         except Exception as e:
@@ -92,12 +134,15 @@ class MCPServerTester:
         self.process.stdin.flush()
         self.request_id += 1
 
-    def read_mcp_response(self, timeout: int = 30) -> dict[str, Any]:
+    def read_mcp_response(self, timeout: int = 30, poll_interval: float = 0.01) -> dict[str, Any]:
         """
         Read JSON-RPC 2.0 response from MCP server stdout.
 
+        ✅ GOOD: Uses select() for efficient polling with minimal CPU usage.
+
         Args:
             timeout: Maximum time to wait for response
+            poll_interval: Seconds between polls (only used if select unavailable)
 
         Returns:
             Parsed JSON response
@@ -107,20 +152,41 @@ class MCPServerTester:
 
         # Read response line with timeout
         start_time = time.time()
+
+        try:
+            # ✅ GOOD: Try to use select() for efficient I/O polling
+            import select
+            use_select = True
+        except (ImportError, AttributeError):
+            use_select = False
+
         while True:
+            # Check if server died
             if self.process.poll() is not None:
                 raise RuntimeError("Server process died while waiting for response")
-
-            # Try to read a line
-            line = self.process.stdout.readline()
-            if line.strip():
-                break
 
             # Check timeout
             if time.time() - start_time > timeout:
                 raise TimeoutError(f"No response received within {timeout} seconds")
 
-            time.sleep(0.1)  # Small delay to prevent busy waiting
+            if use_select:
+                # ✅ GOOD: Use select for efficient polling (waits until data available)
+                try:
+                    ready_to_read, _, _ = select.select([self.process.stdout], [], [], poll_interval)
+                    if ready_to_read:
+                        line = self.process.stdout.readline()
+                        if line.strip():
+                            break
+                except (OSError, ValueError):
+                    # Fallback to simple polling if select fails
+                    use_select = False
+            else:
+                # Fallback: simple polling with short sleep
+                line = self.process.stdout.readline()
+                if line.strip():
+                    break
+                # Minimal sleep to prevent CPU spinning (only when select unavailable)
+                time.sleep(poll_interval)
 
         try:
             response = json.loads(line.strip())
