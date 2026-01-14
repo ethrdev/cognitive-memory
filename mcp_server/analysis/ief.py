@@ -283,20 +283,19 @@ def on_feedback_received(
 
     from mcp_server.db.connection import get_connection_sync
 
-    conn = get_connection()
-    cursor = conn.cursor()
+    with get_connection_sync() as conn:
+        cursor = conn.cursor()
 
-    # Store feedback (Story 7.7, AC Zeile 411-420)
-    cursor.execute("""
-        INSERT INTO ief_feedback (
-            query_id, query_text, helpful, feedback_reason, constitutive_weight_used
-        ) VALUES (%s, %s, %s, %s, %s)
-        RETURNING id
-    """, (query_id, query_text, helpful, feedback_reason, constitutive_weight_used))
+        # Store feedback (Story 7.7, AC Zeile 411-420)
+        cursor.execute("""
+            INSERT INTO ief_feedback (
+                query_id, query_text, helpful, feedback_reason, constitutive_weight_used
+            ) VALUES (%s, %s, %s, %s, %s)
+            RETURNING id
+        """, (query_id, query_text, helpful, feedback_reason, constitutive_weight_used))
 
-    feedback_id = cursor.fetchone()[0]
-    conn.commit()
-    cursor.close()
+        feedback_id = cursor.fetchone()[0]
+        conn.commit()
 
     _feedback_count_since_calibration += 1
 
@@ -343,22 +342,21 @@ def recalibrate_weights() -> dict[str, float]:
 
     logger = logging.getLogger(__name__)
 
-    conn = get_connection()
-    cursor = conn.cursor()
+    with get_connection_sync() as conn:
+        cursor = conn.cursor()
 
-    # Get helpful and unhelpful query stats (Story 7.7, AC Zeile 423-429)
-    cursor.execute("""
-        SELECT
-            helpful,
-            AVG(constitutive_weight_used) as avg_weight,
-            COUNT(*) as count
-        FROM ief_feedback
-        WHERE helpful IS NOT NULL
-        GROUP BY helpful
-    """)
+        # Get helpful and unhelpful query stats (Story 7.7, AC Zeile 423-429)
+        cursor.execute("""
+            SELECT
+                helpful,
+                AVG(constitutive_weight_used) as avg_weight,
+                COUNT(*) as count
+            FROM ief_feedback
+            WHERE helpful IS NOT NULL
+            GROUP BY helpful
+        """)
 
-    results = cursor.fetchall()
-    cursor.close()
+        results = cursor.fetchall()
 
     helpful_avg_weight = None
     unhelpful_avg_weight = None

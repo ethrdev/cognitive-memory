@@ -14,7 +14,7 @@ from datetime import datetime, timezone, timedelta
 from enum import Enum
 from typing import Any, Optional
 
-from mcp_server.db.connection import get_connection_sync
+from mcp_server.db.connection import get_connection, get_connection_sync
 from mcp_server.db.graph import get_or_create_node, add_edge, get_edge_by_id
 from mcp_server.external.anthropic_client import HaikuClient
 from mcp_server.analysis.smf import (
@@ -123,7 +123,7 @@ class DissonanceEngine:
         # Validate UUID format for context_node
         if not re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', context_node):
             # If not UUID, try to find node by name
-            with get_connection_sync() as conn:
+            async with get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     "SELECT id FROM nodes WHERE name = %s",
@@ -216,7 +216,7 @@ class DissonanceEngine:
 
                             # Create review proposal for NUANCE classifications (AC #6)
                             if result.dissonance_type == DissonanceType.NUANCE:
-                                self.create_nuance_review(result)
+                                await self.create_nuance_review(result)
                                 pending_reviews.append(result)
                                 result.requires_review = True
 
@@ -494,7 +494,7 @@ class DissonanceEngine:
                 logger.warning(f"SMF proposal rejected due to framing violations: {violations}")
                 # Audit-Log für Framing Verstoß
                 from mcp_server.db.graph import _log_audit_entry
-                _log_audit_entry(
+                await _log_audit_entry(
                     edge_id=edge_a["id"],
                     action="FRAMING_VIOLATION",
                     blocked=True,
@@ -525,7 +525,7 @@ class DissonanceEngine:
                 logger.warning(f"SMF proposal rejected due to safeguard violation: {violation_reason}")
                 # Audit-Log für Safeguard Verstoß
                 from mcp_server.db.graph import _log_audit_entry
-                _log_audit_entry(
+                await _log_audit_entry(
                     edge_id=edge_a["id"],
                     action="SAFEGUARD_VIOLATION",
                     blocked=True,

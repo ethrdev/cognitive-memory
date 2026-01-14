@@ -31,7 +31,7 @@ from typing import List, Dict, Optional
 
 # Add parent directory to path for database imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from db.connection import get_connection, initialize_pool
+from db.connection import get_connection, get_connection_sync, initialize_pool
 
 # =============================================================================
 # Configuration

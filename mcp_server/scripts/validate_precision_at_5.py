@@ -210,7 +210,7 @@ def load_ground_truth() -> list[dict]:
         sys.path.insert(0, str(PROJECT_ROOT / "mcp_server"))
         load_dotenv(str(PROJECT_ROOT / ".env.development"))
 
-        from db.connection import get_connection
+        from db.connection import get_connection_sync
 
         with get_connection_sync() as conn:
             cursor = conn.cursor()

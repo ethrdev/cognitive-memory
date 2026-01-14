@@ -32,7 +32,7 @@ from uuid import UUID
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from db.connection import get_connection, initialize_pool
+from db.connection import get_connection, get_connection_sync, initialize_pool
 
 # Import classify_query_type from  (REUSE)
 # We'll import from validate_precision_at_5 once we verify path

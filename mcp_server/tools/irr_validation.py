@@ -39,11 +39,7 @@ async def handle_run_irr_validation(arguments: dict[str, Any]) -> dict[str, Any]
 
         # Validate parameters
         if (
-<<<<<<< Updated upstream
             not isinstance(kappa_threshold, int | float)
-=======
-            not isinstance(kappa_threshold, (int, float))
->>>>>>> Stashed changes
             or kappa_threshold <= 0
             or kappa_threshold > 1
         ):

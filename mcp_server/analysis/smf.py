@@ -22,7 +22,7 @@ from typing import Any, Optional, Tuple, List
 
 import yaml
 
-from mcp_server.db.connection import get_connection_sync
+from mcp_server.db.connection import get_connection, get_connection_sync
 from mcp_server.db.graph import get_edge_by_id, _log_audit_entry
 from mcp_server.external.anthropic_client import HaikuClient
 
@@ -136,7 +136,7 @@ async def _resolve_smf_dissonance(
         **base_properties,
         "resolved_edge_ids": edge_ids,  # Store edge references in properties
     }
-    update_node_properties(resolution_node["node_id"], resolution_metadata)
+    await update_node_properties(resolution_node["node_id"], resolution_metadata)
 
     return {
         "resolution_node_id": resolution_node["node_id"],
@@ -548,7 +548,7 @@ async def approve_proposal(
 
     fully_approved = False
 
-    with get_connection_sync() as conn:
+    async with get_connection() as conn:
         cursor = conn.cursor()
 
         # Update approval tracking
@@ -590,7 +590,6 @@ async def approve_proposal(
             """, (resolved_at, actor, undo_deadline, proposal_id))
 
         conn.commit()
-        cursor.close()
 
     # Execute resolution and audit outside connection context
     if fully_approved:
@@ -607,7 +606,7 @@ async def approve_proposal(
             )
 
         # Audit log
-        _log_audit_entry(
+        await _log_audit_entry(
             edge_id=str(proposal["affected_edges"][0]) if proposal["affected_edges"] else str(proposal_id),
             action="SMF_APPROVE",
             blocked=False,

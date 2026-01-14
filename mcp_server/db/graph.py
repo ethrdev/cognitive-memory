@@ -709,7 +709,7 @@ async def get_edge_by_names(
                 edge_id = str(result["id"])
 
                 # AUTO-UPDATE after successful fetch (Story 7.2)
-                _update_edge_access_stats([edge_id], conn)
+                await _update_edge_access_stats([edge_id], conn)
 
                 return {
                     "id": edge_id,
@@ -1573,7 +1573,7 @@ async def delete_edge(
             # Protection check: Block deletion of constitutive edges without consent
             if is_constitutive and not consent_given:
                 # Log the blocked attempt
-                _log_audit_entry(
+                await _log_audit_entry(
                     edge_id=edge_id,
                     action="DELETE_ATTEMPT",
                     blocked=True,
@@ -1607,7 +1607,7 @@ async def delete_edge(
 
             if deleted_result:
                 # Log successful deletion
-                _log_audit_entry(
+                await _log_audit_entry(
                     edge_id=edge_id,
                     action="DELETE_SUCCESS",
                     blocked=False,
