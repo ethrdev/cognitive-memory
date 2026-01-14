@@ -381,3 +381,31 @@ async def _update_edge_sector(
             "error": str(e)
         }, exc_info=True)
         raise
+
+
+async def handle_reclassify_memory_sector(arguments: dict[str, Any]) -> dict[str, Any]:
+    """
+    MCP Tool Handler for reclassify_memory_sector.
+
+    Extracts parameters from arguments dict and calls the main function.
+
+    Args:
+        arguments: Tool arguments containing:
+            - source_name: Name of the source node
+            - target_name: Name of the target node
+            - relation: Relationship type
+            - new_sector: Target memory sector
+            - edge_id: Optional UUID for disambiguation
+            - actor: Who is performing the reclassification (default: "I/O")
+
+    Returns:
+        Dict with status and reclassification details
+    """
+    return await reclassify_memory_sector(
+        source_name=arguments.get("source_name", ""),
+        target_name=arguments.get("target_name", ""),
+        relation=arguments.get("relation", ""),
+        new_sector=arguments.get("new_sector", ""),
+        edge_id=arguments.get("edge_id"),
+        actor=arguments.get("actor", "I/O")
+    )

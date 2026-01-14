@@ -97,7 +97,7 @@ class DissonanceEngine:
     constitutive knowledge graphs.
     """
 
-    async def __init__(self, haiku_client: Optional[HaikuClient] = None):
+    def __init__(self, haiku_client: Optional[HaikuClient] = None):
         """Initialize the dissonance engine."""
         self.haiku_client = haiku_client or HaikuClient()
 
@@ -325,7 +325,7 @@ class DissonanceEngine:
 
             return [dict(row) for row in cursor.fetchall()]
 
-    async def _get_memory_strength(self, edge_id: str) -> Optional[float]:
+    def _get_memory_strength(self, edge_id: str) -> Optional[float]:
         """
         Get memory strength for an edge from related l2_insights.
 
@@ -520,7 +520,7 @@ class DissonanceEngine:
             }
 
             # Validiere Safeguards
-            is_valid, violation_reason = validate_safeguards(proposal_data)
+            is_valid, violation_reason = await validate_safeguards(proposal_data)
             if not is_valid:
                 logger.warning(f"SMF proposal rejected due to safeguard violation: {violation_reason}")
                 # Audit-Log für Safeguard Verstoß

@@ -57,7 +57,7 @@ from mcp_server.tools.smf_reject import handle_smf_reject
 from mcp_server.tools.smf_undo import handle_smf_undo
 from mcp_server.tools.smf_bulk_approve import handle_smf_bulk_approve
 from mcp_server.tools.suggest_lateral_edges import handle_suggest_lateral_edges
-from mcp_server.tools.reclassify_memory_sector import reclassify_memory_sector
+from mcp_server.tools.reclassify_memory_sector import handle_reclassify_memory_sector
 
 
 def rrf_fusion(
@@ -3009,7 +3009,7 @@ def register_tools(server: Server) -> list[Tool]:
         "smf_undo": handle_smf_undo,
         "smf_bulk_approve": handle_smf_bulk_approve,
         "suggest_lateral_edges": handle_suggest_lateral_edges,
-        "reclassify_memory_sector": reclassify_memory_sector,
+        "reclassify_memory_sector": handle_reclassify_memory_sector,
     }
 
     # Register tool call handler (define once, outside the loop)
