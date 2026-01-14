@@ -205,7 +205,7 @@ def _build_filter_clause(filter_params: dict | None) -> tuple[str, list]:
     return " AND " + " AND ".join(clauses), values
 
 
-async def semantic_search(
+def semantic_search(
     query_embedding: list[float],
     top_k: int,
     conn: Any,
@@ -283,7 +283,7 @@ async def semantic_search(
     ]
 
 
-async def keyword_search(
+def keyword_search(
     query_text: str,
     top_k: int,
     conn: Any,
@@ -377,7 +377,7 @@ async def keyword_search(
 # ============================================================================
 
 
-async def episode_semantic_search(
+def episode_semantic_search(
     query_embedding: list[float], top_k: int, conn: Any
 ) -> list[dict]:
     """
@@ -431,7 +431,7 @@ async def episode_semantic_search(
     ]
 
 
-async def episode_keyword_search(
+def episode_keyword_search(
     query_text: str, top_k: int, conn: Any, language: str = "simple"
 ) -> list[dict]:
     """
@@ -1376,14 +1376,14 @@ async def handle_hybrid_search(arguments: dict[str, Any]) -> dict[str, Any]:
         # Execute searches
         async with get_connection() as conn:
             # Run L2 Insights searches (Story 9-4: Pass sector_filter)
-            semantic_results = await semantic_search(query_embedding, top_k, conn, filter_params, sector_filter)
-            keyword_results = await keyword_search(query_text, top_k, conn, filter_params, sector_filter)
+            semantic_results = semantic_search(query_embedding, top_k, conn, filter_params, sector_filter)
+            keyword_results = keyword_search(query_text, top_k, conn, filter_params, sector_filter)
 
             # Bug Fix 2025-12-06: Run Episode Memory searches
             # Episodes contain valuable lessons that should be searchable
             # Story 9-4: Episodes not filtered by sector (future enhancement)
-            episode_semantic_results = await episode_semantic_search(query_embedding, top_k, conn)
-            episode_keyword_results = await episode_keyword_search(query_text, top_k, conn)
+            episode_semantic_results = episode_semantic_search(query_embedding, top_k, conn)
+            episode_keyword_results = episode_keyword_search(query_text, top_k, conn)
 
             # Story 4.6: Run graph search (Story 9-4: Pass sector_filter)
             graph_results = await graph_search(query_text, top_k, conn, sector_filter)
