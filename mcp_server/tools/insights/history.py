@@ -116,7 +116,7 @@ async def handle_get_insight_history(arguments: dict[str, Any]) -> dict[str, Any
                     reason as change_reason,
                     action
                 FROM l2_insight_history
-                WHERE insight_id = $1
+                WHERE insight_id = %s
                 ORDER BY version_id ASC
             """
 
@@ -124,10 +124,9 @@ async def handle_get_insight_history(arguments: dict[str, Any]) -> dict[str, Any
             from mcp_server.db.connection import get_connection
 
             async with get_connection() as conn:
-                history_rows = await conn.fetch(
-                    history_query,
-                    insight_id
-                )
+                cursor = conn.cursor()
+                cursor.execute(history_query, (insight_id,))
+                history_rows = cursor.fetchall()
 
             # Format response according to Story 26.7 ACs
             history_list = []

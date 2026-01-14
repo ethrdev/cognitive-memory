@@ -172,9 +172,11 @@ async def test_response_format_matches_specification(mock_get_conn, mock_get_ins
         "is_deleted": False
     }
 
-    # Mock database connection and result using AsyncContextManagerMock
+    # Mock database connection with psycopg2 cursor pattern
+    mock_cursor = Mock()
+    mock_cursor.fetchall.return_value = []
     mock_conn = Mock()
-    mock_conn.fetch = AsyncMock(return_value=[])
+    mock_conn.cursor.return_value = mock_cursor
     mock_get_conn.return_value = AsyncContextManagerMock(return_value=mock_conn)
 
     result = await handle_get_insight_history({"insight_id": 42})
@@ -202,9 +204,11 @@ async def test_empty_history_returns_empty_array(mock_get_conn, mock_get_insight
         "is_deleted": False
     }
 
-    # No history entries
+    # No history entries - psycopg2 cursor pattern
+    mock_cursor = Mock()
+    mock_cursor.fetchall.return_value = []
     mock_conn = Mock()
-    mock_conn.fetch = AsyncMock(return_value=[])
+    mock_conn.cursor.return_value = mock_cursor
     mock_get_conn.return_value = AsyncContextManagerMock(return_value=mock_conn)
 
     result = await handle_get_insight_history({"insight_id": 42})
@@ -228,12 +232,12 @@ async def test_deleted_insight_preserves_history_accessibility(mock_get_conn, mo
         "is_deleted": True
     }
 
-    # History exists
+    # History exists - psycopg2 cursor pattern
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc)
 
-    mock_conn = Mock()
-    mock_conn.fetch = AsyncMock(return_value=[
+    mock_cursor = Mock()
+    mock_cursor.fetchall.return_value = [
         {
             "version_id": 1,
             "previous_content": "Before deletion",
@@ -242,7 +246,9 @@ async def test_deleted_insight_preserves_history_accessibility(mock_get_conn, mo
             "changed_by": "I/O",
             "change_reason": "Before delete"
         }
-    ])
+    ]
+    mock_conn = Mock()
+    mock_conn.cursor.return_value = mock_cursor
     mock_get_conn.return_value = AsyncContextManagerMock(return_value=mock_conn)
 
     result = await handle_get_insight_history({"insight_id": 42})

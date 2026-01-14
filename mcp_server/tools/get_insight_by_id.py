@@ -57,7 +57,7 @@ async def handle_get_insight_by_id(arguments: dict[str, Any]) -> dict[str, Any]:
 
         # Database lookup
         try:
-            insight = get_insight_by_id(insight_id)
+            insight = await get_insight_by_id(insight_id)
 
             if insight:
                 logger.debug(f"Insight found: id={insight_id}")
