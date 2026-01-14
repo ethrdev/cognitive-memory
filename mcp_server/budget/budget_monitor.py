@@ -12,7 +12,7 @@ from datetime import date, timedelta
 from typing import Any
 
 from mcp_server.config import get_config
-from mcp_server.db.connection import get_connection
+from mcp_server.db.connection import get_connection_sync
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ def get_monthly_cost(year: int | None = None, month: int | None = None) -> float
     target_month = month if month is not None else today.month
 
     try:
-        with get_connection() as conn:
+        with get_connection_sync() as conn:
             cursor = conn.cursor()
 
             query = """
@@ -94,7 +94,7 @@ def get_monthly_cost_by_api(
     target_month = month if month is not None else today.month
 
     try:
-        with get_connection() as conn:
+        with get_connection_sync() as conn:
             cursor = conn.cursor()
 
             query = """
@@ -298,7 +298,7 @@ def get_daily_costs(days: int = 30) -> list[dict[str, Any]]:
         raise ValueError(f"days must be an integer between 1 and 365, got {days}")
 
     try:
-        with get_connection() as conn:
+        with get_connection_sync() as conn:
             cursor = conn.cursor()
 
             # Calculate start_date using Python timedelta (: SQL injection fix)

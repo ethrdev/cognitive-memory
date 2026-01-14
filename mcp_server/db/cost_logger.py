@@ -11,7 +11,7 @@ import logging
 from datetime import date, timedelta
 from typing import Any
 
-from mcp_server.db.connection import get_connection
+from mcp_server.db.connection import get_connection_sync
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ def insert_cost_log(
     # Note: log_date parameter ignored - table uses created_at timestamp instead
 
     try:
-        with get_connection() as conn:
+        with get_connection_sync() as conn:
             cursor = conn.cursor()
 
             # Use actual DB schema (migration 002):
@@ -114,7 +114,7 @@ def get_costs_by_date_range(
         Uses created_at for date filtering (migration 002 schema).
     """
     try:
-        with get_connection() as conn:
+        with get_connection_sync() as conn:
             cursor = conn.cursor()
 
             # Use actual DB schema (migration 002): created_at instead of date
@@ -194,7 +194,7 @@ def get_total_cost(days: int = 30) -> float:
         raise ValueError(f"days must be an integer between 1 and 365, got {days}")
 
     try:
-        with get_connection() as conn:
+        with get_connection_sync() as conn:
             cursor = conn.cursor()
 
             # Calculate start_date using Python timedelta (: SQL injection fix)
@@ -246,7 +246,7 @@ def get_cost_by_api(days: int = 30) -> list[dict[str, Any]]:
         raise ValueError(f"days must be an integer between 1 and 365, got {days}")
 
     try:
-        with get_connection() as conn:
+        with get_connection_sync() as conn:
             cursor = conn.cursor()
 
             # Calculate start_date using Python timedelta (: SQL injection fix)
@@ -314,7 +314,7 @@ def delete_old_costs(days_to_keep: int = 365) -> int:
         Uses created_at for date filtering (migration 002 schema).
     """
     try:
-        with get_connection() as conn:
+        with get_connection_sync() as conn:
             cursor = conn.cursor()
 
             cutoff_date = date.today() - timedelta(days=days_to_keep)

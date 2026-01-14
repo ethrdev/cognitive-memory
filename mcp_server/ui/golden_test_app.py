@@ -85,7 +85,7 @@ MOCK_L2_INSIGHTS = [
 def load_queries_from_db() -> List[Dict]:
     """Load unlabeled queries from PostgreSQL golden_test_set table"""
     try:
-        with get_connection() as conn:
+        with get_connection_sync() as conn:
             with conn.cursor() as cur:
                 # Load all queries from golden_test_set (labeled and unlabeled)
                 cur.execute("""
@@ -142,7 +142,7 @@ def save_labeled_query_to_db(query_id: int, expected_docs: List[int]) -> bool:
         True if successful, False otherwise
     """
     try:
-        with get_connection() as conn:
+        with get_connection_sync() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
                     UPDATE golden_test_set

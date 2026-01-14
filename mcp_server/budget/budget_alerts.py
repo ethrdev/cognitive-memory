@@ -19,7 +19,7 @@ import requests
 
 from mcp_server.budget.budget_monitor import check_budget_threshold
 from mcp_server.config import get_config
-from mcp_server.db.connection import get_connection
+from mcp_server.db.connection import get_connection_sync
 
 logger = logging.getLogger(__name__)
 
@@ -206,7 +206,7 @@ def _log_alert(
         notification_methods: Notification methods used (e.g., 'email,slack')
     """
     try:
-        with get_connection() as conn:
+        with get_connection_sync() as conn:
             cursor = conn.cursor()
 
             # Create table if not exists
@@ -275,7 +275,7 @@ def _check_alert_sent_today(alert_type: str) -> bool:
         bool: True if alert already sent today, False otherwise
     """
     try:
-        with get_connection() as conn:
+        with get_connection_sync() as conn:
             cursor = conn.cursor()
 
             # Check if table exists

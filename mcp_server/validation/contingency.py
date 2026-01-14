@@ -14,7 +14,7 @@ from datetime import datetime
 import numpy as np
 from scipy.stats import wilcoxon
 
-from mcp_server.db.connection import get_connection
+from mcp_server.db.connection import get_connection_sync
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ class HighDisagreementAnalyzer:
         Returns:
             List of high-disagreement queries sorted by disagreement magnitude
         """
-        with get_connection() as conn:
+        with get_connection_sync() as conn:
             with conn.cursor() as cursor:
                 # SQL query to calculate disagreement for each query
                 cursor.execute(
@@ -312,7 +312,7 @@ class JudgeRecalibration:
         Returns:
             List of low-kappa queries
         """
-        with get_connection() as conn:
+        with get_connection_sync() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     """
@@ -553,7 +553,7 @@ class ContingencyManager:
             final_expected_docs: Final list of relevant document IDs
             reason: Reason for the override
         """
-        with get_connection() as conn:
+        with get_connection_sync() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     """

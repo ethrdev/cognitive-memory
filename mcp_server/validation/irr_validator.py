@@ -22,7 +22,7 @@ import numpy as np
 # Import scipy for statistical tests
 from scipy.stats import wilcoxon
 
-from mcp_server.db.connection import get_connection
+from mcp_server.db.connection import get_connection_sync
 
 # Import existing Cohen's Kappa calculation
 from mcp_server.tools.dual_judge import DualJudgeEvaluator
@@ -73,7 +73,7 @@ class IRRValidator:
         Returns:
             List of queries with judge1_score and judge2_score arrays
         """
-        with get_connection() as conn:
+        with get_connection_sync() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     """
@@ -289,7 +289,7 @@ class IRRValidator:
         Args:
             results: Validation results to save
         """
-        with get_connection() as conn:
+        with get_connection_sync() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     """

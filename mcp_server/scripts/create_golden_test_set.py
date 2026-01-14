@@ -76,7 +76,7 @@ def get_excluded_sessions() -> List[UUID]:
     Returns:
         List of UUID session_ids to exclude
     """
-    with get_connection() as conn:
+    with get_connection_sync() as conn:
         with conn.cursor() as cur:
             # Query ground_truth sessions
             # Note: ground_truth doesn't have session_id column directly,
@@ -106,7 +106,7 @@ def get_available_sessions(excluded_sessions: List[UUID]) -> List[UUID]:
     Returns:
         List of available session_ids
     """
-    with get_connection() as conn:
+    with get_connection_sync() as conn:
         with conn.cursor() as cur:
             # Get all unique sessions from l0_raw
             cur.execute("""
@@ -140,7 +140,7 @@ def extract_queries_from_sessions(
     Returns:
         List of query dicts with {query, session_id, query_type, word_count}
     """
-    with get_connection() as conn:
+    with get_connection_sync() as conn:
         with conn.cursor() as cur:
             # Extract user queries from l0_raw (speaker='user')
             cur.execute("""
@@ -236,7 +236,7 @@ def insert_golden_test_queries(queries: List[Dict]) -> int:
     Returns:
         Number of queries inserted
     """
-    with get_connection() as conn:
+    with get_connection_sync() as conn:
         with conn.cursor() as cur:
             # Insert queries (expected_docs empty for now - manual labeling required)
             inserted_count = 0
@@ -275,7 +275,7 @@ def validate_golden_test_set():
     2. Stratification (40%/40%/20% ±5%)
     3. No overlap with ground_truth sessions
     """
-    with get_connection() as conn:
+    with get_connection_sync() as conn:
         with conn.cursor() as cur:
             # 1. Total count
             cur.execute("SELECT COUNT(*) FROM golden_test_set")

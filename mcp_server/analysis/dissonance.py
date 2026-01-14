@@ -14,7 +14,7 @@ from datetime import datetime, timezone, timedelta
 from enum import Enum
 from typing import Any, Optional
 
-from mcp_server.db.connection import get_connection
+from mcp_server.db.connection import get_connection_sync
 from mcp_server.db.graph import get_or_create_node, add_edge, get_edge_by_id
 from mcp_server.external.anthropic_client import HaikuClient
 from mcp_server.analysis.smf import (
@@ -123,7 +123,7 @@ class DissonanceEngine:
         # Validate UUID format for context_node
         if not re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', context_node):
             # If not UUID, try to find node by name
-            with get_connection() as conn:
+            with get_connection_sync() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     "SELECT id FROM nodes WHERE name = %s",
@@ -269,7 +269,7 @@ class DissonanceEngine:
 
     def _fetch_edges(self, context_node_id: str, scope: str) -> list[dict[str, Any]]:
         """Fetch edges based on scope criteria."""
-        with get_connection() as conn:
+        with get_connection_sync() as conn:
             cursor = conn.cursor()
 
             if scope == "recent":
@@ -680,7 +680,7 @@ def _mark_edge_as_superseded(edge_id: str, superseded_at: str, superseded_by: st
         um keine existierenden Metadaten zu verlieren.
     """
     try:
-        with get_connection() as conn:
+        with get_connection_sync() as conn:
             cursor = conn.cursor()
 
             # Hole aktuelle Properties

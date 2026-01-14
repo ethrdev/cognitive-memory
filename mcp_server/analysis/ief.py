@@ -208,9 +208,9 @@ def _get_insight_embedding(vector_id: int) -> list[float] | None:
     Returns:
         1536-dim embedding or None
     """
-    from mcp_server.db.connection import get_connection
+    from mcp_server.db.connection import get_connection_sync
 
-    with get_connection() as conn:
+    with get_connection_sync() as conn:
         cursor = conn.cursor()
         cursor.execute(
             """
@@ -281,7 +281,7 @@ def on_feedback_received(
     """
     global _feedback_count_since_calibration
 
-    from mcp_server.db.connection import get_connection
+    from mcp_server.db.connection import get_connection_sync
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -338,7 +338,7 @@ def recalibrate_weights() -> dict[str, float]:
     """
     global IEF_WEIGHT_CONSTITUTIVE
 
-    from mcp_server.db.connection import get_connection
+    from mcp_server.db.connection import get_connection_sync
     import logging
 
     logger = logging.getLogger(__name__)
@@ -439,10 +439,10 @@ def apply_insight_feedback_to_score(
     Returns:
         Adjusted IEF score (clamped to [0.0, 1.5] range)
     """
-    from mcp_server.db.connection import get_connection
+    from mcp_server.db.connection import get_connection_sync
 
     # Query all feedback for this insight
-    with get_connection() as conn:
+    with get_connection_sync() as conn:
         cursor = conn.cursor()
         cursor.execute(
             """

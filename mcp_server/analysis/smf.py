@@ -22,7 +22,7 @@ from typing import Any, Optional, Tuple, List
 
 import yaml
 
-from mcp_server.db.connection import get_connection
+from mcp_server.db.connection import get_connection_sync
 from mcp_server.db.graph import get_edge_by_id, _log_audit_entry
 from mcp_server.external.anthropic_client import HaikuClient
 
@@ -382,7 +382,7 @@ def create_smf_proposal(
     proposal_id = str(uuid.uuid4())
     proposal_db_id = None
 
-    with get_connection() as conn:
+    with get_connection_sync() as conn:
         cursor = conn.cursor()
 
         # Cast affected_edges to UUID[] - PostgreSQL requires explicit type cast
@@ -424,7 +424,7 @@ def create_smf_proposal(
 
 def get_proposal(proposal_id: int) -> Optional[dict[str, Any]]:
     """Lädt einen SMF Proposal aus der Datenbank."""
-    with get_connection() as conn:
+    with get_connection_sync() as conn:
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -451,7 +451,7 @@ def get_pending_proposals(include_expired: bool = False) -> List[dict[str, Any]]
     """
     proposals = []
 
-    with get_connection() as conn:
+    with get_connection_sync() as conn:
         cursor = conn.cursor()
 
         if include_expired:
@@ -505,7 +505,7 @@ def expire_old_proposals() -> int:
     """
     count = 0
 
-    with get_connection() as conn:
+    with get_connection_sync() as conn:
         cursor = conn.cursor()
 
         timeout_threshold = datetime.now(timezone.utc) - timedelta(hours=APPROVAL_TIMEOUT_HOURS)
@@ -548,7 +548,7 @@ async def approve_proposal(
 
     fully_approved = False
 
-    with get_connection() as conn:
+    with get_connection_sync() as conn:
         cursor = conn.cursor()
 
         # Update approval tracking
@@ -636,7 +636,7 @@ def reject_proposal(proposal_id: int, reason: str, actor: str) -> dict[str, Any]
 
     resolved_at = datetime.now(timezone.utc).isoformat()
 
-    with get_connection() as conn:
+    with get_connection_sync() as conn:
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -706,7 +706,7 @@ def undo_proposal(proposal_id: int, actor: str) -> dict[str, Any]:
         undo_ethr = proposal.get("undo_approved_by_ethr", False)
 
         # Record this actor's consent
-        with get_connection() as conn:
+        with get_connection_sync() as conn:
             cursor = conn.cursor()
 
             if actor == "I/O":
@@ -750,7 +750,7 @@ def undo_proposal(proposal_id: int, actor: str) -> dict[str, Any]:
 
     undone_at = datetime.now(timezone.utc).isoformat()
 
-    with get_connection() as conn:
+    with get_connection_sync() as conn:
         cursor = conn.cursor()
 
         # Undo logic 1: Remove superseded flags from edges

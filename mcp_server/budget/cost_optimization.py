@@ -319,7 +319,7 @@ def validate_staged_dual_judge_transition() -> Dict[str, Any]:
         ...     print("✗ Not ready for transition")
         ...     print(f"  {validation['recommendation']}")
     """
-    from mcp_server.db.connection import get_connection
+    from mcp_server.db.connection import get_connection_sync
 
     # Get configuration
     try:
@@ -334,7 +334,7 @@ def validate_staged_dual_judge_transition() -> Dict[str, Any]:
 
     # Query ground truth data for Kappa scores
     try:
-        with get_connection() as conn:
+        with get_connection_sync() as conn:
             cursor = conn.cursor()
 
             # Get average Kappa from recent ground truth evaluations

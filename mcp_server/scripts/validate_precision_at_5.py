@@ -212,7 +212,7 @@ def load_ground_truth() -> list[dict]:
 
         from db.connection import get_connection
 
-        with get_connection() as conn:
+        with get_connection_sync() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT query, expected_docs FROM ground_truth ORDER BY id")
             rows = cursor.fetchall()

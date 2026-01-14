@@ -23,7 +23,7 @@ import yaml
 from openai import OpenAI
 from pgvector.psycopg2 import register_vector
 
-from mcp_server.db.connection import get_connection
+from mcp_server.db.connection import get_connection_sync
 
 # Import calculate_precision_at_5 from 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
@@ -112,7 +112,7 @@ def execute_golden_test() -> dict[str, Any]:
     embedding_model_version = None  # Will extract from API response headers
 
     # Load all queries from golden_test_set
-    with get_connection() as conn:
+    with get_connection_sync() as conn:
         cursor = conn.cursor()
 
         # Check if golden_test_set has queries
@@ -172,7 +172,7 @@ def execute_golden_test() -> dict[str, Any]:
         # We'll implement inline semantic + keyword search with RRF fusion
         search_start = time.time()
 
-        with get_connection() as conn:
+        with get_connection_sync() as conn:
             register_vector(conn)
             cursor = conn.cursor()
 
@@ -245,7 +245,7 @@ def execute_golden_test() -> dict[str, Any]:
     # Step 5: Drift Detection - Calculate 7-day rolling average baseline
     today = date.today()
 
-    with get_connection() as conn:
+    with get_connection_sync() as conn:
         cursor = conn.cursor()
 
         # Query last 7 days of data (excluding today)
@@ -284,7 +284,7 @@ def execute_golden_test() -> dict[str, Any]:
             )
 
     # Step 6: Store metrics in model_drift_log (UPSERT)
-    with get_connection() as conn:
+    with get_connection_sync() as conn:
         cursor = conn.cursor()
 
         cursor.execute(
