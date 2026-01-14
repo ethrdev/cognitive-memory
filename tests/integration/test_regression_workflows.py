@@ -34,7 +34,7 @@ class TestStoreSearchRetrieveWorkflow:
 
     @pytest.mark.asyncio
     @pytest.mark.P0
-    @pytest.mark.skip(reason="Known bug: handle_compress_to_l2_insight has async/await issue - requires fix in mcp_server.tools")
+    @pytest.mark.skip(reason="Known bug: handle_compress_to_l2_insight has async/await issue - see bugs/BUG-ASYNC-AWAIT-INVESTIGATION.md")
     async def test_store_insight_then_search_retrieves_it(self, conn):
         """
         GIVEN: User stores an insight via store_insight()

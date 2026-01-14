@@ -37,6 +37,10 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "P2: Medium priority - edge cases")
     config.addinivalue_line("markers", "P3: Low priority - nice to have")
 
+    # Test ID marker - for requirements traceability
+    # Usage: @pytest.mark.id("26.3-UNIT-001")
+    config.addinivalue_line("markers", "id: Test ID for requirements traceability")
+
 
 @pytest.fixture(scope="session")
 def database_url() -> str:

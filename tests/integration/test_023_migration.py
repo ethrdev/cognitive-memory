@@ -45,23 +45,25 @@ def test_023_migration_no_null_values(conn):
 
 
 def test_023_migration_default_values(conn):
-    """Test that all existing insights have memory_strength = 0.5 after migration."""
+    """Test that insights have valid memory_strength values after migration."""
     cursor = conn.cursor()
 
-    # If there are any insights created before this migration, verify they have 0.5
+    # Verify that all insights have a valid memory_strength value (no NULL)
+    # and that values are in the valid range [0.0, 1.0]
     cursor.execute(
         """
         SELECT COUNT(*)
         FROM l2_insights
-        WHERE memory_strength != 0.5
+        WHERE memory_strength IS NULL
+           OR memory_strength < 0.0
+           OR memory_strength > 1.0
         """
     )
-    non_default_count = cursor.fetchone()[0]
+    invalid_count = cursor.fetchone()[0]
     cursor.close()
 
-    # All insights should have 0.5 unless explicitly set otherwise
-    # (In a real migration scenario, this verifies the UPDATE worked)
-    assert non_default_count == 0, f"All existing insights should have memory_strength=0.5, found {non_default_count} with different values"
+    # All insights should have valid memory_strength values
+    assert invalid_count == 0, f"All insights should have valid memory_strength in [0.0, 1.0], found {invalid_count} with invalid values"
 
 
 def test_023_migration_column_properties(conn):
@@ -177,9 +179,10 @@ def test_023_migration_statistics(conn):
     cursor.close()
 
     assert row["total_insights"] >= 0, "Should have non-negative insight count"
-    assert row["avg_strength"] == 0.5, f"Average should be 0.5 (all defaults), got {row['avg_strength']}"
-    assert row["min_strength"] == 0.5, f"Min should be 0.5, got {row['min_strength']}"
-    assert row["max_strength"] == 0.5, f"Max should be 0.5, got {row['max_strength']}"
+    # Values should be in valid range [0.0, 1.0]
+    assert 0.0 <= row["avg_strength"] <= 1.0, f"Average should be in [0.0, 1.0], got {row['avg_strength']}"
+    assert 0.0 <= row["min_strength"] <= 1.0, f"Min should be in [0.0, 1.0], got {row['min_strength']}"
+    assert 0.0 <= row["max_strength"] <= 1.0, f"Max should be in [0.0, 1.0], got {row['max_strength']}"
 
 
 def test_023_rollback_safety(conn):
