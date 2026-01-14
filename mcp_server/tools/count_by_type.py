@@ -31,7 +31,7 @@ async def handle_count_by_type(arguments: dict[str, Any]) -> dict[str, Any]:
 
     try:
         # Database lookup - get all counts in single query
-        counts = get_all_counts()
+        counts = await get_all_counts()
 
         logger.debug(f"Retrieved counts: {counts}")
 
