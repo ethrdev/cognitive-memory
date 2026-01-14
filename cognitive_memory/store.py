@@ -673,8 +673,8 @@ class WorkingMemory:
                         if item_importance > 0.8:
                             cursor.execute(
                                 """
-                                INSERT INTO stale_memory (content, importance, archive_reason, created_at)
-                                SELECT content, importance, %s, created_at
+                                INSERT INTO stale_memory (original_content, importance, reason)
+                                SELECT content, importance, %s
                                 FROM working_memory
                                 WHERE id = %s
                                 RETURNING id;
@@ -709,8 +709,8 @@ class WorkingMemory:
                             if item_importance > 0.8:
                                 cursor.execute(
                                     """
-                                    INSERT INTO stale_memory (content, importance, archive_reason, created_at)
-                                    SELECT content, importance, %s, created_at
+                                    INSERT INTO stale_memory (original_content, importance, reason)
+                                    SELECT content, importance, %s
                                     FROM working_memory
                                     WHERE id = %s
                                     RETURNING id;
@@ -891,8 +891,8 @@ class WorkingMemory:
                 # Archive critical items (importance > 0.8) to stale memory
                 cursor.execute(
                     """
-                    INSERT INTO stale_memory (content, importance, archive_reason, created_at)
-                    SELECT content, importance, %s, created_at
+                    INSERT INTO stale_memory (original_content, importance, reason)
+                    SELECT content, importance, %s
                     FROM working_memory
                     WHERE importance > 0.8;
                     """,

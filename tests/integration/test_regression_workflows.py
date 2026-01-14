@@ -358,7 +358,6 @@ class TestWorkingMemoryLifecycle:
 
     @pytest.mark.asyncio
     @pytest.mark.P0
-    @pytest.mark.skip(reason="Schema issue: stale_memory table missing 'content' column - requires migration fix")
     async def test_clear_empties_working_memory(self, conn):
         """
         GIVEN: Working memory has items
@@ -367,8 +366,29 @@ class TestWorkingMemoryLifecycle:
 
         AC-REG-011: Clear must empty working memory
 
-        NOTE: Skipped due to schema issue with stale_memory table.
+        NOTE: Schema fixed with migration 026_fix_stale_memory_columns.sql.
+        Code in cognitive_memory/store.py now uses correct column names.
         """
+        from cognitive_memory import MemoryStore
+        from cognitive_memory.connection import ConnectionManager
+
+        with patch.object(ConnectionManager, "get_connection") as mock_get_conn:
+            mock_get_conn.return_value.__enter__.return_value = conn
+
+            store = MemoryStore()
+            store._connection_manager._is_initialized = True
+            store._is_connected = True
+
+            # GIVEN: Add items
+            store.working.add("Item 1", importance=0.7)
+            store.working.add("Item 2", importance=0.8)
+
+            # WHEN: Clear
+            store.working.clear()
+
+            # THEN: Empty
+            items = store.working.list()
+            assert len(items) == 0
 
     @pytest.mark.asyncio
     @pytest.mark.P0
