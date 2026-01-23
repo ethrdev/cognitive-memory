@@ -145,3 +145,159 @@ def reset_environment():
     """Reset environment state between tests."""
     yield
     # Cleanup after test if needed
+
+
+# ============================================================================
+# RLS Policy Testing Fixtures (Story 11.3.0: pgTAP + Test Infrastructure)
+# ============================================================================
+
+class ProjectContext:
+    """
+    Context manager for switching project context mid-test.
+
+    Usage:
+        async with project_context(conn, "test_isolated"):
+            # Queries here run with app.current_project = 'test_isolated'
+            result = conn.fetch("SELECT * FROM nodes")
+
+    This is transaction-scoped via SET LOCAL, so it clears automatically
+    when the transaction ends.
+    """
+
+    def __init__(self, conn, project_id: str):
+        """
+        Initialize the project context manager.
+
+        Args:
+            conn: Database connection (psycopg2 connection)
+            project_id: Project ID to set as current context
+        """
+        self.conn = conn
+        self.project_id = project_id
+        self._previous_context = None
+
+    def __enter__(self):
+        """Set the project context using parameterized query."""
+        cur = self.conn.cursor()
+        # Save previous context for restoration
+        # Use current_setting with missing_ok=true to avoid error if not set
+        cur.execute("SELECT current_setting('app.current_project', true)")
+        result = cur.fetchone()
+        self._previous_context = result[0] if result and result[0] else None
+
+        # Set new context using parameterized query (SQL injection safe)
+        cur.execute(
+            "SET LOCAL app.current_project = %s",
+            (self.project_id,)
+        )
+        return self.conn
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Restore previous context (or leave SET LOCAL to clear at transaction end)."""
+        if self._previous_context:
+            cur = self.conn.cursor()
+            cur.execute(
+                "SET LOCAL app.current_project = %s",
+                (self._previous_context,)
+            )
+        # Context will be fully cleared when transaction ends
+
+
+@pytest.fixture
+def project_context():
+    """
+    Factory for creating project context managers.
+
+    AC6: Pytest Fixtures - project_context (Context Manager)
+
+    Usage:
+        def test_my_feature(conn, project_context):
+            with project_context(conn, "test_isolated") as conn:
+                # Queries here use test_isolated context
+                result = conn.fetch("SELECT * FROM nodes")
+
+            with project_context(conn, "test_super") as conn:
+                # Queries here use test_super context
+                result = conn.fetch("SELECT * FROM nodes")
+    """
+    return ProjectContext
+
+
+@pytest.fixture(scope="function")
+def isolated_conn(conn, request):
+    """
+    Create a connection with project-isolated RLS context.
+
+    AC5: Pytest Fixtures - isolated_conn
+
+    This fixture uses SET LOCAL app.current_project within a transaction
+    to simulate RLS-isolated access. The transaction is rolled back after
+    the test, ensuring no data pollution.
+
+    The project_id can be specified via pytest mark:
+        @pytest.mark.parametrize("project_id", ["test_super", "test_isolated"])
+        def test_with_isolated_conn(conn, isolated_conn, project_id):
+            ...
+
+    Or via direct use in test (though this is less common):
+        # In a parameterized test, use the project_id from the fixture
+    """
+    # Get project_id from pytest mark if available
+    project_id = getattr(request, "param", "test_isolated")
+
+    cur = conn.cursor()
+    try:
+        # Set project context using parameterized query
+        cur.execute(
+            "SET LOCAL app.current_project = %s",
+            (project_id,)
+        )
+        yield conn
+    finally:
+        # Transaction rollback happens in the conn fixture
+        # SET LOCAL is automatically cleared at transaction end
+        pass
+
+
+@pytest.fixture(scope="function")
+def bypass_conn():
+    """
+    Create a connection that bypasses RLS (for test setup/verification).
+
+    AC7: Pytest Fixtures - bypass_conn
+
+    This fixture creates a separate connection using test_bypass_role
+    which has BYPASSRLS attribute. This allows:
+        - Setting up test data across multiple projects
+        - Verifying data state regardless of RLS policies
+        - Cleaning up test data
+
+    ONLY available when TESTING=true environment variable is set.
+
+    Requires:
+        - TEST_BYPASS_DSN environment variable set
+
+    Usage:
+        def test_setup_with_bypass(bypass_conn):
+            cur = bypass_conn.cursor()
+            # Can see ALL data regardless of RLS
+            cur.execute("SELECT * FROM nodes")
+            all_nodes = cur.fetchall()
+    """
+    # Guard: Only available in test environment
+    if not os.getenv("TESTING"):
+        pytest.skip("bypass_conn only available when TESTING=true")
+
+    bypass_dsn = os.getenv("TEST_BYPASS_DSN")
+    if not bypass_dsn:
+        pytest.skip("TEST_BYPASS_DSN not set - bypass_conn unavailable")
+
+    try:
+        # Create separate connection for bypass access
+        connection = psycopg2.connect(bypass_dsn, cursor_factory=DictCursor)
+        connection.autocommit = False
+        yield connection
+        connection.rollback()
+        connection.close()
+    except psycopg2.Error as e:
+        pytest.skip(f"Could not create bypass connection: {e}")

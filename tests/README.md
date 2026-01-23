@@ -516,6 +516,181 @@ repos:
 
 ---
 
+## RLS Policy Testing (Epic 11.3)
+
+**Story 11.3.0: pgTAP + Test Infrastructure**
+
+### Overview
+
+The RLS (Row-Level Security) policy testing infrastructure provides comprehensive testing for multi-project isolation. It supports both **pgTAP** (primary, for database-native testing) and **pytest fallback** (for Azure PostgreSQL where pgTAP is unavailable).
+
+### Directory Structure
+
+```
+tests/
+├── db/
+│   ├── sql/
+│   │   └── install_test_extensions.sql    # pgTAP + BYPASSRLS role setup
+│   └── pgtap/
+│       └── template_rls_test.sql          # pgTAP test template
+├── fixtures/
+│   └── rls_test_helpers.py                # RLS test data fixtures
+├── integration/
+│   └── test_rls_isolation.py              # Pytest fallback tests
+└── performance/
+    └── test_rls_overhead.py               # RLS performance comparison
+```
+
+### Environment Variables
+
+| Variable | Purpose | Required For |
+|----------|---------|--------------|
+| `TEST_DATABASE_URL` | Test database connection | All RLS tests |
+| `TEST_BYPASS_DSN` | BYPASSRLS role connection | `bypass_conn` fixture, performance tests |
+| `TEST_BYPASS_PASSWORD` | Password for test_bypass_role | Role setup |
+| `TESTING` | Enable test-only features | `bypass_conn` guard |
+| `PGTAP_AVAILABLE` | Force pytest fallback mode | Azure compatibility |
+
+### pgTAP Usage
+
+**Installation (one-time setup):**
+
+```bash
+# Install pgTAP in test database
+psql -d $TEST_DATABASE_URL -f tests/db/sql/install_test_extensions.sql
+
+# Set password for test_bypass_role
+psql -d $TEST_DATABASE_URL -c \
+  "ALTER ROLE test_bypass_role PASSWORD 'your_secure_password';"
+```
+
+**Running pgTAP tests:**
+
+```bash
+# Run all pgTAP tests
+pg_prove -d $TEST_DATABASE_URL tests/db/pgtap/*.sql
+
+# Run specific test file
+pg_prove -d $TEST_DATABASE_URL tests/db/pgtap/test_rls_super_reads_all.sql
+
+# Run with verbose output
+pg_prove -v -d $TEST_DATABASE_URL tests/db/pgtap/*.sql
+```
+
+**Creating new pgTAP tests:**
+
+1. Copy `tests/db/pgtap/template_rls_test.sql`
+2. Modify test plan: `SELECT plan(N);` where N is number of tests
+3. Add test data in `SETUP` section
+4. Write assertions using pgTAP functions:
+   - `SELECT is(actual, expected, description);`
+   - `SELECT results_eq(query, expected, description);`
+5. Wrap in `BEGIN;` / `ROLLBACK;` for isolation
+
+### Pytest Fixtures
+
+**isolated_conn** - Project-isolated connection:
+
+```python
+def test_with_isolated_conn(conn, isolated_conn):
+    """Test with RLS-isolated connection"""
+    cur = isolated_conn
+    # Queries use test_isolated context by default
+    cur.execute("SELECT * FROM nodes WHERE project_id = 'test_isolated'")
+```
+
+**project_context** - Context manager for switching projects:
+
+```python
+def test_with_project_context(conn, project_context):
+    """Test switching project context mid-test"""
+    with project_context(conn, "test_super") as conn:
+        # Queries here use test_super context
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM nodes")
+
+    with project_context(conn, "test_isolated") as conn:
+        # Queries here use test_isolated context
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM nodes")
+```
+
+**bypass_conn** - RLS-bypassing connection (test setup/verification):
+
+```python
+def test_with_bypass_conn(bypass_conn):
+    """Test with RLS bypassed (can see all projects)"""
+    cur = bypass_conn.cursor()
+    cur.execute("SELECT * FROM nodes")  # Sees ALL data
+    all_nodes = cur.fetchall()
+```
+
+**rls_test_data** - Ephemeral test projects and data:
+
+```python
+def test_with_rls_data(conn, rls_test_data):
+    """Test with pre-populated test data"""
+    cur = conn.cursor()
+    # Test projects already created: test_super, test_shared, test_isolated
+    # Each has 2 nodes, 2 edges, 2 l2_insights
+    cur.execute("SELECT COUNT(*) FROM nodes WHERE project_id = 'test_super'")
+    assert cur.fetchone()[0] == 2
+```
+
+### Test Projects
+
+The RLS testing infrastructure uses **ephemeral test projects** that are created and destroyed within test transactions:
+
+| Project | Access Level | Description |
+|---------|--------------|-------------|
+| `test_super` | super | Can read all projects |
+| `test_shared` | shared | Can read own + test_isolated |
+| `test_isolated` | isolated | Can read own only |
+
+**Important:** Never use production project IDs (`io`, `aa`, `ab`, etc.) in RLS tests.
+
+### pgTAP Fallback (Azure Compatibility)
+
+When pgTAP is unavailable (e.g., Azure PostgreSQL), pytest fallback tests are used:
+
+```bash
+# Set environment variable to force pytest mode
+export PGTAP_AVAILABLE=false
+
+# Run pytest fallback tests
+pytest tests/integration/test_rls_isolation.py -v
+```
+
+The pytest fallback tests provide equivalent coverage for:
+- FR12: Super reads all projects
+- FR13: Shared reads own + permitted
+- FR14: Isolated reads own only
+- FR15: All levels write own only
+- RESTRICTIVE policy: NULL project_id blocked
+
+### Performance Testing
+
+Measure RLS overhead to validate NFR2 (<10ms for 95th percentile):
+
+```bash
+# Set required environment variables
+export TESTING=true
+export TEST_BYPASS_DSN="postgresql://test_bypass_role:password@localhost/db"
+
+# Run performance tests
+pytest tests/performance/test_rls_overhead.py -v
+```
+
+### Provider Support
+
+| Provider | pgTAP Support | Notes |
+|----------|---------------|-------|
+| AWS RDS/Aurora | ✅ Yes | Use pg_prove |
+| Google Cloud SQL | ✅ Yes | Use pg_prove |
+| Azure PostgreSQL | ❌ No | Use pytest fallback |
+
+---
+
 ## Knowledge Base References
 
 This framework follows best practices from:
