@@ -62,9 +62,9 @@ development_status:
   # Epic 11.3: RLS + Gradual Rollout Infrastructure
   epic-11-3: in-progress
   11-3-0-pgtap-test-infrastructure: done
-  11-3-1-rls-helper-functions: backlog
-  11-3-2-shadow-audit-infrastructure: backlog
-  11-3-3-rls-policies-core-tables: backlog
+  11-3-1-rls-helper-functions: done
+  11-3-2-shadow-audit-infrastructure: done
+  11-3-3-rls-policies-core-tables: done
   11-3-4-rls-policies-support-tables: backlog
   11-3-5-bypassrls-emergency-role: backlog
   epic-11-3-retrospective: optional

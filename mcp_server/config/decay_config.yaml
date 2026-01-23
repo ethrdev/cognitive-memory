@@ -1,0 +1,33 @@
+# Decay Configuration for Sector-Specific Memory Decay
+#
+# This file defines the decay parameters for each memory sector.
+# Higher S_base values mean slower decay (better retention).
+# S_floor sets a minimum memory strength (optional, can be null).
+#
+# Default values based on Epic 8 requirements:
+# - emotional: S_base=200, S_floor=150 (best retention, minimum floor)
+# - semantic: S_base=100, S_floor=null (baseline decay, can decay to zero)
+# - episodic: S_base=150, S_floor=100 (good retention with floor)
+# - procedural: S_base=120, S_floor=null (learned skills, moderate retention)
+# - reflective: S_base=180, S_floor=120 (good retention, high floor)
+
+decay_config:
+  emotional:
+    S_base: 200.0
+    S_floor: 150.0
+
+  semantic:
+    S_base: 100.0
+    S_floor: null
+
+  episodic:
+    S_base: 150.0
+    S_floor: 100.0
+
+  procedural:
+    S_base: 120.0
+    S_floor: null
+
+  reflective:
+    S_base: 180.0
+    S_floor: 120.0
