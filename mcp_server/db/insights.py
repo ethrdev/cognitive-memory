@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from mcp_server.db.connection import get_connection
+from mcp_server.db.connection import get_connection_with_project_context
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ async def get_insight_by_id(insight_id: int) -> dict[str, Any] | None:
         Exception: If database operation fails
     """
     try:
-        async with get_connection() as conn:
+        async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
 
             # Simple SELECT by ID - no embedding (too large)
@@ -96,7 +96,7 @@ async def update_insight_in_db(
         Exception: If database operation fails
     """
     try:
-        async with get_connection() as conn:
+        async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
 
             # Check if insight exists and is not deleted (AC-6, AC-7)
@@ -188,7 +188,7 @@ async def write_insight_history(
         Exception: If database operation fails
     """
     try:
-        async with get_connection() as conn:
+        async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
 
             # Insert history entry
@@ -258,7 +258,7 @@ async def execute_update_with_history(
         raise ValueError("new_content cannot be empty")
 
     try:
-        async with get_connection() as conn:
+        async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
 
             # Start transaction
@@ -374,7 +374,7 @@ async def execute_delete_with_history(
         raise ValueError("reason required")
 
     try:
-        async with get_connection() as conn:
+        async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
 
             # Start transaction

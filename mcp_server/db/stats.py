@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from mcp_server.db.connection import get_connection
+from mcp_server.db.connection import get_connection_with_project_context
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ async def get_all_counts() -> dict[str, int]:
         Exception: If database operation fails
     """
     try:
-        async with get_connection() as conn:
+        async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
 
             # Efficient UNION ALL query - single roundtrip for all counts

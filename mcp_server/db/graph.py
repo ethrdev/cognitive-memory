@@ -18,7 +18,7 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
-from mcp_server.db.connection import get_connection
+from mcp_server.db.connection import get_connection_with_project_context
 from mcp_server.utils.relevance import calculate_relevance_score
 from mcp_server.utils.sector_classifier import MemorySector
 from psycopg2.extras import Json
@@ -152,7 +152,7 @@ async def add_node(
     logger = logging.getLogger(__name__)
 
     try:
-        async with get_connection() as conn:
+        async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
 
             # Attempt to insert new node with idempotent conflict resolution
@@ -237,7 +237,7 @@ async def get_node_by_id(node_id: str) -> dict[str, Any] | None:
     logger = logging.getLogger(__name__)
 
     try:
-        async with get_connection() as conn:
+        async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
 
             cursor.execute(
@@ -280,7 +280,7 @@ async def get_nodes_by_label(label: str) -> list[dict[str, Any]]:
     logger = logging.getLogger(__name__)
 
     try:
-        async with get_connection() as conn:
+        async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
 
             cursor.execute(
@@ -324,7 +324,7 @@ async def get_node_by_name(name: str) -> dict[str, Any] | None:
     logger = logging.getLogger(__name__)
 
     try:
-        async with get_connection() as conn:
+        async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
 
             cursor.execute(
@@ -374,7 +374,7 @@ async def update_node_properties(node_id: str, new_properties: dict[str, Any]) -
     logger = logging.getLogger(__name__)
 
     try:
-        async with get_connection() as conn:
+        async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
 
             # Merge new properties with existing using jsonb concatenation
@@ -641,7 +641,7 @@ async def get_edge_by_id(edge_id: str) -> dict[str, Any] | None:
         Edge data dict oder None
     """
     try:
-        async with get_connection() as conn:
+        async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -687,7 +687,7 @@ async def get_edge_by_names(
     logger = logging.getLogger(__name__)
 
     try:
-        async with get_connection() as conn:
+        async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
 
             # SQL with JOINs to resolve node names to IDs
@@ -813,7 +813,7 @@ async def add_edge(
     properties = json.dumps(props)
 
     try:
-        async with get_connection() as conn:
+        async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
 
             # Insert edge with idempotent conflict resolution
@@ -951,7 +951,7 @@ async def query_neighbors(
         return []
 
     try:
-        async with get_connection() as conn:
+        async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
 
             # Build direction conditions for SQL
@@ -1279,7 +1279,7 @@ async def find_path(
     start_time = time.time()
 
     try:
-        async with get_connection() as conn:
+        async with get_connection_with_project_context() as conn:
             from psycopg2.extras import DictCursor
             cursor = conn.cursor(cursor_factory=DictCursor)
 
@@ -1539,7 +1539,7 @@ async def delete_edge(
     logger = logging.getLogger(__name__)
 
     try:
-        async with get_connection() as conn:
+        async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
 
             # First, fetch the edge to check its properties
@@ -1654,7 +1654,7 @@ async def _log_audit_entry(
 ) -> None:
     """Log audit entry for constitutive edge operations to database."""
     try:
-        async with get_connection() as conn:
+        async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -1677,7 +1677,7 @@ async def get_audit_log(
 ) -> list[dict[str, Any]]:
     """Retrieve audit log entries from database."""
     try:
-        async with get_connection() as conn:
+        async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
             query_parts = ["SELECT id, edge_id, action, blocked, reason, actor, properties, created_at FROM audit_log"]
             conditions, params = [], []
@@ -1719,7 +1719,7 @@ async def get_audit_log(
 async def clear_audit_log() -> int:
     """Clear all audit log entries. Only for testing purposes."""
     try:
-        async with get_connection() as conn:
+        async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) as count FROM audit_log;")
             count = cursor.fetchone()["count"] or 0

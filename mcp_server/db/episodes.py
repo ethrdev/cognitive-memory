@@ -12,7 +12,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from mcp_server.db.connection import get_connection
+from mcp_server.db.connection import get_connection_with_project_context
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ async def list_episodes(
         Exception: If database operation fails
     """
     try:
-        async with get_connection() as conn:
+        async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
 
             # Data Query - get_connection() returns RealDictCursor

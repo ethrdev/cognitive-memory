@@ -11,7 +11,7 @@ import logging
 from datetime import date
 from typing import Any, Dict, List
 
-from mcp_server.db.connection import get_connection
+from mcp_server.db.connection import get_connection_with_project_context
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ async def log_evaluation(
         ... )
     """
     try:
-        async with get_connection() as conn:
+        async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
 
             # Insert into evaluation_log (detailed results)
@@ -112,7 +112,7 @@ async def get_recent_evaluations(limit: int = 10) -> List[Dict[str, Any]]:
         ...     print(f"Reward: {eval['reward_score']}, Query: {eval['query'][:50]}")
     """
     try:
-        async with get_connection() as conn:
+        async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -169,7 +169,7 @@ async def get_evaluation_stats(days: int = 30) -> Dict[str, Any]:
         >>> print(f"Low quality: {stats['low_quality_pct']:.1f}%")
     """
     try:
-        async with get_connection() as conn:
+        async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """

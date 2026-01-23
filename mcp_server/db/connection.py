@@ -3,6 +3,8 @@ Database Connection Pool Module
 
 Provides connection pooling for PostgreSQL database with health checks
 and graceful shutdown capabilities.
+
+Story 11.4.2: Adds RLS context integration with get_connection_with_project_context().
 """
 
 from __future__ import annotations
@@ -18,6 +20,8 @@ import psycopg2
 from psycopg2 import pool
 from psycopg2.extensions import connection
 from psycopg2.extras import DictCursor
+
+from mcp_server.exceptions import RLSContextError
 
 
 # Custom exceptions
@@ -273,6 +277,351 @@ def get_connection_sync(max_retries: int = 3, retry_delay: float = 0.5) -> Itera
 
             _logger.debug("Database connection acquired from pool (sync)")
             yield conn
+            return  # Success - exit the retry loop
+
+        except psycopg2.Error as e:
+            # Check if the error during operation is transient
+            if _is_transient_error(e) and attempt < max_retries:
+                _logger.warning(f"Transient database error (attempt {attempt + 1}/{max_retries + 1}): {e}")
+                _logger.info(f"Retrying in {current_delay:.1f}s...")
+                time.sleep(current_delay)
+                current_delay *= 2
+                last_error = e
+                continue
+            raise
+        except pool.PoolError as e:
+            if attempt < max_retries:
+                _logger.warning(f"Pool error (attempt {attempt + 1}/{max_retries + 1}): {e}")
+                time.sleep(current_delay)
+                current_delay *= 2
+                last_error = e
+                continue
+            _logger.error("Connection pool exhausted after all retries")
+            raise PoolError("Connection pool exhausted - no available connections") from e
+        finally:
+            # Always return connection to pool if it was successfully acquired
+            if conn is not None:
+                try:
+                    _connection_pool.putconn(conn)
+                    _logger.debug("Database connection returned to pool (sync)")
+                except Exception as e:
+                    _logger.error(f"Error returning connection to pool: {e}")
+                conn = None
+
+    # All retries exhausted
+    if last_error:
+        _logger.error(f"All {max_retries + 1} connection attempts failed. Last error: {last_error}")
+        raise PoolError(f"Connection failed after {max_retries + 1} attempts: {last_error}") from last_error
+
+
+@asynccontextmanager
+async def get_connection_with_project_context(
+    read_only: bool = False,
+    max_retries: int = 3,
+    retry_delay: float = 0.5,
+) -> AsyncIterator[connection]:
+    """
+    Get a database connection with RLS project context automatically set.
+
+    Story 11.4.2: Project Context Validation and RLS Integration
+
+    This wrapper extends get_connection() to:
+    1. Get project_id from the project_context contextvar (set by TenantMiddleware)
+    2. Call set_project_context(project_id) with appropriate transaction scoping
+    3. Ensure RLS session variables are active for all queries
+    4. Maintain backward compatibility with existing connection pool retry logic
+
+    CRITICAL: Transaction scoping depends on read_only parameter:
+    - read_only=True: Uses autocommit mode (valid for single SELECT query)
+    - read_only=False: Uses explicit transaction (required for writes, valid for transaction duration)
+
+    Args:
+        read_only: If True, use autocommit for SELECT-only operations.
+                  If False, use explicit transaction for write operations (default: False).
+        max_retries: Maximum number of retry attempts for transient errors (default: 3)
+        retry_delay: Initial delay between retries in seconds, doubles each attempt (default: 0.5)
+
+    Returns:
+        Database connection object with RLS context active
+
+    Raises:
+        PoolError: If pool is not initialized or exhausted after all retries
+        ConnectionHealthError: If connection health check fails after all retries
+        RLSContextError: If project context cannot be set (no project_id in contextvar)
+
+    Example:
+        # For read-only operations (SELECT queries):
+        async with get_connection_with_project_context(read_only=True) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM nodes WHERE project_id = %s", (project_id,))
+            # RLS context active for single query, then autocommit
+        # Context is cleared automatically
+
+        # For write operations (INSERT/UPDATE/DELETE):
+        async with get_connection_with_project_context(read_only=False) as conn:
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO nodes ...")
+            # RLS context active for entire transaction
+        # Transaction commits/rollbacks, context cleared
+    """
+    global _connection_pool
+
+    if _connection_pool is None:
+        raise PoolError(
+            "Connection pool not initialized. Call initialize_pool() first."
+        )
+
+    # Get project_id from contextvar (set by TenantMiddleware)
+    from mcp_server.middleware.context import get_project_id
+
+    project_id = get_project_id()
+    if project_id is None:
+        raise RLSContextError(
+            "No project context available. "
+            "TenantMiddleware should have set project_context before database access."
+        )
+
+    last_error: Exception | None = None
+    current_delay = retry_delay
+    conn = None
+
+    for attempt in range(max_retries + 1):
+        try:
+            # Get connection from pool
+            conn = _connection_pool.getconn()
+
+            # Health check: verify connection is alive
+            try:
+                cursor = conn.cursor()
+                cursor.execute("SELECT 1 as health_check")
+                result = cursor.fetchone()
+                if result["health_check"] != 1:
+                    raise ConnectionHealthError("Connection health check failed")
+                cursor.close()
+            except (psycopg2.Error, Exception) as e:
+                _logger.warning(f"Connection health check failed (attempt {attempt + 1}/{max_retries + 1}): {e}")
+                # Discard bad connection
+                try:
+                    _connection_pool.putconn(conn, close=True)
+                except Exception:
+                    pass
+                conn = None
+
+                # Check if error is transient and we should retry
+                if _is_transient_error(e) and attempt < max_retries:
+                    _logger.info(f"Transient error detected, retrying in {current_delay:.1f}s...")
+                    await asyncio.sleep(current_delay)
+                    current_delay *= 2  # Exponential backoff
+                    last_error = e
+                    continue
+
+                raise ConnectionHealthError(f"Connection health check failed: {e}") from e
+
+            # CRITICAL: Set RLS context with appropriate transaction scoping
+            # For read-only: SET LOCAL valid for single query with autocommit
+            # For write: SET LOCAL valid for entire transaction
+            try:
+                if read_only:
+                    # Read-only mode: autocommit, SET LOCAL valid for single query
+                    conn.autocommit = True
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT set_project_context(%s)", (project_id,))
+                    cursor.close()
+
+                    _logger.debug(
+                        f"RLS context set for project_id={project_id} "
+                        f"(read-only mode, autocommit, context active for single query)"
+                    )
+
+                    # Yield connection with RLS context
+                    yield conn
+
+                    # Autocommit happens automatically, no explicit transaction
+                else:
+                    # Write mode: explicit transaction, SET LOCAL valid for transaction
+                    with conn.transaction() as tx:
+                        cursor = conn.cursor()
+                        # Call set_project_context() which sets all session variables
+                        # This is defined in migration 034_rls_helper_functions.sql
+                        cursor.execute("SELECT set_project_context(%s)", (project_id,))
+                        cursor.close()
+
+                        _logger.debug(
+                            f"RLS context set for project_id={project_id} "
+                            f"(transaction started, context active)"
+                        )
+
+                        # Yield connection with active transaction and RLS context
+                        # The transaction remains open until the caller exits the context manager
+                        yield conn
+
+                        # Transaction commits/rolls back based on exception handling
+                        # tx.__exit__ handles this automatically
+
+            except psycopg2.Error as e:
+                _logger.error(f"Failed to set RLS context for project {project_id}: {e}")
+                raise RLSContextError(f"Failed to set RLS context: {e}") from e
+
+            _logger.debug("Database connection with RLS context returned to pool")
+            return  # Success - exit the retry loop
+
+        except psycopg2.Error as e:
+            # Check if the error during operation is transient
+            if _is_transient_error(e) and attempt < max_retries:
+                _logger.warning(f"Transient database error (attempt {attempt + 1}/{max_retries + 1}): {e}")
+                _logger.info(f"Retrying in {current_delay:.1f}s...")
+                time.sleep(current_delay)
+                current_delay *= 2
+                last_error = e
+                continue
+            raise
+        except pool.PoolError as e:
+            if attempt < max_retries:
+                _logger.warning(f"Pool error (attempt {attempt + 1}/{max_retries + 1}): {e}")
+                time.sleep(current_delay)
+                current_delay *= 2
+                last_error = e
+                continue
+            _logger.error("Connection pool exhausted after all retries")
+            raise PoolError("Connection pool exhausted - no available connections") from e
+        finally:
+            # Always return connection to pool if it was successfully acquired
+            if conn is not None:
+                try:
+                    _connection_pool.putconn(conn)
+                    _logger.debug("Database connection returned to pool")
+                except Exception as e:
+                    _logger.error(f"Error returning connection to pool: {e}")
+                conn = None
+
+    # All retries exhausted
+    if last_error:
+        _logger.error(f"All {max_retries + 1} connection attempts failed. Last error: {last_error}")
+        raise PoolError(f"Connection failed after {max_retries + 1} attempts: {last_error}") from last_error
+
+
+@contextmanager
+def get_connection_with_project_context_sync(
+    read_only: bool = False,
+    max_retries: int = 3,
+    retry_delay: float = 0.5,
+) -> Iterator[connection]:
+    """
+    Synchronous version of get_connection_with_project_context.
+
+    Use this for non-async code paths (middleware validation, batch jobs).
+    For MCP tools running in async context, use get_connection_with_project_context() instead.
+
+    Args:
+        read_only: If True, use autocommit for SELECT-only operations.
+                  If False, use explicit transaction for write operations (default: False).
+        max_retries: Maximum number of retry attempts for transient errors (default: 3)
+        retry_delay: Initial delay between retries in seconds, doubles each attempt (default: 0.5)
+
+    Returns:
+        Database connection object with RLS context active
+
+    Raises:
+        PoolError: If pool is not initialized or exhausted after all retries
+        ConnectionHealthError: If connection health check fails after all retries
+        RLSContextError: If project context cannot be set
+
+    Example:
+        # In middleware validation (read-only):
+        with get_connection_with_project_context_sync(read_only=True) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM nodes")
+    """
+    global _connection_pool
+
+    if _connection_pool is None:
+        raise PoolError(
+            "Connection pool not initialized. Call initialize_pool() first."
+        )
+
+    # Get project_id from contextvar (set by TenantMiddleware)
+    from mcp_server.middleware.context import get_project_id
+
+    project_id = get_project_id()
+    if project_id is None:
+        raise RLSContextError(
+            "No project context available. "
+            "TenantMiddleware should have set project_context before database access."
+        )
+
+    last_error: Exception | None = None
+    current_delay = retry_delay
+    conn = None
+
+    for attempt in range(max_retries + 1):
+        try:
+            # Get connection from pool
+            conn = _connection_pool.getconn()
+
+            # Health check: verify connection is alive
+            try:
+                cursor = conn.cursor()
+                cursor.execute("SELECT 1 as health_check")
+                result = cursor.fetchone()
+                if result["health_check"] != 1:
+                    raise ConnectionHealthError("Connection health check failed")
+                cursor.close()
+            except (psycopg2.Error, Exception) as e:
+                _logger.warning(f"Connection health check failed (attempt {attempt + 1}/{max_retries + 1}): {e}")
+                # Discard bad connection
+                try:
+                    _connection_pool.putconn(conn, close=True)
+                except Exception:
+                    pass
+                conn = None
+
+                # Check if error is transient and we should retry
+                if _is_transient_error(e) and attempt < max_retries:
+                    _logger.info(f"Transient error detected, retrying in {current_delay:.1f}s...")
+                    time.sleep(current_delay)  # sync sleep
+                    current_delay *= 2  # Exponential backoff
+                    last_error = e
+                    continue
+
+                raise ConnectionHealthError(f"Connection health check failed: {e}") from e
+
+            # CRITICAL: Set RLS context with appropriate transaction scoping
+            try:
+                if read_only:
+                    # Read-only mode: autocommit, SET LOCAL valid for single query
+                    conn.autocommit = True
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT set_project_context(%s)", (project_id,))
+                    cursor.close()
+
+                    _logger.debug(
+                        f"RLS context set for project_id={project_id} "
+                        f"(sync read-only mode, autocommit, context active for single query)"
+                    )
+
+                    # Yield connection with RLS context
+                    yield conn
+                else:
+                    # Write mode: explicit transaction, SET LOCAL valid for transaction
+                    with conn:
+                        cursor = conn.cursor()
+                        # Call set_project_context() which sets all session variables
+                        cursor.execute("SELECT set_project_context(%s)", (project_id,))
+                        cursor.close()
+
+                        _logger.debug(
+                            f"RLS context set for project_id={project_id} "
+                            f"(transaction started, context active)"
+                        )
+
+                        # Yield connection with active transaction and RLS context
+                        yield conn
+
+            except psycopg2.Error as e:
+                _logger.error(f"Failed to set RLS context for project {project_id}: {e}")
+                raise RLSContextError(f"Failed to set RLS context: {e}") from e
+
+            _logger.debug("Database connection with RLS context returned to pool (sync)")
             return  # Success - exit the retry loop
 
         except psycopg2.Error as e:
