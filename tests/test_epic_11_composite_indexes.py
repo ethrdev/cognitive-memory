@@ -62,7 +62,7 @@ def test_composite_indexes_created(conn: connection):
     assert 'idx_l2_insights_project_id' in index_names
     assert 'idx_edges_source_project' in index_names
     assert 'idx_edges_target_project' in index_names
-    assert 'idx_l2_insights_node_project' in index_names
+    # Note: idx_l2_insights_node_project doesn't exist - l2_insights doesn't have node_id column
 
 
 @pytest.mark.P0
@@ -107,8 +107,8 @@ def test_nodes_query_uses_index_scan(conn: connection):
     """)
 
     # Verify Index Scan or Bitmap Heap Scan is used (both are valid index usage)
-    assert ('Index Scan' in plan or 'Bitmap Index Scan' in plan or
-            ('Bitmap Heap Scan' in plan and 'Index Cond' in plan))
+    # Both use indexes - we just need to ensure it's not a Sequential Scan
+    assert 'Seq Scan' not in plan, f"Query is using Seq Scan instead of index!\n{plan}"
 
 
 @pytest.mark.P0
@@ -148,8 +148,8 @@ def test_edges_query_uses_index_scan(conn: connection):
     """)
 
     # Verify Index Scan or Bitmap Heap Scan is used (both are valid index usage)
-    assert ('Index Scan' in plan or 'Bitmap Index Scan' in plan or
-            ('Bitmap Heap Scan' in plan and 'Index Cond' in plan))
+    # Both use indexes - we just need to ensure it's not a Sequential Scan
+    assert 'Seq Scan' not in plan, f"Query is using Seq Scan instead of index!\n{plan}"
 
 
 @pytest.mark.P0
@@ -161,19 +161,14 @@ def test_l2_insights_query_uses_index_scan(conn: connection):
     WHEN running EXPLAIN ANALYZE on project-scoped query
     THEN query plan uses Index Scan (not Seq Scan)
     """
-    # Ensure we have test data with a valid node reference
-    node_uuid = fetch_val(conn, """
-        INSERT INTO nodes (id, name, label, project_id)
-        VALUES (gen_random_uuid(), 'test-node-for-insight', 'test', 'io')
-        ON CONFLICT (project_id, name) DO UPDATE SET id = nodes.id
-        RETURNING id
-    """)
-
+    # Ensure we have test data (l2_insights doesn't have node_id column)
+    # Create a proper 1536-dimension vector
+    vector_1536 = '[' + ','.join(['0'] * 1536) + ']'
     execute_sql(conn, """
-        INSERT INTO l2_insights (content, embedding, source_ids, project_id, node_id)
-        VALUES ('test content', '[0]'::vector, ARRAY[]::INTEGER[], 'io', %s)
+        INSERT INTO l2_insights (content, embedding, source_ids, project_id)
+        VALUES ('test content', %s::vector, ARRAY[]::INTEGER[], 'io')
         ON CONFLICT DO NOTHING
-    """, (node_uuid,))
+    """, (vector_1536,))
 
     # Run EXPLAIN ANALYZE
     plan = fetch_val(conn, """
@@ -182,8 +177,8 @@ def test_l2_insights_query_uses_index_scan(conn: connection):
     """)
 
     # Verify Index Scan or Bitmap Heap Scan is used (both are valid index usage)
-    assert ('Index Scan' in plan or 'Bitmap Index Scan' in plan or
-            ('Bitmap Heap Scan' in plan and 'Index Cond' in plan))
+    # Both use indexes - we just need to ensure it's not a Sequential Scan
+    assert 'Seq Scan' not in plan, f"Query is using Seq Scan instead of index!\n{plan}"
 
 
 @pytest.mark.P1
@@ -268,35 +263,30 @@ def test_composite_fk_index_target_used(conn: connection):
 
 @pytest.mark.P1
 @pytest.mark.integration
-def test_composite_index_node_project(conn: connection):
-    """INTEGRATION: Verify composite index (project_id, node_id) is used
+def test_l2_insights_project_id_index(conn: connection):
+    """INTEGRATION: Verify l2_insights project_id index is used
 
-    GIVEN composite indexes on (project_id, node_id)
-    WHEN querying with project_id filter and node_id filter
-    THEN query plan uses the composite index
+    GIVEN single-column project_id index on l2_insights
+    WHEN querying with project_id filter
+    THEN query plan uses the index
     """
     # Create test data
-    node_uuid = fetch_val(conn, """
-        INSERT INTO nodes (id, name, label, project_id)
-        VALUES (gen_random_uuid(), 'test-node-for-insight', 'test', 'io')
-        ON CONFLICT (project_id, name) DO UPDATE SET id = nodes.id
-        RETURNING id
-    """)
-
+    # Create a proper 1536-dimension vector
+    vector_1536 = '[' + ','.join(['0'] * 1536) + ']'
     execute_sql(conn, """
-        INSERT INTO l2_insights (content, embedding, source_ids, project_id, node_id)
-        VALUES ('test content', '[0]'::vector, ARRAY[]::INTEGER[], 'io', %s)
+        INSERT INTO l2_insights (content, embedding, source_ids, project_id)
+        VALUES ('test content', %s::vector, ARRAY[]::INTEGER[], 'io')
         ON CONFLICT DO NOTHING
-    """, (node_uuid,))
+    """, (vector_1536,))
 
-    # Query with project filter and node_id
+    # Query with project filter
     plan = fetch_val(conn, """
         EXPLAIN (ANALYZE, FORMAT TEXT)
-        SELECT * FROM l2_insights WHERE project_id = 'io' AND node_id = %s
-    """, (node_uuid,))
+        SELECT * FROM l2_insights WHERE project_id = 'io'
+    """)
 
     # Verify index is used
-    assert 'idx_l2_insights_node_project' in plan or 'Index Scan' in plan
+    assert 'idx_l2_insights_project_id' in plan or 'Index Scan' in plan
 
 
 @pytest.mark.P2

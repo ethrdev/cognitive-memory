@@ -22,7 +22,6 @@ DROP INDEX CONCURRENTLY IF EXISTS idx_l2_insights_project_id;
 
 DROP INDEX CONCURRENTLY IF EXISTS idx_edges_source_project;
 DROP INDEX CONCURRENTLY IF EXISTS idx_edges_target_project;
-DROP INDEX CONCURRENTLY IF EXISTS idx_l2_insights_node_project;
 
 -- ============================================================================
 -- VERIFICATION (uncomment to verify)

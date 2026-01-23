@@ -49,10 +49,9 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_edges_source_project
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_edges_target_project
     ON edges(project_id, target_id);
 
--- L2 insights foreign key index with project_id
--- Pattern: SELECT * FROM l2_insights WHERE project_id = ? AND node_id = ?
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_l2_insights_node_project
-    ON l2_insights(project_id, node_id);
+-- L2 insights: Only single-column project_id index needed
+-- l2_insights doesn't have a node_id column (nodes.vector_id references l2_insights.id)
+-- Pattern: SELECT * FROM l2_insights WHERE project_id = ?
 
 -- ============================================================================
 -- VERIFICATION QUERIES (uncomment to verify)
@@ -69,7 +68,6 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_l2_insights_node_project
 --   idx_edges_project_id         | CREATE INDEX idx_edges_project_id ON edges USING btree (project_id)
 --   idx_edges_source_project     | CREATE INDEX idx_edges_source_project ON edges USING btree (project_id, source_id)
 --   idx_edges_target_project     | CREATE INDEX idx_edges_target_project ON edges USING btree (project_id, target_id)
---   idx_l2_insights_node_project | CREATE INDEX idx_l2_insights_node_project ON l2_insights USING btree (project_id, node_id)
 --   idx_l2_insights_project_id   | CREATE INDEX idx_l2_insights_project_id ON l2_insights USING btree (project_id)
 --   idx_nodes_project_id         | CREATE INDEX idx_nodes_project_id ON nodes USING btree (project_id)
 
