@@ -34,6 +34,38 @@ def get_project_id() -> str | None:
     return project_context.get()
 
 
+def get_current_project() -> str:
+    """Get the current project ID from context, raising error if not set.
+
+    Story 11.4.3: Tool Handler Refactoring
+    This function is used by tool handlers to get the project_id with a guarantee
+    that the middleware has properly set the context. It raises RuntimeError if
+    called without context, preventing accidental middleware bypass.
+
+    Returns:
+        The project ID for the current request (guaranteed to be non-None).
+
+    Raises:
+        RuntimeError: If project context is not set (middleware bypass or missing setup).
+
+    Example:
+        from mcp_server.middleware.context import get_current_project
+
+        async def handle_tool(arguments: dict) -> dict:
+            project_id = get_current_project()  # Raises RuntimeError if not set
+            # Use project_id for database operations
+            return {"result": data, "metadata": {"project_id": project_id}}
+    """
+    project_id = project_context.get()
+    if project_id is None:
+        raise RuntimeError(
+            "No project context available. "
+            "TenantMiddleware should have set project_context before tool execution. "
+            "This indicates either middleware bypass or incorrect middleware setup."
+        )
+    return project_id
+
+
 def set_project_id(project_id: str) -> None:
     """Set the project ID for the current request.
 

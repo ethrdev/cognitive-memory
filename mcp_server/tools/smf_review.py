@@ -5,6 +5,7 @@ MCP tool for reviewing detailed information about a specific SMF proposal.
 Returns complete proposal details including affected edge information and
 consequences of approval/rejection.
 
+Story 11.4.3: Tool Handler Refactoring - Added project context usage and metadata
 Story 7.9: SMF mit Safeguards + Neutral Framing - AC #8
 """
 
@@ -15,6 +16,8 @@ from typing import Any
 
 from mcp_server.analysis.smf import get_proposal
 from mcp_server.db.graph import get_edge_by_id
+from mcp_server.middleware.context import get_current_project
+from mcp_server.utils.response import add_response_metadata
 
 
 async def handle_smf_review(arguments: dict[str, Any]) -> dict[str, Any]:
@@ -33,25 +36,28 @@ async def handle_smf_review(arguments: dict[str, Any]) -> dict[str, Any]:
     logger = logging.getLogger(__name__)
 
     try:
+        # Story 11.4.3: Get project_id from middleware context
+        project_id = get_current_project()
+
         # Extract parameters
         proposal_id = arguments.get("proposal_id")
 
         # Parameter validation
         if not proposal_id:
-            return {
+            return add_response_metadata({
                 "error": "Parameter validation failed",
                 "details": "Missing 'proposal_id' parameter",
                 "tool": "smf_review",
-            }
+            }, project_id)
 
         # Get proposal from database
         proposal = get_proposal(proposal_id)
         if not proposal:
-            return {
+            return add_response_metadata({
                 "error": "Proposal not found",
                 "details": f"No proposal found with ID: {proposal_id}",
                 "tool": "smf_review",
-            }
+            }, project_id)
 
         # Get details for affected edges
         affected_edges_details = []
@@ -129,14 +135,14 @@ async def handle_smf_review(arguments: dict[str, Any]) -> dict[str, Any]:
         }
 
         logger.info(f"Retrieved details for SMF proposal {proposal_id}")
-        return response
+        return add_response_metadata(response, project_id)
 
     except Exception as e:
         logger.error(f"Error reviewing SMF proposal {proposal_id}: {e}")
-        return {
+        return add_response_metadata({
             "error": "Failed to review proposal",
             "details": str(e),
             "tool": "smf_review",
             "proposal_id": arguments.get("proposal_id"),
             "status": "error"
-        }
+        }, get_current_project())  # Still get project_id even in catch block

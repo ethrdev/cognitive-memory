@@ -5,6 +5,7 @@ MCP tool for creating relationships between graph nodes with idempotent operatio
 Supports auto-upsert of nodes and standardized relationship types.
 
 Story 4.3: graph_add_edge Tool Implementation
+Story 11.4.3: Tool Handler Refactoring - Added project context usage and metadata
 """
 
 from __future__ import annotations
@@ -14,6 +15,8 @@ import logging
 from typing import Any
 
 from mcp_server.db.graph import add_edge, get_or_create_node
+from mcp_server.middleware.context import get_current_project
+from mcp_server.utils.response import add_response_metadata
 from mcp_server.utils.sector_classifier import classify_memory_sector
 
 logger = logging.getLogger(__name__)
@@ -34,11 +37,15 @@ async def handle_graph_add_edge(arguments: dict[str, Any]) -> dict[str, Any]:
 
     Returns:
         Dict with edge_id, created status, and confirmation data,
-        or error response if validation/database operations fail
+        plus metadata containing project_id (FR29),
+        or error response with metadata if validation/database operations fail
     """
     logger = logging.getLogger(__name__)
 
     try:
+        # Story 11.4.3: Get project_id from middleware context
+        project_id = get_current_project()
+
         # Extract parameters
         source_name = arguments.get("source_name")
         target_name = arguments.get("target_name")
@@ -50,63 +57,63 @@ async def handle_graph_add_edge(arguments: dict[str, Any]) -> dict[str, Any]:
 
         # Parameter validation
         if not source_name or not isinstance(source_name, str):
-            return {
+            return add_response_metadata({
                 "error": "Parameter validation failed",
                 "details": "Missing or invalid 'source_name' parameter (must be non-empty string)",
                 "tool": "graph_add_edge",
-            }
+            }, project_id)
 
         if not target_name or not isinstance(target_name, str):
-            return {
+            return add_response_metadata({
                 "error": "Parameter validation failed",
                 "details": "Missing or invalid 'target_name' parameter (must be non-empty string)",
                 "tool": "graph_add_edge",
-            }
+            }, project_id)
 
         if not relation or not isinstance(relation, str):
-            return {
+            return add_response_metadata({
                 "error": "Parameter validation failed",
                 "details": "Missing or invalid 'relation' parameter (must be non-empty string)",
                 "tool": "graph_add_edge",
-            }
+            }, project_id)
 
         if source_label is not None and not isinstance(source_label, str):
-            return {
+            return add_response_metadata({
                 "error": "Parameter validation failed",
                 "details": "Invalid 'source_label' parameter (must be string)",
                 "tool": "graph_add_edge",
-            }
+            }, project_id)
 
         if target_label is not None and not isinstance(target_label, str):
-            return {
+            return add_response_metadata({
                 "error": "Parameter validation failed",
                 "details": "Invalid 'target_label' parameter (must be string)",
                 "tool": "graph_add_edge",
-            }
+            }, project_id)
 
         # Weight validation (0.0-1.0 range)
         if weight is not None:
             try:
                 weight = float(weight)
                 if not (0.0 <= weight <= 1.0):
-                    return {
+                    return add_response_metadata({
                         "error": "Parameter validation failed",
                         "details": "Invalid 'weight' parameter (must be float between 0.0 and 1.0)",
                         "tool": "graph_add_edge",
-                    }
+                    }, project_id)
             except (ValueError, TypeError):
-                return {
+                return add_response_metadata({
                     "error": "Parameter validation failed",
                     "details": "Invalid 'weight' parameter (must be float between 0.0 and 1.0)",
                     "tool": "graph_add_edge",
-                }
+                }, project_id)
 
         if properties is not None and not isinstance(properties, dict):
-            return {
+            return add_response_metadata({
                 "error": "Parameter validation failed",
                 "details": "Invalid 'properties' parameter (must be object/dict)",
                 "tool": "graph_add_edge",
-            }
+            }, project_id)
 
         # Log warning for non-standard relations (optional validation, not blocking)
         if relation not in STANDARD_RELATIONS:
@@ -169,20 +176,20 @@ async def handle_graph_add_edge(arguments: dict[str, Any]) -> dict[str, Any]:
             if nodes_info:
                 response.update(nodes_info)
 
-            return response
+            return add_response_metadata(response, project_id)
 
         except Exception as db_error:
             logger.error(f"Database error in graph_add_edge: {db_error}")
-            return {
+            return add_response_metadata({
                 "error": "Database operation failed",
                 "details": str(db_error),
                 "tool": "graph_add_edge",
-            }
+            }, project_id)
 
     except Exception as e:
         logger.error(f"Unexpected error in graph_add_edge: {e}")
-        return {
+        return add_response_metadata({
             "error": "Tool execution failed",
             "details": str(e),
             "tool": "graph_add_edge",
-        }
+        }, project_id)

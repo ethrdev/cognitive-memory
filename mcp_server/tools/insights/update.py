@@ -5,6 +5,7 @@ MCP tool for updating an existing L2 insight.
 Implements EP-1 (Consent-Aware) and EP-3 (History-on-Mutation) patterns.
 
 Story 26.2: UPDATE Operation
+Story 11.4.3: Tool Handler Refactoring - Added project context usage and metadata
 """
 
 from __future__ import annotations
@@ -12,8 +13,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from mcp_server.analysis.smf import SMFAction, ApprovalLevel, TriggerType, create_smf_proposal
 from mcp_server.db.insights import execute_update_with_history
-from mcp_server.analysis.smf import create_smf_proposal, TriggerType, ApprovalLevel, SMFAction
+from mcp_server.middleware.context import get_current_project
+from mcp_server.utils.response import add_response_metadata
 
 
 async def handle_update_insight(arguments: dict[str, Any]) -> dict[str, Any]:
@@ -41,6 +44,7 @@ async def handle_update_insight(arguments: dict[str, Any]) -> dict[str, Any]:
         - I/O actor: {"success": True, "insight_id": int, "history_id": int, "updated_fields": {...}}
         - ethr actor: {"status": "pending", "proposal_id": int}
         - Error: {"error": {"code": int, "message": str, "field": str|None}}
+        All responses include metadata with project_id (FR29).
 
     Raises:
         No exceptions - all errors return structured error responses (EP-5)
@@ -48,6 +52,9 @@ async def handle_update_insight(arguments: dict[str, Any]) -> dict[str, Any]:
     logger = logging.getLogger(__name__)
 
     try:
+        # Story 11.4.3: Get project_id from middleware context
+        project_id = get_current_project()
+
         # Extract parameters
         insight_id = arguments.get("insight_id")
         actor = arguments.get("actor")
@@ -59,93 +66,93 @@ async def handle_update_insight(arguments: dict[str, Any]) -> dict[str, Any]:
 
         # insight_id required
         if insight_id is None:
-            return {
+            return add_response_metadata({
                 "error": {
                     "code": 400,
                     "message": "insight_id is required",
                     "field": "insight_id"
                 }
-            }
+            }, project_id)
 
         if not isinstance(insight_id, int) or insight_id < 1:
-            return {
+            return add_response_metadata({
                 "error": {
                     "code": 400,
                     "message": "insight_id must be a positive integer",
                     "field": "insight_id"
                 }
-            }
+            }, project_id)
 
         # actor required
         if actor is None:
-            return {
+            return add_response_metadata({
                 "error": {
                     "code": 400,
                     "message": "actor is required",
                     "field": "actor"
                 }
-            }
+            }, project_id)
 
         if actor not in ["I/O", "ethr"]:
-            return {
+            return add_response_metadata({
                 "error": {
                     "code": 400,
                     "message": "actor must be 'I/O' or 'ethr'",
                     "field": "actor"
                 }
-            }
+            }, project_id)
 
         # reason required (AC-3)
         if not reason:
-            return {
+            return add_response_metadata({
                 "error": {
                     "code": 400,
                     "message": "reason required",
                     "field": "reason"
                 }
-            }
+            }, project_id)
 
         # At least one change required (AC-4)
         if new_content is None and new_memory_strength is None:
-            return {
+            return add_response_metadata({
                 "error": {
                     "code": 400,
                     "message": "no changes provided",
                     "field": None
                 }
-            }
+            }, project_id)
 
         # Empty content check (AC-4)
         if new_content is not None and len(str(new_content).strip()) == 0:
-            return {
+            return add_response_metadata({
                 "error": {
                     "code": 400,
                     "message": "new_content cannot be empty",
                     "field": "new_content"
                 }
-            }
+            }, project_id)
 
         # Memory strength range validation
         if new_memory_strength is not None:
             try:
                 strength = float(new_memory_strength)
                 if not (0.0 <= strength <= 1.0):
-                    return {
+                    return add_response_metadata({
                         "error": {
                             "code": 400,
                             "message": "new_memory_strength must be between 0.0 and 1.0",
                             "field": "new_memory_strength"
                         }
-                    }
+                    }, project_id)
                 new_memory_strength = strength
             except (ValueError, TypeError):
-                return {
+                return add_response_metadata({
                     "error": {
                         "code": 400,
                         "message": "new_memory_strength must be a number",
                         "field": "new_memory_strength"
                     }
-                }
+                }, project_id)
 
         # ===== EP-1 CONSENT-AWARE PATTERN =====
 
@@ -163,35 +170,35 @@ async def handle_update_insight(arguments: dict[str, Any]) -> dict[str, Any]:
                 )
 
                 logger.info(f"Insight {insight_id} updated successfully")
-                return result
+                return add_response_metadata(result, project_id)
 
             except ValueError as ve:
                 # Validation errors (not found, etc.)
                 error_msg = str(ve)
                 if "not found" in error_msg:
-                    return {
+                    return add_response_metadata({
                         "error": {
                             "code": 404,
                             "message": f"Insight {insight_id} not found"
                         }
-                    }
+                    }, project_id)
                 else:
-                    return {
+                    return add_response_metadata({
                         "error": {
                             "code": 400,
                             "message": error_msg
                         }
-                    }
+                    }, project_id)
 
             except Exception as e:
                 logger.error(f"Failed to update insight {insight_id}: {e}")
-                return {
+                return add_response_metadata({
                     "error": {
                         "code": 500,
                         "message": "Internal error during update",
                         "details": str(e)
                     }
-                }
+                }, project_id)
 
         else:  # actor == "ethr"
             # ethr requires bilateral consent - create SMF proposal
@@ -217,28 +224,28 @@ async def handle_update_insight(arguments: dict[str, Any]) -> dict[str, Any]:
                 )
 
                 logger.info(f"SMF proposal {proposal_id} created for insight {insight_id} update")
-                return {
+                return add_response_metadata({
                     "status": "pending",
                     "proposal_id": proposal_id,
                     "message": "Waiting for I/O approval"
-                }
+                }, project_id)
 
             except Exception as e:
                 logger.error(f"Failed to create SMF proposal: {e}")
-                return {
+                return add_response_metadata({
                     "error": {
                         "code": 500,
                         "message": "Failed to create consent proposal",
                         "details": str(e)
                     }
-                }
+                }, project_id)
 
     except Exception as e:
         logger.error(f"Unexpected error in update_insight: {e}")
-        return {
+        return add_response_metadata({
             "error": {
                 "code": 500,
                 "message": "Tool execution failed",
                 "details": str(e)
             }
-        }
+        }, project_id)

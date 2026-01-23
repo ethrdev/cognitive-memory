@@ -4,6 +4,7 @@ delete_insight Tool Implementation
 MCP tool for soft-deleting an existing L2 insight.
 Implements EP-1 (Consent-Aware), EP-2 (Soft-Delete), and EP-3 (History-on-Mutation) patterns.
 
+Story 11.4.3: Tool Handler Refactoring - Added project context usage and metadata
 Story 26.3: DELETE Operation
 """
 
@@ -14,6 +15,8 @@ from typing import Any
 
 from mcp_server.db.insights import execute_delete_with_history
 from mcp_server.analysis.smf import create_smf_proposal, TriggerType, ApprovalLevel, SMFAction
+from mcp_server.middleware.context import get_current_project
+from mcp_server.utils.response import add_response_metadata
 
 
 async def handle_delete_insight(arguments: dict[str, Any]) -> dict[str, Any]:
@@ -51,6 +54,9 @@ async def handle_delete_insight(arguments: dict[str, Any]) -> dict[str, Any]:
     logger = logging.getLogger(__name__)
 
     try:
+        # Story 11.4.3: Get project_id from middleware context
+        project_id = get_current_project()
+
         # Extract parameters
         insight_id = arguments.get("insight_id")
         actor = arguments.get("actor")
@@ -60,51 +66,51 @@ async def handle_delete_insight(arguments: dict[str, Any]) -> dict[str, Any]:
 
         # insight_id required
         if insight_id is None:
-            return {
+            return add_response_metadata({
                 "error": {
                     "code": 400,
                     "message": "insight_id is required",
                     "field": "insight_id"
                 }
-            }
+            }, project_id)
 
         if not isinstance(insight_id, int) or insight_id < 1:
-            return {
+            return add_response_metadata({
                 "error": {
                     "code": 400,
                     "message": "insight_id must be a positive integer",
                     "field": "insight_id"
                 }
-            }
+            }, project_id)
 
         # actor required
         if actor is None:
-            return {
+            return add_response_metadata({
                 "error": {
                     "code": 400,
                     "message": "actor is required",
                     "field": "actor"
                 }
-            }
+            }, project_id)
 
         if actor not in ["I/O", "ethr"]:
-            return {
+            return add_response_metadata({
                 "error": {
                     "code": 400,
                     "message": "actor must be 'I/O' or 'ethr'",
                     "field": "actor"
                 }
-            }
+            }, project_id)
 
         # reason required (AC-6)
         if not reason:
-            return {
+            return add_response_metadata({
                 "error": {
                     "code": 400,
                     "message": "reason required",
                     "field": "reason"
                 }
-            }
+            }, project_id)
 
         # ===== EP-1 CONSENT-AWARE PATTERN =====
 
@@ -120,42 +126,42 @@ async def handle_delete_insight(arguments: dict[str, Any]) -> dict[str, Any]:
                 )
 
                 logger.info(f"Insight {insight_id} deleted successfully")
-                return result
+                return add_response_metadata(result, project_id)
 
             except ValueError as ve:
                 # Validation errors (not found, already deleted, etc.)
                 error_msg = str(ve)
                 if "not found" in error_msg:
-                    return {
+                    return add_response_metadata({
                         "error": {
                             "code": 404,
                             "message": f"Insight {insight_id} not found"
                         }
-                    }
+                    }, project_id)
                 elif "already deleted" in error_msg:
-                    return {
+                    return add_response_metadata({
                         "error": {
                             "code": 409,
                             "message": "already deleted"
                         }
-                    }
+                    }, project_id)
                 else:
-                    return {
+                    return add_response_metadata({
                         "error": {
                             "code": 400,
                             "message": error_msg
                         }
-                    }
+                    }, project_id)
 
             except Exception as e:
                 logger.error(f"Failed to delete insight {insight_id}: {e}")
-                return {
+                return add_response_metadata({
                     "error": {
                         "code": 500,
                         "message": "Internal error during delete",
                         "details": str(e)
                     }
-                }
+                }, project_id)
 
         else:  # actor == "ethr"
             # ethr requires bilateral consent - create SMF proposal
@@ -179,28 +185,29 @@ async def handle_delete_insight(arguments: dict[str, Any]) -> dict[str, Any]:
                 )
 
                 logger.info(f"SMF proposal {proposal_id} created for insight {insight_id} deletion")
-                return {
+                return add_response_metadata({
                     "status": "pending",
                     "proposal_id": proposal_id,
                     "message": "Waiting for I/O approval"
-                }
+                }, project_id)
 
             except Exception as e:
                 logger.error(f"Failed to create SMF proposal: {e}")
-                return {
+                return add_response_metadata({
                     "error": {
                         "code": 500,
                         "message": "Failed to create consent proposal",
                         "details": str(e)
                     }
-                }
+                }, project_id)
 
     except Exception as e:
         logger.error(f"Unexpected error in delete_insight: {e}")
-        return {
+        # project_id is already available from line 58
+        return add_response_metadata({
             "error": {
                 "code": 500,
                 "message": "Tool execution failed",
                 "details": str(e)
             }
-        }
+        }, project_id)

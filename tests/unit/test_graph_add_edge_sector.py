@@ -18,7 +18,7 @@ class TestEmotionalEdgeClassification:
     """Test AC #2: Edges with emotional_valence are classified as emotional."""
 
     @pytest.mark.asyncio
-    async def test_emotional_valence_positive(self):
+    async def test_emotional_valence_positive(with_project_context):
         """Edge with positive emotional_valence should be classified as emotional."""
         result = await handle_graph_add_edge({
             "source_name": "TestSource",
@@ -31,7 +31,7 @@ class TestEmotionalEdgeClassification:
         assert result["memory_sector"] == "emotional"
 
     @pytest.mark.asyncio
-    async def test_emotional_valence_negative(self):
+    async def test_emotional_valence_negative(with_project_context):
         """Edge with negative emotional_valence should be classified as emotional."""
         result = await handle_graph_add_edge({
             "source_name": "TestSource",
@@ -44,7 +44,7 @@ class TestEmotionalEdgeClassification:
         assert result["memory_sector"] == "emotional"
 
     @pytest.mark.asyncio
-    async def test_emotional_valence_neutral(self):
+    async def test_emotional_valence_neutral(with_project_context):
         """Edge with neutral emotional_valence should be classified as emotional."""
         result = await handle_graph_add_edge({
             "source_name": "TestSource",
@@ -61,7 +61,7 @@ class TestEpisodicEdgeClassification:
     """Test AC #3: Edges with shared_experience are classified as episodic."""
 
     @pytest.mark.asyncio
-    async def test_shared_experience_context(self):
+    async def test_shared_experience_context(with_project_context):
         """Edge with context_type=shared_experience should be classified as episodic."""
         result = await handle_graph_add_edge({
             "source_name": "TestSource",
@@ -78,7 +78,7 @@ class TestProceduralEdgeClassification:
     """Test AC #4: Edges with LEARNED/CAN_DO relations are classified as procedural."""
 
     @pytest.mark.asyncio
-    async def test_learned_relation(self):
+    async def test_learned_relation(with_project_context):
         """Edge with LEARNED relation should be classified as procedural."""
         result = await handle_graph_add_edge({
             "source_name": "TestSource",
@@ -90,7 +90,7 @@ class TestProceduralEdgeClassification:
         assert result["memory_sector"] == "procedural"
 
     @pytest.mark.asyncio
-    async def test_can_do_relation(self):
+    async def test_can_do_relation(with_project_context):
         """Edge with CAN_DO relation should be classified as procedural."""
         result = await handle_graph_add_edge({
             "source_name": "TestSource",
@@ -106,7 +106,7 @@ class TestReflectiveEdgeClassification:
     """Test AC #5: Edges with REFLECTS/REFLECTS_ON/REALIZED relations are classified as reflective."""
 
     @pytest.mark.asyncio
-    async def test_reflects_relation(self):
+    async def test_reflects_relation(with_project_context):
         """Edge with REFLECTS relation should be classified as reflective."""
         result = await handle_graph_add_edge({
             "source_name": "TestSource",
@@ -118,7 +118,7 @@ class TestReflectiveEdgeClassification:
         assert result["memory_sector"] == "reflective"
 
     @pytest.mark.asyncio
-    async def test_reflects_on_relation(self):
+    async def test_reflects_on_relation(with_project_context):
         """Edge with REFLECTS_ON relation should be classified as reflective."""
         result = await handle_graph_add_edge({
             "source_name": "TestSource",
@@ -130,7 +130,7 @@ class TestReflectiveEdgeClassification:
         assert result["memory_sector"] == "reflective"
 
     @pytest.mark.asyncio
-    async def test_realized_relation(self):
+    async def test_realized_relation(with_project_context):
         """Edge with REALIZED relation should be classified as reflective."""
         result = await handle_graph_add_edge({
             "source_name": "TestSource",
@@ -146,7 +146,7 @@ class TestSemanticDefaultClassification:
     """Test AC #6: Edges matching no specific rule default to semantic."""
 
     @pytest.mark.asyncio
-    async def test_semantic_default_no_properties(self):
+    async def test_semantic_default_no_properties(with_project_context):
         """Edge without special properties should default to semantic."""
         result = await handle_graph_add_edge({
             "source_name": "TestSource",
@@ -158,7 +158,7 @@ class TestSemanticDefaultClassification:
         assert result["memory_sector"] == "semantic"
 
     @pytest.mark.asyncio
-    async def test_semantic_default_standard_relations(self):
+    async def test_semantic_default_standard_relations(with_project_context):
         """Standard relations without special properties should be semantic."""
         for relation in ["USES", "SOLVES", "CREATED_BY", "RELATED_TO", "DEPENDS_ON"]:
             result = await handle_graph_add_edge({
@@ -175,7 +175,7 @@ class TestMemorySectorInResponse:
     """Test AC #1: Response includes memory_sector field."""
 
     @pytest.mark.asyncio
-    async def test_memory_sector_field_present(self):
+    async def test_memory_sector_field_present(with_project_context):
         """Response should always include memory_sector field."""
         result = await handle_graph_add_edge({
             "source_name": "TestSource",
@@ -188,7 +188,7 @@ class TestMemorySectorInResponse:
         assert len(result["memory_sector"]) > 0
 
     @pytest.mark.asyncio
-    async def test_memory_sector_lowercase(self):
+    async def test_memory_sector_lowercase(with_project_context):
         """memory_sector in response should always be lowercase."""
         result = await handle_graph_add_edge({
             "source_name": "TestSource",
@@ -204,7 +204,7 @@ class TestEdgeUpdatePreservesClassification:
     """Test AC #8: Edge update with ON CONFLICT reclassifies based on new properties."""
 
     @pytest.mark.asyncio
-    async def test_edge_update_reclassifies_sector(self):
+    async def test_edge_update_reclassifies_sector(with_project_context):
         """Updating an edge with changed properties should reclassify memory_sector."""
         # Create initial edge as semantic
         result1 = await handle_graph_add_edge({
@@ -251,7 +251,7 @@ class TestEdgeUpdatePreservesClassification:
             assert row["memory_sector"] == "emotional", "ON CONFLICT should update memory_sector in database"
 
     @pytest.mark.asyncio
-    async def test_edge_update_from_emotional_to_semantic(self):
+    async def test_edge_update_from_emotional_to_semantic(with_project_context):
         """Updating edge and removing emotional property should reclassify to semantic."""
         # Create edge with emotional_valence
         result1 = await handle_graph_add_edge({

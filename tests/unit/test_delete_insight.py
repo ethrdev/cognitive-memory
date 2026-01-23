@@ -20,7 +20,7 @@ from mcp_server.analysis.smf import SMFAction
 # =============================================================================
 
 @pytest.mark.asyncio
-async def test_reason_required():
+async def test_reason_required(with_project_context):
     """AC-6: reason is mandatory - returns 400 error when missing."""
     result = await handle_delete_insight({
         "insight_id": 42,
@@ -35,7 +35,7 @@ async def test_reason_required():
 
 
 @pytest.mark.asyncio
-async def test_reason_empty_string():
+async def test_reason_empty_string(with_project_context):
     """AC-6: reason cannot be empty string."""
     result = await handle_delete_insight({
         "insight_id": 42,
@@ -54,7 +54,7 @@ async def test_reason_empty_string():
 
 @pytest.mark.asyncio
 @patch('mcp_server.tools.insights.delete.execute_delete_with_history')
-async def test_io_direct_delete(mock_execute):
+async def test_io_direct_delete(mock_execute, with_project_context):
     """AC-1: I/O can delete directly without SMF proposal."""
     # Mock successful delete
     mock_execute.return_value = {
@@ -78,6 +78,10 @@ async def test_io_direct_delete(mock_execute):
     assert result["recoverable"] is True
     mock_execute.assert_called_once_with(insight_id=42, actor="I/O", reason="Nicht mehr relevant")
 
+    # Verify metadata includes project_id
+    assert "metadata" in result
+    assert result["metadata"]["project_id"] == "test-project"
+
 
 # =============================================================================
 # AC-2: SMF Proposal (ethr as Actor) Tests
@@ -85,7 +89,7 @@ async def test_io_direct_delete(mock_execute):
 
 @pytest.mark.asyncio
 @patch('mcp_server.tools.insights.delete.create_smf_proposal')
-async def test_ethr_creates_smf_proposal(mock_create_proposal):
+async def test_ethr_creates_smf_proposal(mock_create_proposal, with_project_context):
     """AC-2: ethr creates SMF proposal for bilateral consent."""
     # Mock successful proposal creation
     mock_create_proposal.return_value = 999
@@ -102,6 +106,10 @@ async def test_ethr_creates_smf_proposal(mock_create_proposal):
     assert "message" in result
     mock_create_proposal.assert_called_once()
 
+    # Verify metadata includes project_id
+    assert "metadata" in result
+    assert result["metadata"]["project_id"] == "test-project"
+
 
 # =============================================================================
 # AC-5: Already Deleted Tests
@@ -109,7 +117,7 @@ async def test_ethr_creates_smf_proposal(mock_create_proposal):
 
 @pytest.mark.asyncio
 @patch('mcp_server.tools.insights.delete.execute_delete_with_history')
-async def test_already_deleted(mock_execute):
+async def test_already_deleted(mock_execute, with_project_context):
     """AC-5: returns 409 for already deleted insight."""
     # Mock already deleted error
     mock_execute.side_effect = ValueError("already deleted")
@@ -131,7 +139,7 @@ async def test_already_deleted(mock_execute):
 
 @pytest.mark.asyncio
 @patch('mcp_server.tools.insights.delete.execute_delete_with_history')
-async def test_not_found(mock_execute):
+async def test_not_found(mock_execute, with_project_context):
     """AC-7: returns 404 for unknown insight."""
     # Mock not found error
     mock_execute.side_effect = ValueError("Insight 42 not found")
@@ -153,7 +161,7 @@ async def test_not_found(mock_execute):
 
 @pytest.mark.asyncio
 @patch('mcp_server.tools.insights.delete.execute_delete_with_history')
-async def test_search_exclusion(mock_execute):
+async def test_search_exclusion(mock_execute, with_project_context):
     """AC-3: soft-deleted insights should be excluded from search results.
 
     Note: This unit test verifies the delete operation sets is_deleted=TRUE.
@@ -195,7 +203,7 @@ async def test_search_exclusion(mock_execute):
 
 @pytest.mark.asyncio
 @patch('mcp_server.tools.insights.delete.execute_delete_with_history')
-async def test_history_preservation(mock_execute):
+async def test_history_preservation(mock_execute, with_project_context):
     """AC-4: Deleted insights should be available in history."""
     # Mock successful delete that creates history
     mock_execute.return_value = {
@@ -227,7 +235,7 @@ async def test_history_preservation(mock_execute):
 # =============================================================================
 
 @pytest.mark.asyncio
-async def test_insight_id_required():
+async def test_insight_id_required(with_project_context):
     """insight_id is mandatory."""
     result = await handle_delete_insight({
         "actor": "I/O",
@@ -241,7 +249,7 @@ async def test_insight_id_required():
 
 
 @pytest.mark.asyncio
-async def test_insight_id_must_be_positive():
+async def test_insight_id_must_be_positive(with_project_context):
     """insight_id must be a positive integer."""
     result = await handle_delete_insight({
         "insight_id": 0,
@@ -255,7 +263,7 @@ async def test_insight_id_must_be_positive():
 
 
 @pytest.mark.asyncio
-async def test_actor_required():
+async def test_actor_required(with_project_context):
     """actor is mandatory."""
     result = await handle_delete_insight({
         "insight_id": 42,
@@ -269,7 +277,7 @@ async def test_actor_required():
 
 
 @pytest.mark.asyncio
-async def test_actor_must_be_io_or_ethr():
+async def test_actor_must_be_io_or_ethr(with_project_context):
     """actor must be 'I/O' or 'ethr'."""
     result = await handle_delete_insight({
         "insight_id": 42,
@@ -283,7 +291,7 @@ async def test_actor_must_be_io_or_ethr():
 
 
 @pytest.mark.asyncio
-async def test_insight_id_must_be_integer():
+async def test_insight_id_must_be_integer(with_project_context):
     """insight_id must be an integer."""
     result = await handle_delete_insight({
         "insight_id": "not-a-number",
@@ -302,7 +310,7 @@ async def test_insight_id_must_be_integer():
 
 @pytest.mark.asyncio
 @patch('mcp_server.tools.insights.delete.execute_delete_with_history')
-async def test_io_delete_internal_error(mock_execute):
+async def test_io_delete_internal_error(mock_execute, with_project_context):
     """Handles internal errors gracefully."""
     mock_execute.side_effect = Exception("Database connection failed")
 
@@ -319,7 +327,7 @@ async def test_io_delete_internal_error(mock_execute):
 
 @pytest.mark.asyncio
 @patch('mcp_server.tools.insights.delete.create_smf_proposal')
-async def test_ethr_proposal_creation_fails(mock_create_proposal):
+async def test_ethr_proposal_creation_fails(mock_create_proposal, with_project_context):
     """Handles SMF proposal creation failures."""
     mock_create_proposal.side_effect = Exception("SMF service unavailable")
 
@@ -340,7 +348,7 @@ async def test_ethr_proposal_creation_fails(mock_create_proposal):
 
 @pytest.mark.asyncio
 @patch('mcp_server.tools.insights.delete.create_smf_proposal')
-async def test_smf_proposal_correct_action(mock_create_proposal):
+async def test_smf_proposal_correct_action(mock_create_proposal, with_project_context):
     """Verifies SMF proposal uses DELETE_INSIGHT action."""
     mock_create_proposal.return_value = 999
 
@@ -358,7 +366,7 @@ async def test_smf_proposal_correct_action(mock_create_proposal):
 
 @pytest.mark.asyncio
 @patch('mcp_server.tools.insights.delete.create_smf_proposal')
-async def test_smf_proposal_bilateral_approval(mock_create_proposal):
+async def test_smf_proposal_bilateral_approval(mock_create_proposal, with_project_context):
     """Verifies SMF proposal requires bilateral approval."""
     mock_create_proposal.return_value = 999
 

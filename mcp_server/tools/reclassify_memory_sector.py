@@ -1,6 +1,7 @@
 """
 Reclassify Memory Sector MCP Tool
 
+Story 11.4.3: Tool Handler Refactoring - Added project context usage and metadata
 Story 10.1: Manual reclassification of edge memory sectors.
 Story 10.2: Constitutive edge protection with bilateral consent.
 Functional Requirements: FR5, FR6, FR7, FR8, FR9, FR10, FR23, FR26, FR27
@@ -14,6 +15,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 from mcp_server.db.connection import get_connection
+from mcp_server.middleware.context import get_current_project
+from mcp_server.utils.response import add_response_metadata
 from mcp_server.utils.sector_classifier import MemorySector
 from mcp_server.utils.constants import ReclassifyStatus
 
@@ -401,11 +404,22 @@ async def handle_reclassify_memory_sector(arguments: dict[str, Any]) -> dict[str
     Returns:
         Dict with status and reclassification details
     """
-    return await reclassify_memory_sector(
-        source_name=arguments.get("source_name", ""),
-        target_name=arguments.get("target_name", ""),
-        relation=arguments.get("relation", ""),
-        new_sector=arguments.get("new_sector", ""),
-        edge_id=arguments.get("edge_id"),
-        actor=arguments.get("actor", "I/O")
-    )
+    # Story 11.4.3: Get project_id from middleware context
+    project_id = get_current_project()
+
+    try:
+        result = await reclassify_memory_sector(
+            source_name=arguments.get("source_name", ""),
+            target_name=arguments.get("target_name", ""),
+            relation=arguments.get("relation", ""),
+            new_sector=arguments.get("new_sector", ""),
+            edge_id=arguments.get("edge_id"),
+            actor=arguments.get("actor", "I/O")
+        )
+        return add_response_metadata(result, project_id)
+    except Exception as e:
+        logger.error(f"Error in handle_reclassify_memory_sector: {e}")
+        return add_response_metadata({
+            "error": str(e),
+            "status": "error"
+        }, get_current_project())

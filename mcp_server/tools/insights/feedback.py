@@ -4,6 +4,7 @@ submit_insight_feedback Tool Implementation
 MCP tool for submitting feedback about recalled L2 insights.
 Implements EP-4 (Lazy Evaluation) pattern - feedback is stored, IEF updates on next query.
 
+Story 11.4.3: Tool Handler Refactoring - Added project context usage and metadata
 Story 26.4: Context Critic
 """
 
@@ -11,6 +12,9 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+
+from mcp_server.middleware.context import get_current_project
+from mcp_server.utils.response import add_response_metadata
 
 
 async def handle_submit_insight_feedback(arguments: dict[str, Any]) -> dict[str, Any]:
@@ -45,6 +49,9 @@ async def handle_submit_insight_feedback(arguments: dict[str, Any]) -> dict[str,
     logger = logging.getLogger(__name__)
 
     try:
+        # Story 11.4.3: Get project_id from middleware context
+        project_id = get_current_project()
+
         # Extract parameters
         insight_id = arguments.get("insight_id")
         feedback_type = arguments.get("feedback_type")
@@ -54,53 +61,53 @@ async def handle_submit_insight_feedback(arguments: dict[str, Any]) -> dict[str,
 
         # insight_id required
         if insight_id is None:
-            return {
+            return add_response_metadata({
                 "error": {
                     "code": 400,
                     "message": "insight_id is required",
                     "field": "insight_id"
                 }
-            }
+            }, project_id)
 
         if not isinstance(insight_id, int) or insight_id < 1:
-            return {
+            return add_response_metadata({
                 "error": {
                     "code": 400,
                     "message": "insight_id must be a positive integer",
                     "field": "insight_id"
                 }
-            }
+            }, project_id)
 
         # feedback_type required
         if feedback_type is None:
-            return {
+            return add_response_metadata({
                 "error": {
                     "code": 400,
                     "message": "feedback_type is required",
                     "field": "feedback_type"
                 }
-            }
+            }, project_id)
 
         # Validate feedback_type enum (AC-3, AC-4, AC-5)
         valid_types = ["helpful", "not_relevant", "not_now"]
         if feedback_type not in valid_types:
-            return {
+            return add_response_metadata({
                 "error": {
                     "code": 400,
                     "message": f"feedback_type must be one of: {', '.join(valid_types)}",
                     "field": "feedback_type"
                 }
-            }
+            }, project_id)
 
         # context is optional, but validate it's a string if provided
         if context is not None and not isinstance(context, str):
-            return {
+            return add_response_metadata({
                 "error": {
                     "code": 400,
                     "message": "context must be a string if provided",
                     "field": "context"
                 }
-            }
+            }, project_id)
 
         # ===== INSIGHT EXISTENCE CHECK (AC-8) =====
 
@@ -121,12 +128,12 @@ async def handle_submit_insight_feedback(arguments: dict[str, Any]) -> dict[str,
 
             if not result or result.get("is_deleted", False):
                 # Return 404 for both not found and soft-deleted (like update/delete)
-                return {
+                return add_response_metadata({
                     "error": {
                         "code": 404,
                         "message": f"Insight {insight_id} not found"
                     }
-                }
+                }, project_id)
 
             # ===== EP-4 LAZY EVALUATION: STORE FEEDBACK ONLY =====
 
@@ -154,18 +161,18 @@ async def handle_submit_insight_feedback(arguments: dict[str, Any]) -> dict[str,
             )
 
             # Return success with lazy evaluation note (AC-3, AC-5)
-            return {
+            return add_response_metadata({
                 "success": True,
                 "feedback_id": feedback_id,
                 "note": "IEF will update on next query"
-            }
+            }, project_id)
 
     except Exception as e:
         logger.error(f"Failed to submit feedback for insight {insight_id}: {e}")
-        return {
+        return add_response_metadata({
             "error": {
                 "code": 500,
                 "message": "Internal error during feedback submission",
                 "details": str(e)
             }
-        }
+        }, get_current_project())  # Still get project_id even in catch block

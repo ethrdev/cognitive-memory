@@ -44,7 +44,7 @@ class AsyncContextManagerMock:
 # =============================================================================
 
 @pytest.mark.asyncio
-async def test_insight_id_required():
+async def test_insight_id_required(with_project_context):
     """Test that insight_id parameter is required."""
     result = await handle_get_insight_history({})
 
@@ -55,7 +55,7 @@ async def test_insight_id_required():
 
 
 @pytest.mark.asyncio
-async def test_insight_id_must_be_positive_integer():
+async def test_insight_id_must_be_positive_integer(with_project_context):
     """Test that insight_id must be a positive integer."""
     result = await handle_get_insight_history({"insight_id": 0})
 
@@ -65,7 +65,7 @@ async def test_insight_id_must_be_positive_integer():
 
 
 @pytest.mark.asyncio
-async def test_insight_id_must_be_integer():
+async def test_insight_id_must_be_integer(with_project_context):
     """Test that insight_id must be an integer type."""
     result = await handle_get_insight_history({"insight_id": "not-an-int"})
 
@@ -74,7 +74,7 @@ async def test_insight_id_must_be_integer():
 
 
 @pytest.mark.asyncio
-async def test_insight_id_must_be_positive():
+async def test_insight_id_must_be_positive(with_project_context):
     """Test that insight_id must be > 0."""
     result = await handle_get_insight_history({"insight_id": -1})
 
@@ -89,7 +89,7 @@ async def test_insight_id_must_be_positive():
 
 @pytest.mark.asyncio
 @patch('mcp_server.tools.insights.history.get_insight_by_id')
-async def test_insight_not_found_error(mock_get_insight):
+async def test_insight_not_found_error(mock_get_insight, with_project_context):
     """Test that 404 error is returned for non-existent insight."""
     mock_get_insight.return_value = None
 
@@ -106,7 +106,7 @@ async def test_insight_not_found_error(mock_get_insight):
 
 @pytest.mark.asyncio
 @patch('mcp_server.tools.insights.history.get_insight_by_id')
-async def test_database_connection_error(mock_get_insight):
+async def test_database_connection_error(mock_get_insight, with_project_context):
     """Test graceful handling of database connection errors."""
     mock_get_insight.side_effect = Exception("Connection failed")
 
@@ -163,7 +163,7 @@ def test_tool_schema_matches_specification():
 @pytest.mark.asyncio
 @patch('mcp_server.tools.insights.history.get_insight_by_id')
 @patch('mcp_server.db.connection.get_connection')
-async def test_response_format_matches_specification(mock_get_conn, mock_get_insight):
+async def test_response_format_matches_specification(mock_get_conn, mock_get_insight, with_project_context):
     """Test that response format matches Story 26.7 specification."""
     # Mock insight
     mock_get_insight.return_value = {
@@ -196,7 +196,7 @@ async def test_response_format_matches_specification(mock_get_conn, mock_get_ins
 @pytest.mark.asyncio
 @patch('mcp_server.tools.insights.history.get_insight_by_id')
 @patch('mcp_server.db.connection.get_connection')
-async def test_empty_history_returns_empty_array(mock_get_conn, mock_get_insight):
+async def test_empty_history_returns_empty_array(mock_get_conn, mock_get_insight, with_project_context):
     """Test that insights without history return empty array (not error)."""
     mock_get_insight.return_value = {
         "id": 42,
@@ -223,7 +223,7 @@ async def test_empty_history_returns_empty_array(mock_get_conn, mock_get_insight
 @pytest.mark.asyncio
 @patch('mcp_server.tools.insights.history.get_insight_by_id')
 @patch('mcp_server.db.connection.get_connection')
-async def test_deleted_insight_preserves_history_accessibility(mock_get_conn, mock_get_insight):
+async def test_deleted_insight_preserves_history_accessibility(mock_get_conn, mock_get_insight, with_project_context):
     """Test that deleted insights still return history (Archäologie-Prinzip)."""
     # Mock deleted insight
     mock_get_insight.return_value = {

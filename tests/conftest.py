@@ -143,8 +143,32 @@ def mock_db_pool():
 @pytest.fixture(autouse=True)
 def reset_environment():
     """Reset environment state between tests."""
+    from mcp_server.middleware.context import clear_context
+    clear_context()
     yield
     # Cleanup after test if needed
+    from mcp_server.middleware.context import clear_context
+    clear_context()
+
+
+@pytest.fixture(autouse=True)
+def with_project_context():
+    """
+    Fixture to set project context for tool handler tests (auto-applied to all tests).
+
+    Story 11.4.3: Tool Handler Refactoring
+    This fixture sets up the project context that tool handlers expect
+    when called via middleware. Unit tests that directly call handlers
+    should use this fixture to simulate middleware context setup.
+
+    This is autouse=True so it automatically applies to all tests without
+    needing to be explicitly requested as a parameter.
+    """
+    from mcp_server.middleware.context import set_project_id, clear_context
+
+    set_project_id("test-project")
+    yield
+    clear_context()
 
 
 # ============================================================================

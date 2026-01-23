@@ -4,6 +4,7 @@ smf_bulk_approve Tool Implementation
 MCP tool for bulk-approving SMF proposals by type filter.
 Useful for batch-processing trivial NUANCE cases.
 
+Story 11.4.3: Tool Handler Refactoring - Added project context usage and metadata
 Created: 2026-01-03 by BMAD Team
 """
 
@@ -17,6 +18,8 @@ from mcp_server.analysis.smf import (
     approve_proposal,
     get_proposal,
 )
+from mcp_server.middleware.context import get_current_project
+from mcp_server.utils.response import add_response_metadata
 
 
 async def handle_smf_bulk_approve(arguments: dict[str, Any]) -> dict[str, Any]:
@@ -37,6 +40,9 @@ async def handle_smf_bulk_approve(arguments: dict[str, Any]) -> dict[str, Any]:
     logger = logging.getLogger(__name__)
 
     try:
+        # Story 11.4.3: Get project_id from middleware context
+        project_id = get_current_project()
+
         # Extract parameters
         actor = arguments.get("actor")
         trigger_type_filter = arguments.get("trigger_type")
@@ -46,18 +52,18 @@ async def handle_smf_bulk_approve(arguments: dict[str, Any]) -> dict[str, Any]:
 
         # Parameter validation
         if not actor:
-            return {
+            return add_response_metadata({
                 "error": "Parameter validation failed",
                 "details": "Missing 'actor' parameter (must be 'I/O' or 'ethr')",
                 "tool": "smf_bulk_approve",
-            }
+            }, project_id)
 
         if actor not in ["I/O", "ethr"]:
-            return {
+            return add_response_metadata({
                 "error": "Parameter validation failed",
                 "details": f"Invalid actor '{actor}'. Must be 'I/O' or 'ethr'",
                 "tool": "smf_bulk_approve",
-            }
+            }, project_id)
 
         # Get all pending proposals
         all_proposals = get_pending_proposals()
@@ -109,7 +115,7 @@ async def handle_smf_bulk_approve(arguments: dict[str, Any]) -> dict[str, Any]:
             def count_by_type(proposals: list, type_name: str) -> int:
                 return len([p for p in proposals if get_resolution_type(p) == type_name.upper()])
 
-            return {
+            return add_response_metadata({
                 "dry_run": True,
                 "proposals_to_approve": len(filtered_proposals),
                 "proposal_ids": [p["id"] for p in filtered_proposals],
@@ -125,7 +131,7 @@ async def handle_smf_bulk_approve(arguments: dict[str, Any]) -> dict[str, Any]:
                 "message": f"Would approve {len(filtered_proposals)} proposals as {actor}",
                 "tool": "smf_bulk_approve",
                 "status": "dry_run",
-            }
+            }, project_id)
 
         # Execute bulk approval
         results = {
@@ -177,7 +183,7 @@ async def handle_smf_bulk_approve(arguments: dict[str, Any]) -> dict[str, Any]:
             f"{bilateral} awaiting bilateral approval"
         )
 
-        return {
+        return add_response_metadata({
             "actor": actor,
             "total_processed": total,
             "succeeded": succeeded,
@@ -190,13 +196,13 @@ async def handle_smf_bulk_approve(arguments: dict[str, Any]) -> dict[str, Any]:
             ),
             "tool": "smf_bulk_approve",
             "status": "success",
-        }
+        }, project_id)
 
     except Exception as e:
         logger.error(f"Bulk approval failed: {e}")
-        return {
+        return add_response_metadata({
             "error": "Bulk approval failed",
             "details": str(e),
             "tool": "smf_bulk_approve",
             "status": "error",
-        }
+        }, get_current_project())  # Still get project_id even in catch block

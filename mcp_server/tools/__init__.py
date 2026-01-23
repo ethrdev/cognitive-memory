@@ -37,6 +37,8 @@ from psycopg2.extensions import cursor as cursor_type
 from psycopg2.extras import DictRow
 
 from mcp_server.db.connection import get_connection
+from mcp_server.middleware.context import get_current_project
+from mcp_server.utils.response import add_response_metadata
 from mcp_server.tools.dual_judge import DualJudgeEvaluator
 from mcp_server.tools.get_golden_test_results import handle_get_golden_test_results
 from mcp_server.tools.graph_add_node import handle_graph_add_node
@@ -971,6 +973,8 @@ async def handle_store_raw_dialogue(arguments: dict[str, Any]) -> dict[str, Any]
     """
     Store raw dialogue data to L0 memory.
 
+    Story 11.4.3: Tool Handler Refactoring - Added project context usage and metadata
+
     Args:
         arguments: Tool arguments containing session_id, speaker, content, metadata
 
@@ -981,6 +985,9 @@ async def handle_store_raw_dialogue(arguments: dict[str, Any]) -> dict[str, Any]
     logger = logging.getLogger(__name__)
 
     try:
+        # Story 11.4.3: Get project_id from middleware context
+        project_id = get_current_project()
+
         # Extract parameters
         session_id = arguments.get("session_id")
         speaker = arguments.get("speaker")
@@ -1013,32 +1020,34 @@ async def handle_store_raw_dialogue(arguments: dict[str, Any]) -> dict[str, Any]
 
             logger.info(f"Stored raw dialogue: id={row_id}, session={session_id}")
 
-            return {
+            return add_response_metadata({
                 "id": row_id,
                 "timestamp": timestamp.isoformat(),
                 "session_id": session_id,
                 "status": "success",
-            }
+            }, project_id)
 
     except psycopg2.Error as e:
         logger.error(f"Database error in store_raw_dialogue: {e}")
-        return {
+        return add_response_metadata({
             "error": "Database operation failed",
             "details": str(e),
             "tool": "store_raw_dialogue",
-        }
+        }, get_current_project())
     except Exception as e:
         logger.error(f"Unexpected error in store_raw_dialogue: {e}")
-        return {
+        return add_response_metadata({
             "error": "Tool execution failed",
             "details": str(e),
             "tool": "store_raw_dialogue",
-        }
+        }, get_current_project())
 
 
 async def handle_compress_to_l2_insight(arguments: dict[str, Any]) -> dict[str, Any]:
     """
     Compress dialogue data to L2 insight with OpenAI embedding.
+
+    Story 11.4.3: Tool Handler Refactoring - Added project context usage and metadata
 
     Args:
         arguments: Tool arguments containing content and source_ids
@@ -1049,6 +1058,9 @@ async def handle_compress_to_l2_insight(arguments: dict[str, Any]) -> dict[str, 
     logger = logging.getLogger(__name__)
 
     try:
+        # Story 11.4.3: Get project_id from middleware context
+        project_id = get_current_project()
+
         # Extract parameters
         content = arguments.get("content")
         source_ids = arguments.get("source_ids")
@@ -1059,46 +1071,46 @@ async def handle_compress_to_l2_insight(arguments: dict[str, Any]) -> dict[str, 
 
         # Parameter validation
         if not content or not isinstance(content, str):
-            return {
+            return add_response_metadata({
                 "error": "Parameter validation failed",
                 "details": "Missing or invalid 'content' parameter (must be string)",
                 "tool": "compress_to_l2_insight",
-            }
+            }, project_id)
 
         # Accept empty list [] but reject None or non-list types
         if source_ids is None or not isinstance(source_ids, list):
-            return {
+            return add_response_metadata({
                 "error": "Parameter validation failed",
                 "details": "Missing or invalid 'source_ids' parameter (must be array of integers)",
                 "tool": "compress_to_l2_insight",
-            }
+            }, project_id)
 
         # Validate memory_strength range (0.0 to 1.0)
         if memory_strength is not None and not (0.0 <= memory_strength <= 1.0):
-            return {
+            return add_response_metadata({
                 "error": "Parameter validation failed",
                 "details": "memory_strength must be between 0.0 and 1.0",
                 "tool": "compress_to_l2_insight",
-            }
+            }, project_id)
 
         # Validate all source_ids are integers
         try:
             source_ids = [int(id) for id in source_ids]
         except (ValueError, TypeError) as e:
-            return {
+            return add_response_metadata({
                 "error": "Parameter validation failed",
                 "details": f"All source_ids must be integers: {e}",
                 "tool": "compress_to_l2_insight",
-            }
+            }, project_id)
 
         # Initialize OpenAI client
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key or api_key == "sk-your-openai-api-key-here":
-            return {
+            return add_response_metadata({
                 "error": "OpenAI API key not configured",
                 "details": "OPENAI_API_KEY environment variable not set or contains placeholder value",
                 "tool": "compress_to_l2_insight",
-            }
+            }, project_id)
 
         client = OpenAI(api_key=api_key)
 
@@ -1159,29 +1171,29 @@ async def handle_compress_to_l2_insight(arguments: dict[str, Any]) -> dict[str, 
                     f"Successfully stored L2 insight {insight_id} with {len(embedding)}-dimensional embedding"
                 )
 
-                return {
+                return add_response_metadata({
                     "id": insight_id,
                     "embedding_status": embedding_status,
                     "fidelity_score": fidelity_score,
                     "memory_strength": memory_strength,
                     "timestamp": created_at,
-                }
+                }, project_id)
 
         except psycopg2.Error as e:
             logger.error(f"Database error storing L2 insight: {e}")
-            return {
+            return add_response_metadata({
                 "error": "Database operation failed",
                 "details": str(e),
                 "tool": "compress_to_l2_insight",
-            }
+            }, project_id)
 
     except Exception as e:
         logger.error(f"Unexpected error in compress_to_l2_insight: {e}")
-        return {
+        return add_response_metadata({
             "error": "Tool execution failed",
             "details": str(e),
             "tool": "compress_to_l2_insight",
-        }
+        }, get_current_project())
 
 
 def generate_query_embedding(query_text: str) -> list[float]:
@@ -1613,6 +1625,8 @@ async def handle_update_working_memory(arguments: dict[str, Any]) -> dict[str, A
     """
     Add item to Working Memory with atomic eviction handling.
 
+    Story 11.4.3: Tool Handler Refactoring - Added project context usage and metadata
+
     Args:
         arguments: Tool arguments containing content (string), importance (float, default 0.5)
 
@@ -1623,30 +1637,33 @@ async def handle_update_working_memory(arguments: dict[str, Any]) -> dict[str, A
     logger = logging.getLogger(__name__)
 
     try:
+        # Story 11.4.3: Get project_id from middleware context
+        project_id = get_current_project()
+
         # Extract parameters
         content = arguments.get("content")
         importance = arguments.get("importance", 0.5)  # Default importance
 
         # Validate inputs
         if not content or not isinstance(content, str):
-            return {
+            return add_response_metadata({
                 "error": "Content is required and must be a non-empty string",
                 "tool": "update_working_memory",
-            }
+            }, project_id)
 
         if not isinstance(importance, int | float):
-            return {
+            return add_response_metadata({
                 "error": "Importance must be a number between 0.0 and 1.0",
                 "tool": "update_working_memory",
-            }
+            }, project_id)
 
         importance = float(importance)  # Convert to float
 
         if not (0.0 <= importance <= 1.0):
-            return {
+            return add_response_metadata({
                 "error": "Importance must be between 0.0 and 1.0",
                 "tool": "update_working_memory",
-            }
+            }, project_id)
 
         # ENTIRE operation in single transaction to prevent race conditions
         async with get_connection() as conn:
@@ -1686,12 +1703,12 @@ async def handle_update_working_memory(arguments: dict[str, Any]) -> dict[str, A
                     f"Updated working memory: added_id={added_id}, evicted_id={evicted_id}"
                 )
 
-                return {
+                return add_response_metadata({
                     "added_id": added_id,
                     "evicted_id": evicted_id,  # Optional[int]
                     "archived_id": archived_id,  # Optional[int]
                     "status": "success",
-                }
+                }, project_id)
 
             except Exception:
                 # Rollback on ANY error
@@ -1700,30 +1717,32 @@ async def handle_update_working_memory(arguments: dict[str, Any]) -> dict[str, A
 
     except ValueError as e:
         logger.error(f"Validation error in update_working_memory: {e}")
-        return {
+        return add_response_metadata({
             "error": "Validation failed",
             "details": str(e),
             "tool": "update_working_memory",
-        }
+        }, get_current_project())
     except psycopg2.Error as e:
         logger.error(f"Database error in update_working_memory: {e}")
-        return {
+        return add_response_metadata({
             "error": "Database operation failed",
             "details": str(e),
             "tool": "update_working_memory",
-        }
+        }, get_current_project())
     except Exception as e:
         logger.error(f"Unexpected error in update_working_memory: {e}")
-        return {
+        return add_response_metadata({
             "error": "Tool execution failed",
             "details": str(e),
             "tool": "update_working_memory",
-        }
+        }, get_current_project())
 
 
 async def handle_delete_working_memory(arguments: dict[str, Any]) -> dict[str, Any]:
     """
     Delete item from Working Memory by ID (idempotent).
+
+    Story 11.4.3: Tool Handler Refactoring - Added project context usage and metadata
 
     Args:
         arguments: Tool arguments containing 'id' (integer)
@@ -1736,30 +1755,33 @@ async def handle_delete_working_memory(arguments: dict[str, Any]) -> dict[str, A
     logger = logging.getLogger(__name__)
 
     try:
+        # Story 11.4.3: Get project_id from middleware context
+        project_id = get_current_project()
+
         # Extract parameters
         item_id = arguments.get("id")
 
         # Validate input
         if item_id is None:
-            return {
+            return add_response_metadata({
                 "error": "Parameter validation failed",
                 "details": "Missing required 'id' parameter",
                 "tool": "delete_working_memory",
-            }
+            }, project_id)
 
         if not isinstance(item_id, int):
-            return {
+            return add_response_metadata({
                 "error": "Parameter validation failed",
                 "details": "'id' must be an integer",
                 "tool": "delete_working_memory",
-            }
+            }, project_id)
 
         if item_id < 1:
-            return {
+            return add_response_metadata({
                 "error": "Parameter validation failed",
                 "details": "'id' must be >= 1",
                 "tool": "delete_working_memory",
-            }
+            }, project_id)
 
         # Delete operation
         async with get_connection() as conn:
@@ -1778,32 +1800,32 @@ async def handle_delete_working_memory(arguments: dict[str, Any]) -> dict[str, A
                 )
                 conn.commit()
                 logger.info(f"Deleted working memory entry: id={item_id}")
-                return {
+                return add_response_metadata({
                     "deleted_id": item_id,
                     "status": "success",
-                }
+                }, project_id)
             else:
                 # Entry did not exist - idempotent success with not_found status
                 logger.debug(f"Working memory entry not found: id={item_id}")
-                return {
+                return add_response_metadata({
                     "deleted_id": None,
                     "status": "not_found",
-                }
+                }, project_id)
 
     except psycopg2.Error as e:
         logger.error(f"Database error in delete_working_memory: {e}")
-        return {
+        return add_response_metadata({
             "error": "Database operation failed",
             "details": str(e),
             "tool": "delete_working_memory",
-        }
+        }, get_current_project())
     except Exception as e:
         logger.error(f"Unexpected error in delete_working_memory: {e}")
-        return {
+        return add_response_metadata({
             "error": "Tool execution failed",
             "details": str(e),
             "tool": "delete_working_memory",
-        }
+        }, get_current_project())
 
 
 async def add_episode(
@@ -1876,6 +1898,8 @@ async def handle_store_episode(arguments: dict[str, Any]) -> dict[str, Any]:
     """
     Store episode memory with query, reward, and reflection.
 
+    Story 11.4.3: Tool Handler Refactoring - Added project context usage and metadata
+
     Args:
         arguments: Tool arguments containing query, reward, reflection
 
@@ -1883,6 +1907,8 @@ async def handle_store_episode(arguments: dict[str, Any]) -> dict[str, Any]:
         Success response with episode ID or error response
     """
     logger = logging.getLogger(__name__)
+    # Story 11.4.3: Get project_id from middleware context
+    project_id = get_current_project()
 
     # Extract and validate parameters
     try:
@@ -1890,83 +1916,83 @@ async def handle_store_episode(arguments: dict[str, Any]) -> dict[str, Any]:
         reward = arguments["reward"]
         reflection = arguments["reflection"]
     except KeyError as e:
-        return {
+        return add_response_metadata({
             "error": f"Missing required parameter: {e}",
             "details": f"Required parameters: query, reward, reflection. Missing: {e}",
             "tool": "store_episode",
             "embedding_status": "failed",
-        }
+        }, project_id)
 
     # Input validation
     if not isinstance(query, str) or not query.strip():
-        return {
+        return add_response_metadata({
             "error": "Invalid query parameter",
             "details": "Query must be a non-empty string",
             "tool": "store_episode",
             "embedding_status": "failed",
-        }
+        }, project_id)
 
     if not isinstance(reflection, str) or not reflection.strip():
-        return {
+        return add_response_metadata({
             "error": "Invalid reflection parameter",
             "details": "Reflection must be a non-empty string",
             "tool": "store_episode",
             "embedding_status": "failed",
-        }
+        }, project_id)
 
     if not isinstance(reward, int | float):
-        return {
+        return add_response_metadata({
             "error": "Invalid reward parameter",
             "details": "Reward must be a number between -1.0 and 1.0",
             "tool": "store_episode",
             "embedding_status": "failed",
-        }
+        }, project_id)
 
     # Validate reward range BEFORE API call (save costs on invalid input)
     if reward < -1.0 or reward > 1.0:
-        return {
+        return add_response_metadata({
             "error": "Reward out of range",
             "details": f"Reward {reward} is outside valid range [-1.0, 1.0]",
             "tool": "store_episode",
             "embedding_status": "failed",
-        }
+        }, project_id)
 
     # Store episode in database
     try:
         async with get_connection() as conn:
             result = await add_episode(query, reward, reflection, conn)
             logger.info(f"Successfully stored episode with ID: {result['id']}")
-            return result
+            return add_response_metadata(result, project_id)
 
     except RuntimeError as e:
         # Embedding or other critical failure
         logger.error(f"Episode storage failed: {e}")
-        return {
+        return add_response_metadata({
             "error": "Episode storage failed",
             "details": str(e),
             "tool": "store_episode",
             "embedding_status": "failed",
-        }
+        }, project_id)
 
     except psycopg2.Error as e:
         # Database error
         logger.error(f"Database error storing episode: {e}")
-        return {
+        return add_response_metadata({
             "error": "Database error",
             "details": f"Failed to store episode: {e}",
             "tool": "store_episode",
             "embedding_status": "failed",
-        }
+        }, project_id)
 
     except Exception as e:
         # Unexpected error
         logger.error(f"Unexpected error storing episode: {e}")
-        return {
+        return add_response_metadata({
             "error": "Unexpected error",
             "details": f"Failed to store episode: {e}",
             "tool": "store_episode",
             "embedding_status": "failed",
-        }
+        }, get_current_project())
 
 
 async def handle_store_dual_judge_scores(arguments: dict[str, Any]) -> dict[str, Any]:

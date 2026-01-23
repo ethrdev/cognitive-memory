@@ -21,7 +21,7 @@ class TestGraphAddNodeNodeOnly:
     """
 
     @pytest.mark.asyncio
-    async def test_graph_add_node_response_has_no_memory_sector(self):
+    async def test_graph_add_node_response_has_no_memory_sector(with_project_context):
         """
         AC #2: graph_add_node response should NOT include memory_sector field.
 
@@ -50,7 +50,7 @@ class TestGraphAddNodeNodeOnly:
         )
 
     @pytest.mark.asyncio
-    async def test_graph_add_node_with_properties_no_memory_sector(self):
+    async def test_graph_add_node_with_properties_no_memory_sector(with_project_context):
         """
         AC #2: Even with properties, no memory_sector in response.
 
@@ -76,7 +76,7 @@ class TestGraphAddNodeNodeOnly:
         assert "memory_sector" not in result
 
     @pytest.mark.asyncio
-    async def test_graph_add_node_minimal_response(self):
+    async def test_graph_add_node_minimal_response(with_project_context):
         """
         Verify graph_add_node response structure matches documented format.
 
@@ -99,7 +99,7 @@ class TestGraphAddNodeNodeOnly:
         )
 
     @pytest.mark.asyncio
-    async def test_graph_add_node_does_not_call_add_edge(self):
+    async def test_graph_add_node_does_not_call_add_edge(with_project_context):
         """
         Verify graph_add_node does not create edges (implementation detail test).
 
@@ -133,7 +133,7 @@ class TestGraphAddNodeBackwardCompatibility:
     """
 
     @pytest.mark.asyncio
-    async def test_graph_add_node_existing_behavior_preserved(self):
+    async def test_graph_add_node_existing_behavior_preserved(with_project_context):
         """
         NFR5: Verify existing graph_add_node behavior is unchanged.
 
@@ -164,7 +164,7 @@ class TestGraphAddNodeBackwardCompatibility:
         # (memory_sector is not present, which is correct for node-only)
 
     @pytest.mark.asyncio
-    async def test_graph_add_node_idempotent_operation_unchanged(self):
+    async def test_graph_add_node_idempotent_operation_unchanged(with_project_context):
         """
         Verify idempotent operation still works (existing behavior).
 

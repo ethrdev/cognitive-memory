@@ -4,6 +4,7 @@ resolve_dissonance Tool Implementation
 MCP tool for creating resolution hyperedges for detected dissonances.
 Documents the development process without deleting original edges.
 
+Story 11.4.3: Tool Handler Refactoring - Added project context usage and metadata
 Story 7.5: Dissonance Engine - Resolution via Hyperedge
 """
 
@@ -16,6 +17,8 @@ from typing import Any
 
 from mcp_server.analysis.dissonance import resolve_dissonance
 from mcp.types import Tool, TextContent
+from mcp_server.middleware.context import get_current_project
+from mcp_server.utils.response import add_response_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +69,9 @@ async def handle_resolve_dissonance(arguments: dict[str, Any]) -> dict[str, Any]
     logger = logging.getLogger(__name__)
 
     try:
+        # Story 11.4.3: Get project_id from middleware context
+        project_id = get_current_project()
+
         # Extract parameters
         review_id = arguments.get("review_id")
         resolution_type = arguments.get("resolution_type")
@@ -74,42 +80,42 @@ async def handle_resolve_dissonance(arguments: dict[str, Any]) -> dict[str, Any]
 
         # Parameter validation
         if not review_id or not isinstance(review_id, str):
-            return {
+            return add_response_metadata({
                 "error": "Parameter validation failed",
                 "details": "Missing or invalid 'review_id' parameter (must be non-empty string)",
                 "tool": "resolve_dissonance",
-            }
+            }, project_id)
 
         if not resolution_type or not isinstance(resolution_type, str):
-            return {
+            return add_response_metadata({
                 "error": "Parameter validation failed",
                 "details": "Missing or invalid 'resolution_type' parameter (must be string)",
                 "tool": "resolve_dissonance",
-            }
+            }, project_id)
 
         if not context or not isinstance(context, str):
-            return {
+            return add_response_metadata({
                 "error": "Parameter validation failed",
                 "details": "Missing or invalid 'context' parameter (must be non-empty string)",
                 "tool": "resolve_dissonance",
-            }
+            }, project_id)
 
         # Validate resolution_type enum
         valid_types = ["EVOLUTION", "CONTRADICTION", "NUANCE"]
         if resolution_type not in valid_types:
-            return {
+            return add_response_metadata({
                 "error": "Parameter validation failed",
                 "details": f"Invalid 'resolution_type' parameter (must be one of: {', '.join(valid_types)})",
                 "tool": "resolve_dissonance",
-            }
+            }, project_id)
 
         # Validate resolved_by
         if not isinstance(resolved_by, str):
-            return {
+            return add_response_metadata({
                 "error": "Parameter validation failed",
                 "details": "Invalid 'resolved_by' parameter (must be string)",
                 "tool": "resolve_dissonance",
-            }
+            }, project_id)
 
         # Start performance timing
         start_time = time.time()
@@ -133,7 +139,7 @@ async def handle_resolve_dissonance(arguments: dict[str, Any]) -> dict[str, Any]
                 f"resolution_id={result['resolution_id'][:8]}..., time={execution_time:.2f}ms"
             )
 
-            return {
+            return add_response_metadata({
                 "resolution": result,
                 "input_params": {
                     "review_id": review_id,
@@ -143,33 +149,33 @@ async def handle_resolve_dissonance(arguments: dict[str, Any]) -> dict[str, Any]
                 },
                 "execution_time_ms": round(execution_time, 2),
                 "status": "success"
-            }
+            }, project_id)
 
         except ValueError as ve:
             # Handle specific validation errors from resolve_dissonance
             logger.error(f"ValueError in resolve_dissonance: {ve}")
-            return {
+            return add_response_metadata({
                 "error": "Resolution failed",
                 "details": str(ve),
                 "tool": "resolve_dissonance",
                 "error_type": "validation_error"
-            }
+            }, project_id)
 
         except Exception as re:
             # Handle other resolution errors
             logger.error(f"Resolution error: {re}")
-            return {
+            return add_response_metadata({
                 "error": "Resolution operation failed",
                 "details": str(re),
                 "tool": "resolve_dissonance",
                 "error_type": "resolution_error"
-            }
+            }, project_id)
 
     except Exception as e:
         logger.error(f"Unexpected error in resolve_dissonance handler: {e}")
-        return {
+        return add_response_metadata({
             "error": "Tool execution failed",
             "details": str(e),
             "tool": "resolve_dissonance",
             "error_type": "handler_error"
-        }
+        }, get_current_project())  # Still get project_id even in catch block

@@ -1,5 +1,5 @@
 """
-Golden Test Results Tool - 
+Golden Test Results Tool -
 
 Daily execution of Golden Test Set for model drift detection.
 Calculates Precision@5 metric, detects drift, and stores results in model_drift_log.
@@ -7,6 +7,8 @@ Calculates Precision@5 metric, detects drift, and stores results in model_drift_
 Hybrid Pattern:
 - Core function: execute_golden_test() - callable directly from cron/Python
 - MCP Wrapper: handle_get_golden_test_results() - callable via MCP protocol
+
+Story 11.4.3: Tool Handler Refactoring - Added project context usage and metadata
 """
 
 from __future__ import annotations
@@ -24,8 +26,10 @@ from openai import OpenAI
 from pgvector.psycopg2 import register_vector
 
 from mcp_server.db.connection import get_connection_sync
+from mcp_server.middleware.context import get_current_project
+from mcp_server.utils.response import add_response_metadata
 
-# Import calculate_precision_at_5 from 
+# Import calculate_precision_at_5 from
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 from validate_precision_at_5 import calculate_precision_at_5
 
@@ -359,24 +363,34 @@ async def handle_get_golden_test_results(arguments: dict[str, Any]) -> dict[str,
     logger.info("MCP Tool get_golden_test_results called")
 
     try:
+        # Story 11.4.3: Get project_id from middleware context
+        project_id = get_current_project()
+
         # Execute Golden Test (synchronous function)
         result = execute_golden_test()
-        return result
+        return add_response_metadata(result, project_id)
 
     except RuntimeError as e:
         logger.error(f"Golden Test execution failed: {e}")
-        return {
+        # If get_current_project() failed, project_id won't be available
+        # Call again to get project_id for metadata, handle if it fails again
+        try:
+            project_id = get_current_project()
+        except RuntimeError:
+            project_id = "unknown"
+        return add_response_metadata({
             "error": "Golden Test execution failed",
             "details": str(e),
             "tool": "get_golden_test_results",
             "status": "failed",
-        }
+        }, project_id)
 
     except Exception as e:
         logger.error(f"Unexpected error in get_golden_test_results: {e}")
-        return {
+        # project_id is available if we got past the get_current_project() call
+        return add_response_metadata({
             "error": "Tool execution failed",
             "details": str(e),
             "tool": "get_golden_test_results",
             "status": "failed",
-        }
+        }, project_id)

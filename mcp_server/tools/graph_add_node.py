@@ -6,6 +6,7 @@ Supports properties metadata and optional vector linking to L2 insights.
 
 Story 4.2: graph_add_node Tool Implementation
 Story 8.4: FR25 Documentation for Future Node-Edge Classification
+Story 11.4.3: Tool Handler Refactoring - Added project context usage and metadata
 
 FR25 (Epic 8): If edge creation is added in the future, edges must be
 classified using classify_memory_sector() from mcp_server.utils.sector_classifier.
@@ -21,6 +22,8 @@ import logging
 from typing import Any
 
 from mcp_server.db.graph import add_node
+from mcp_server.middleware.context import get_current_project
+from mcp_server.utils.response import add_response_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -39,11 +42,15 @@ async def handle_graph_add_node(arguments: dict[str, Any]) -> dict[str, Any]:
 
     Returns:
         Dict with node_id, created status, and confirmation data,
-        or error response if validation/database operations fail
+        plus metadata containing project_id (FR29),
+        or error response with metadata if validation/database operations fail
     """
     logger = logging.getLogger(__name__)
 
     try:
+        # Story 11.4.3: Get project_id from middleware context
+        project_id = get_current_project()
+
         # Extract parameters
         label = arguments.get("label")
         name = arguments.get("name")
@@ -52,32 +59,32 @@ async def handle_graph_add_node(arguments: dict[str, Any]) -> dict[str, Any]:
 
         # Parameter validation
         if not label or not isinstance(label, str):
-            return {
+            return add_response_metadata({
                 "error": "Parameter validation failed",
                 "details": "Missing or invalid 'label' parameter (must be non-empty string)",
                 "tool": "graph_add_node",
-            }
+            }, project_id)
 
         if not name or not isinstance(name, str):
-            return {
+            return add_response_metadata({
                 "error": "Parameter validation failed",
                 "details": "Missing or invalid 'name' parameter (must be non-empty string)",
                 "tool": "graph_add_node",
-            }
+            }, project_id)
 
         if properties is not None and not isinstance(properties, dict):
-            return {
+            return add_response_metadata({
                 "error": "Parameter validation failed",
                 "details": "Invalid 'properties' parameter (must be object/dict)",
                 "tool": "graph_add_node",
-            }
+            }, project_id)
 
         if vector_id is not None and (not isinstance(vector_id, int) or vector_id <= 0):
-            return {
+            return add_response_metadata({
                 "error": "Parameter validation failed",
                 "details": "Invalid 'vector_id' parameter (must be positive integer)",
                 "tool": "graph_add_node",
-            }
+            }, project_id)
 
         # Log warning for non-standard labels (optional validation, not blocking)
         if label not in STANDARD_LABELS:
@@ -97,26 +104,26 @@ async def handle_graph_add_node(arguments: dict[str, Any]) -> dict[str, Any]:
 
             logger.info(f"Node {'created' if result['created'] else 'found'}: id={result['node_id']}, label={label}, name={name}")
 
-            return {
+            return add_response_metadata({
                 "node_id": result["node_id"],
                 "created": result["created"],
                 "label": result["label"],
                 "name": result["name"],
                 "status": "success",
-            }
+            }, project_id)
 
         except Exception as db_error:
             logger.error(f"Database error in graph_add_node: {db_error}")
-            return {
+            return add_response_metadata({
                 "error": "Database operation failed",
                 "details": str(db_error),
                 "tool": "graph_add_node",
-            }
+            }, project_id)
 
     except Exception as e:
         logger.error(f"Unexpected error in graph_add_node: {e}")
-        return {
+        return add_response_metadata({
             "error": "Tool execution failed",
             "details": str(e),
             "tool": "graph_add_node",
-        }
+        }, project_id)

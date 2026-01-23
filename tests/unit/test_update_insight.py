@@ -20,7 +20,7 @@ from mcp_server.analysis.smf import SMFAction
 # =============================================================================
 
 @pytest.mark.asyncio
-async def test_reason_required():
+async def test_reason_required(with_project_context):
     """AC-3: reason is mandatory - returns 400 error when missing."""
     result = await handle_update_insight({
         "insight_id": 42,
@@ -36,7 +36,7 @@ async def test_reason_required():
 
 
 @pytest.mark.asyncio
-async def test_reason_empty_string():
+async def test_reason_empty_string(with_project_context):
     """AC-3: reason cannot be empty string."""
     result = await handle_update_insight({
         "insight_id": 42,
@@ -55,7 +55,7 @@ async def test_reason_empty_string():
 # =============================================================================
 
 @pytest.mark.asyncio
-async def test_changes_required():
+async def test_changes_required(with_project_context):
     """AC-4: at least one change required - returns 400 when neither new_content nor new_memory_strength provided."""
     result = await handle_update_insight({
         "insight_id": 42,
@@ -70,7 +70,7 @@ async def test_changes_required():
 
 
 @pytest.mark.asyncio
-async def test_new_content_not_empty():
+async def test_new_content_not_empty(with_project_context):
     """AC-4: new_content cannot be empty string."""
     result = await handle_update_insight({
         "insight_id": 42,
@@ -86,7 +86,7 @@ async def test_new_content_not_empty():
 
 
 @pytest.mark.asyncio
-async def test_new_content_whitespace_only():
+async def test_new_content_whitespace_only(with_project_context):
     """AC-4: new_content with only whitespace is treated as empty."""
     result = await handle_update_insight({
         "insight_id": 42,
@@ -101,7 +101,7 @@ async def test_new_content_whitespace_only():
 
 
 @pytest.mark.asyncio
-async def test_memory_strength_out_of_range_low():
+async def test_memory_strength_out_of_range_low(with_project_context):
     """AC-4: new_memory_strength must be >= 0.0."""
     result = await handle_update_insight({
         "insight_id": 42,
@@ -116,7 +116,7 @@ async def test_memory_strength_out_of_range_low():
 
 
 @pytest.mark.asyncio
-async def test_memory_strength_out_of_range_high():
+async def test_memory_strength_out_of_range_high(with_project_context):
     """AC-4: new_memory_strength must be <= 1.0."""
     result = await handle_update_insight({
         "insight_id": 42,
@@ -136,7 +136,7 @@ async def test_memory_strength_out_of_range_high():
 
 @pytest.mark.asyncio
 @patch('mcp_server.tools.insights.update.execute_update_with_history')
-async def test_io_direct_update(mock_execute):
+async def test_io_direct_update(mock_execute, with_project_context):
     """AC-1: I/O can update directly without SMF proposal."""
     # Mock successful update
     mock_execute.return_value = {
@@ -169,6 +169,10 @@ async def test_io_direct_update(mock_execute):
         reason="Präzisierung"
     )
 
+    # Verify metadata includes project_id
+    assert "metadata" in result
+    assert result["metadata"]["project_id"] == "test-project"
+
 
 # =============================================================================
 # AC-2: Consent Flow (ethr as Actor) Tests
@@ -176,7 +180,7 @@ async def test_io_direct_update(mock_execute):
 
 @pytest.mark.asyncio
 @patch('mcp_server.tools.insights.update.create_smf_proposal')
-async def test_ethr_creates_smf_proposal(mock_create_smf):
+async def test_ethr_creates_smf_proposal(mock_create_smf, with_project_context):
     """AC-2: ethr creates SMF proposal for consent."""
     # Mock SMF proposal creation
     mock_create_smf.return_value = 456  # proposal_id
@@ -201,6 +205,10 @@ async def test_ethr_creates_smf_proposal(mock_create_smf):
     assert call_args[1]["proposed_action"]["insight_id"] == 42
     assert call_args[1]["reasoning"] == "Vorgeschlagene Änderung"
 
+    # Verify metadata includes project_id
+    assert "metadata" in result
+    assert result["metadata"]["project_id"] == "test-project"
+
 
 # =============================================================================
 # Task 5.9: SMF Consent State Tests (4 states × UPDATE_INSIGHT)
@@ -212,7 +220,7 @@ async def test_ethr_creates_smf_proposal(mock_create_smf):
 @pytest.mark.asyncio
 @patch('mcp_server.tools.insights.update.execute_update_with_history')
 @patch('mcp_server.tools.insights.update.create_smf_proposal')
-async def test_smf_state_approved_executes_update(mock_create_smf, mock_execute):
+async def test_smf_state_approved_executes_update(mock_create_smf, mock_execute, with_project_context):
     """
     SMF State 3: APPROVED - After I/O approves ethr's proposal, update executes.
 
@@ -255,7 +263,7 @@ async def test_smf_state_approved_executes_update(mock_create_smf, mock_execute)
 
 @pytest.mark.asyncio
 @patch('mcp_server.tools.insights.update.create_smf_proposal')
-async def test_smf_state_rejected_no_update(mock_create_smf):
+async def test_smf_state_rejected_no_update(mock_create_smf, with_project_context):
     """
     SMF State 4: REJECTED - After I/O rejects ethr's proposal, no update happens.
 
@@ -290,7 +298,7 @@ async def test_smf_state_rejected_no_update(mock_create_smf):
 @pytest.mark.asyncio
 @patch('mcp_server.tools.insights.update.execute_update_with_history')
 @patch('mcp_server.tools.insights.update.create_smf_proposal')
-async def test_smf_consent_matrix_io_always_direct(mock_create_smf, mock_execute):
+async def test_smf_consent_matrix_io_always_direct(mock_create_smf, mock_execute, with_project_context):
     """
     SMF Consent Matrix: I/O ALWAYS executes directly, never creates proposals.
 
@@ -321,7 +329,7 @@ async def test_smf_consent_matrix_io_always_direct(mock_create_smf, mock_execute
 @pytest.mark.asyncio
 @patch('mcp_server.tools.insights.update.execute_update_with_history')
 @patch('mcp_server.tools.insights.update.create_smf_proposal')
-async def test_smf_consent_matrix_ethr_always_proposal(mock_create_smf, mock_execute):
+async def test_smf_consent_matrix_ethr_always_proposal(mock_create_smf, mock_execute, with_project_context):
     """
     SMF Consent Matrix: ethr ALWAYS creates proposals, never executes directly.
 
@@ -351,7 +359,7 @@ async def test_smf_consent_matrix_ethr_always_proposal(mock_create_smf, mock_exe
 
 @pytest.mark.asyncio
 @patch('mcp_server.tools.insights.update.execute_update_with_history')
-async def test_not_found_insight(mock_execute):
+async def test_not_found_insight(mock_execute, with_project_context):
     """AC-6: returns 404 for unknown insight ID."""
     # Mock ValueError for "not found"
     mock_execute.side_effect = ValueError("Insight 42 not found")
@@ -369,7 +377,7 @@ async def test_not_found_insight(mock_execute):
 
 
 @pytest.mark.asyncio
-async def test_insight_id_validation():
+async def test_insight_id_validation(with_project_context):
     """AC-6: validates insight_id parameter."""
     # Test with None
     result = await handle_update_insight({
@@ -404,7 +412,7 @@ async def test_insight_id_validation():
 # =============================================================================
 
 @pytest.mark.asyncio
-async def test_actor_validation():
+async def test_actor_validation(with_project_context):
     """Test that actor parameter is validated."""
     # Missing actor
     result = await handle_update_insight({
@@ -432,7 +440,7 @@ async def test_actor_validation():
 
 @pytest.mark.asyncio
 @patch('mcp_server.tools.insights.update.execute_update_with_history')
-async def test_soft_deleted_insight_returns_404(mock_execute):
+async def test_soft_deleted_insight_returns_404(mock_execute, with_project_context):
     """AC-7: soft-deleted insights return 404 (same as not found)."""
     # Mock ValueError for "not found" (includes soft-deleted)
     mock_execute.side_effect = ValueError("Insight 42 not found")
@@ -455,7 +463,7 @@ async def test_soft_deleted_insight_returns_404(mock_execute):
 
 @pytest.mark.asyncio
 @patch('mcp_server.tools.insights.update.execute_update_with_history')
-async def test_update_memory_strength_only(mock_execute):
+async def test_update_memory_strength_only(mock_execute, with_project_context):
     """Test updating only memory_strength (no content change)."""
     mock_execute.return_value = {
         "success": True,
@@ -478,7 +486,7 @@ async def test_update_memory_strength_only(mock_execute):
 
 @pytest.mark.asyncio
 @patch('mcp_server.tools.insights.update.execute_update_with_history')
-async def test_update_both_content_and_strength(mock_execute):
+async def test_update_both_content_and_strength(mock_execute, with_project_context):
     """Test updating both content and memory_strength."""
     mock_execute.return_value = {
         "success": True,
@@ -506,7 +514,7 @@ async def test_update_both_content_and_strength(mock_execute):
 
 @pytest.mark.asyncio
 @patch('mcp_server.tools.insights.update.execute_update_with_history')
-async def test_database_error_returns_500(mock_execute):
+async def test_database_error_returns_500(mock_execute, with_project_context):
     """EP-5: Database errors return structured 500 response."""
     mock_execute.side_effect = Exception("Database connection failed")
 
@@ -524,7 +532,7 @@ async def test_database_error_returns_500(mock_execute):
 
 @pytest.mark.asyncio
 @patch('mcp_server.tools.insights.update.create_smf_proposal')
-async def test_smf_creation_error_returns_500(mock_create_smf):
+async def test_smf_creation_error_returns_500(mock_create_smf, with_project_context):
     """EP-5: SMF creation errors return structured 500 response."""
     mock_create_smf.side_effect = Exception("SMF system down")
 

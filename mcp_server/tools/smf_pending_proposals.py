@@ -4,6 +4,7 @@ smf_pending_proposals Tool Implementation
 MCP tool for retrieving all pending SMF proposals that need approval.
 Returns proposals with full details for review and decision-making.
 
+Story 11.4.3: Tool Handler Refactoring - Added project context usage and metadata
 Story 7.9: SMF mit Safeguards + Neutral Framing - AC #7
 """
 
@@ -13,6 +14,8 @@ import logging
 from typing import Any
 
 from mcp_server.analysis.smf import get_pending_proposals
+from mcp_server.middleware.context import get_current_project
+from mcp_server.utils.response import add_response_metadata
 
 
 async def handle_smf_pending_proposals(arguments: dict[str, Any]) -> dict[str, Any]:
@@ -30,6 +33,9 @@ async def handle_smf_pending_proposals(arguments: dict[str, Any]) -> dict[str, A
     logger = logging.getLogger(__name__)
 
     try:
+        # Story 11.4.3: Get project_id from middleware context
+        project_id = get_current_project()
+
         # Get all pending proposals from database
         proposals = get_pending_proposals()
 
@@ -54,17 +60,17 @@ async def handle_smf_pending_proposals(arguments: dict[str, Any]) -> dict[str, A
 
         logger.info(f"Retrieved {len(formatted_proposals)} pending SMF proposals")
 
-        return {
+        return add_response_metadata({
             "proposals": formatted_proposals,
             "count": len(formatted_proposals),
             "status": "success"
-        }
+        }, project_id)
 
     except Exception as e:
         logger.error(f"Error retrieving SMF pending proposals: {e}")
-        return {
+        return add_response_metadata({
             "error": "Failed to retrieve pending proposals",
             "details": str(e),
             "tool": "smf_pending_proposals",
             "status": "error"
-        }
+        }, get_current_project())  # Still get project_id even in catch block

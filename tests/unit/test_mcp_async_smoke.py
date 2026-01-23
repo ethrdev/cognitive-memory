@@ -82,7 +82,7 @@ def check_for_async_errors(result: dict) -> list[str]:
 
 @pytest.mark.asyncio
 @patch('mcp_server.db.connection.get_connection')
-async def test_get_insight_by_id_no_async_errors(mock_get_conn):
+async def test_get_insight_by_id_no_async_errors(mock_get_conn, with_project_context):
     """Verify get_insight_by_id doesn't have async/await bugs."""
     from mcp_server.tools.get_insight_by_id import handle_get_insight_by_id
     from mcp_server.db.insights import get_insight_by_id as db_get_insight
@@ -103,7 +103,7 @@ async def test_get_insight_by_id_no_async_errors(mock_get_conn):
 
 @pytest.mark.asyncio
 @patch('mcp_server.db.connection.get_connection')
-async def test_get_insight_history_no_async_errors(mock_get_conn):
+async def test_get_insight_history_no_async_errors(mock_get_conn, with_project_context):
     """Verify get_insight_history doesn't have async/await bugs."""
     from mcp_server.tools.insights.history import handle_get_insight_history
 
@@ -125,7 +125,7 @@ async def test_get_insight_history_no_async_errors(mock_get_conn):
 @pytest.mark.asyncio
 @pytest.mark.skip(reason="Requires integration test with full DB mocking - complex call chain")
 @patch('mcp_server.db.connection.get_connection')
-async def test_hybrid_search_no_async_errors(mock_get_conn):
+async def test_hybrid_search_no_async_errors(mock_get_conn, with_project_context):
     """Verify hybrid_search doesn't have async/await bugs.
 
     NOTE: This test requires deep mocking of multiple layers.
@@ -154,7 +154,7 @@ async def test_hybrid_search_no_async_errors(mock_get_conn):
 @pytest.mark.asyncio
 @pytest.mark.skip(reason="Requires integration test - calls db.graph functions internally")
 @patch('mcp_server.db.connection.get_connection')
-async def test_graph_add_node_no_async_errors(mock_get_conn):
+async def test_graph_add_node_no_async_errors(mock_get_conn, with_project_context):
     """Verify graph_add_node doesn't have async/await bugs."""
     from mcp_server.tools.graph_add_node import handle_graph_add_node
 
@@ -174,7 +174,7 @@ async def test_graph_add_node_no_async_errors(mock_get_conn):
 
 @pytest.mark.asyncio
 @patch('mcp_server.db.connection.get_connection')
-async def test_graph_query_neighbors_no_async_errors(mock_get_conn):
+async def test_graph_query_neighbors_no_async_errors(mock_get_conn, with_project_context):
     """Verify graph_query_neighbors doesn't have async/await bugs."""
     from mcp_server.tools.graph_query_neighbors import handle_graph_query_neighbors
 
@@ -198,7 +198,7 @@ async def test_graph_query_neighbors_no_async_errors(mock_get_conn):
 
 @pytest.mark.asyncio
 @patch('mcp_server.db.connection.get_connection')
-async def test_smf_pending_proposals_no_async_errors(mock_get_conn):
+async def test_smf_pending_proposals_no_async_errors(mock_get_conn, with_project_context):
     """Verify smf_pending_proposals doesn't have async/await bugs."""
     from mcp_server.tools.smf_pending_proposals import handle_smf_pending_proposals
 
@@ -218,7 +218,7 @@ async def test_smf_pending_proposals_no_async_errors(mock_get_conn):
 
 @pytest.mark.asyncio
 @patch('mcp_server.db.connection.get_connection')
-async def test_update_insight_no_async_errors(mock_get_conn):
+async def test_update_insight_no_async_errors(mock_get_conn, with_project_context):
     """Verify update_insight doesn't have async/await bugs."""
     from mcp_server.tools.insights.update import handle_update_insight
 
@@ -239,7 +239,7 @@ async def test_update_insight_no_async_errors(mock_get_conn):
 @pytest.mark.asyncio
 @pytest.mark.skip(reason="Requires integration test - calls db.insights functions internally")
 @patch('mcp_server.db.connection.get_connection')
-async def test_delete_insight_no_async_errors(mock_get_conn):
+async def test_delete_insight_no_async_errors(mock_get_conn, with_project_context):
     """Verify delete_insight doesn't have async/await bugs."""
     from mcp_server.tools.insights.delete import handle_delete_insight
 
@@ -262,7 +262,7 @@ async def test_delete_insight_no_async_errors(mock_get_conn):
 # =============================================================================
 
 @pytest.mark.asyncio
-async def test_all_handlers_return_dict_not_coroutine():
+async def test_all_handlers_return_dict_not_coroutine(with_project_context):
     """
     Meta-test: Verify handler functions return dict, not coroutine.
 

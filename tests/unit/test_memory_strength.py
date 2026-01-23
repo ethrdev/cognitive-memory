@@ -18,7 +18,7 @@ class TestMemoryStrengthValidation:
     """Test memory_strength parameter validation."""
 
     @pytest.mark.asyncio
-    async def test_memory_strength_valid_range(self):
+    async def test_memory_strength_valid_range(with_project_context):
         """Test that valid memory_strength values are accepted."""
         # Mock OpenAI client (module-level import)
         with patch("mcp_server.tools.OpenAI") as mock_openai:
@@ -55,7 +55,7 @@ class TestMemoryStrengthValidation:
                         assert result["memory_strength"] == strength
 
     @pytest.mark.asyncio
-    async def test_memory_strength_invalid_too_high(self):
+    async def test_memory_strength_invalid_too_high(with_project_context):
         """Test that values > 1.0 are rejected."""
         result = await handle_compress_to_l2_insight({
             "content": "Test insight",
@@ -67,7 +67,7 @@ class TestMemoryStrengthValidation:
         assert "memory_strength must be between 0.0 and 1.0" in result["details"]
 
     @pytest.mark.asyncio
-    async def test_memory_strength_invalid_too_low(self):
+    async def test_memory_strength_invalid_too_low(with_project_context):
         """Test that values < 0.0 are rejected."""
         result = await handle_compress_to_l2_insight({
             "content": "Test insight",
@@ -79,7 +79,7 @@ class TestMemoryStrengthValidation:
         assert "memory_strength must be between 0.0 and 1.0" in result["details"]
 
     @pytest.mark.asyncio
-    async def test_memory_strength_default_on_missing(self):
+    async def test_memory_strength_default_on_missing(with_project_context):
         """Test backward compatibility - missing parameter uses 0.5."""
         # Mock OpenAI client (module-level import)
         with patch("mcp_server.tools.OpenAI") as mock_openai:
@@ -114,7 +114,7 @@ class TestMemoryStrengthValidation:
                     assert result["memory_strength"] == 0.5  # Default value
 
     @pytest.mark.asyncio
-    async def test_memory_strength_explicit_none_uses_default(self):
+    async def test_memory_strength_explicit_none_uses_default(with_project_context):
         """Test that explicit None uses default 0.5."""
         # Mock OpenAI client (module-level import)
         with patch("mcp_server.tools.OpenAI") as mock_openai:
@@ -150,7 +150,7 @@ class TestMemoryStrengthValidation:
                     assert result["memory_strength"] == 0.5  # Default value
 
     @pytest.mark.asyncio
-    async def test_memory_strength_in_metadata(self):
+    async def test_memory_strength_in_metadata(with_project_context):
         """Test that memory_strength is included in metadata."""
         # Mock OpenAI client (module-level import)
         with patch("mcp_server.tools.OpenAI") as mock_openai:

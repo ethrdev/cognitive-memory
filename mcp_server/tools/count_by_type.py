@@ -5,6 +5,7 @@ MCP tool for retrieving counts of all memory types for audit and integrity check
 Returns counts for graph_nodes, graph_edges, l2_insights, episodes, working_memory,
 and raw_dialogues.
 
+Story 11.4.3: Tool Handler Refactoring - Added project context usage and metadata
 Story 6.3: count_by_type MCP Tool
 """
 
@@ -14,6 +15,8 @@ import logging
 from typing import Any
 
 from mcp_server.db.stats import get_all_counts
+from mcp_server.middleware.context import get_current_project
+from mcp_server.utils.response import add_response_metadata
 
 
 async def handle_count_by_type(arguments: dict[str, Any]) -> dict[str, Any]:
@@ -30,13 +33,16 @@ async def handle_count_by_type(arguments: dict[str, Any]) -> dict[str, Any]:
     logger = logging.getLogger(__name__)
 
     try:
+        # Story 11.4.3: Get project_id from middleware context
+        project_id = get_current_project()
+
         # Database lookup - get all counts in single query
         counts = await get_all_counts()
 
         logger.debug(f"Retrieved counts: {counts}")
 
         # Return response with all counts + status at end
-        return {
+        return add_response_metadata({
             "graph_nodes": counts["graph_nodes"],
             "graph_edges": counts["graph_edges"],
             "l2_insights": counts["l2_insights"],
@@ -44,12 +50,13 @@ async def handle_count_by_type(arguments: dict[str, Any]) -> dict[str, Any]:
             "working_memory": counts["working_memory"],
             "raw_dialogues": counts["raw_dialogues"],
             "status": "success",
-        }
+        }, project_id)
 
     except Exception as db_error:
         logger.error(f"Database error in count_by_type: {db_error}")
-        return {
+        # project_id is already available from line 37
+        return add_response_metadata({
             "error": "Database operation failed",
             "details": str(db_error),
             "tool": "count_by_type",
-        }
+        }, project_id)

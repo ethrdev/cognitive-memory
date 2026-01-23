@@ -4,6 +4,7 @@ get_insight_history Tool Implementation
 MCP tool for retrieving the complete revision history of an L2 insight.
 Reads from l2_insight_history table (Migration 024 + 024b) with field mapping.
 
+Story 11.4.3: Tool Handler Refactoring - Added project context usage and metadata
 Story 26.7: Revision History (Stretch Goal)
 """
 
@@ -13,6 +14,8 @@ import logging
 from typing import Any
 
 from mcp_server.db.insights import get_insight_by_id
+from mcp_server.middleware.context import get_current_project
+from mcp_server.utils.response import add_response_metadata
 
 
 async def handle_get_insight_history(arguments: dict[str, Any]) -> dict[str, Any]:
@@ -61,6 +64,9 @@ async def handle_get_insight_history(arguments: dict[str, Any]) -> dict[str, Any
     logger = logging.getLogger(__name__)
 
     try:
+        # Story 11.4.3: Get project_id from middleware context
+        project_id = get_current_project()
+
         # Extract parameters
         insight_id = arguments.get("insight_id")
 
@@ -68,22 +74,22 @@ async def handle_get_insight_history(arguments: dict[str, Any]) -> dict[str, Any
 
         # insight_id required
         if insight_id is None:
-            return {
+            return add_response_metadata({
                 "error": {
                     "code": 400,
                     "message": "insight_id is required",
                     "field": "insight_id"
                 }
-            }
+            }, project_id)
 
         if not isinstance(insight_id, int) or insight_id < 1:
-            return {
+            return add_response_metadata({
                 "error": {
                     "code": 400,
                     "message": "insight_id must be a positive integer",
                     "field": "insight_id"
                 }
-            }
+            }, project_id)
 
         # ===== DATABASE LOOKUP =====
 
@@ -93,12 +99,12 @@ async def handle_get_insight_history(arguments: dict[str, Any]) -> dict[str, Any
 
             if not insight:
                 logger.debug(f"Insight not found: id={insight_id}")
-                return {
+                return add_response_metadata({
                     "error": {
                         "code": 404,
                         "message": f"Insight {insight_id} not found"
                     }
-                }
+                }, project_id)
 
             # Query history from l2_insight_history table
             # Uses schema mapping: old_content→previous_content, actor→changed_by, etc.
@@ -149,33 +155,33 @@ async def handle_get_insight_history(arguments: dict[str, Any]) -> dict[str, Any
 
             logger.debug(f"History retrieved for insight_id={insight_id}: {len(history_list)} revisions")
 
-            return {
+            return add_response_metadata({
                 "insight_id": insight_id,
                 "current_content": current_content,
                 "is_deleted": is_deleted,
                 "history": history_list,
                 "total_revisions": len(history_list)
-            }
+            }, project_id)
 
         except Exception as db_error:
             logger.error(f"Database error in get_insight_history: {db_error}")
-            return {
+            return add_response_metadata({
                 "error": {
                     "code": 500,
                     "message": "Database operation failed",
                     "details": str(db_error)
                 }
-            }
+            }, project_id)
 
     except Exception as e:
         logger.error(f"Unexpected error in get_insight_history: {e}")
-        return {
+        return add_response_metadata({
             "error": {
                 "code": 500,
                 "message": "Tool execution failed",
                 "details": str(e)
             }
-        }
+        }, get_current_project())  # Still get project_id even in catch block
 
 
 # Tool metadata for MCP server registration

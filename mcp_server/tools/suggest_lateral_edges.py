@@ -5,6 +5,7 @@ MCP tool for suggesting potential lateral edges between graph nodes.
 Uses semantic search to find nodes that might be related to a given node,
 excluding nodes that are already directly connected.
 
+Story 11.4.3: Tool Handler Refactoring - Added project context usage and metadata
 Story: Phase 3b - Lateral Edge Suggestions (Graph-Nutzung-Request 2026-01-02)
 """
 
@@ -18,6 +19,8 @@ from typing import Any
 from openai import APIConnectionError, OpenAI, RateLimitError
 
 from mcp_server.db.graph import get_node_by_name, query_neighbors
+from mcp_server.middleware.context import get_current_project
+from mcp_server.utils.response import add_response_metadata
 
 
 async def _get_embedding(text: str) -> list[float] | None:
@@ -82,26 +85,29 @@ async def handle_suggest_lateral_edges(arguments: dict[str, Any]) -> dict[str, A
     logger = logging.getLogger(__name__)
 
     try:
+        # Story 11.4.3: Get project_id from middleware context
+        project_id = get_current_project()
+
         # Extract parameters
         node_name = arguments.get("node_name")
         top_k = arguments.get("top_k", 5)
 
         # Parameter validation
         if not node_name or not isinstance(node_name, str):
-            return {
+            return add_response_metadata({
                 "error": "Parameter validation failed",
                 "details": "Missing or invalid 'node_name' parameter (must be non-empty string)",
                 "tool": "suggest_lateral_edges",
-            }
+            }, project_id)
 
         # 1. Verify the node exists
         source_node = await get_node_by_name(node_name)
         if not source_node:
-            return {
+            return add_response_metadata({
                 "error": "Node not found",
                 "details": f"No node with name '{node_name}' exists in the graph",
                 "tool": "suggest_lateral_edges",
-            }
+            }, project_id)
 
         source_node_id = source_node["id"]
 
@@ -123,11 +129,11 @@ async def handle_suggest_lateral_edges(arguments: dict[str, Any]) -> dict[str, A
         query_embedding = await _get_embedding(node_name)
 
         if query_embedding is None:
-            return {
+            return add_response_metadata({
                 "error": "Embedding generation failed",
                 "details": f"Could not generate embedding for '{node_name}'",
                 "tool": "suggest_lateral_edges",
-            }
+            }, project_id)
 
         # Search for semantically similar L2 insights and check if they have graph connections
         async with get_connection() as conn:
@@ -245,23 +251,23 @@ async def handle_suggest_lateral_edges(arguments: dict[str, Any]) -> dict[str, A
 
         logger.info(f"Found {len(suggestions)} lateral edge suggestions for '{node_name}'")
 
-        return {
+        return add_response_metadata({
             "source_node": node_name,
             "suggestions": suggestions,
             "count": len(suggestions),
             "already_connected": len(connected_node_ids) - 1,  # Exclude self
             "tool": "suggest_lateral_edges",
             "status": "success",
-        }
+        }, project_id)
 
     except Exception as e:
         logger.error(f"Error in suggest_lateral_edges: {e}")
-        return {
+        return add_response_metadata({
             "error": "Tool execution failed",
             "details": str(e),
             "tool": "suggest_lateral_edges",
             "status": "error",
-        }
+        }, get_current_project())  # Still get project_id even in catch block
 
 
 def _suggest_relations(source_label: str, target_label: str, target_name: str) -> list[str]:

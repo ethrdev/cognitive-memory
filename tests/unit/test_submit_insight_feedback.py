@@ -19,7 +19,7 @@ from mcp_server.tools.insights.feedback import handle_submit_insight_feedback
 # =============================================================================
 
 @pytest.mark.asyncio
-async def test_helpful_feedback():
+async def test_helpful_feedback(with_project_context):
     """AC-3: Positive feedback stored correctly."""
     with patch('mcp_server.db.connection.get_connection') as mock_get_conn:
         # Setup mock
@@ -48,9 +48,13 @@ async def test_helpful_feedback():
         insert_call = mock_cursor.execute.call_args_list[1]  # Second call (first is SELECT)
         assert "INSERT INTO insight_feedback" in insert_call[0][0]
 
+        # Verify metadata includes project_id
+        assert "metadata" in result
+        assert result["metadata"]["project_id"] == "test-project"
+
 
 @pytest.mark.asyncio
-async def test_helpful_feedback_with_context():
+async def test_helpful_feedback_with_context(with_project_context):
     """AC-3: Optional context parameter is stored."""
     with patch('mcp_server.db.connection.get_connection') as mock_get_conn:
         # Setup mock
@@ -78,7 +82,7 @@ async def test_helpful_feedback_with_context():
 # =============================================================================
 
 @pytest.mark.asyncio
-async def test_not_relevant_feedback():
+async def test_not_relevant_feedback(with_project_context):
     """AC-4: Negative feedback stored with optional context."""
     with patch('mcp_server.db.connection.get_connection') as mock_get_conn:
         # Setup mock
@@ -103,7 +107,7 @@ async def test_not_relevant_feedback():
 
 
 @pytest.mark.asyncio
-async def test_not_relevant_without_context():
+async def test_not_relevant_without_context(with_project_context):
     """AC-4: Context is optional for not_relevant feedback."""
     with patch('mcp_server.db.connection.get_connection') as mock_get_conn:
         # Setup mock
@@ -131,7 +135,7 @@ async def test_not_relevant_without_context():
 # =============================================================================
 
 @pytest.mark.asyncio
-async def test_not_now_feedback():
+async def test_not_now_feedback(with_project_context):
     """AC-5: Not now feedback logged but no score effect."""
     with patch('mcp_server.db.connection.get_connection') as mock_get_conn:
         # Setup mock
@@ -159,7 +163,7 @@ async def test_not_now_feedback():
 # =============================================================================
 
 @pytest.mark.asyncio
-async def test_invalid_feedback_type():
+async def test_invalid_feedback_type(with_project_context):
     """Invalid feedback_type returns 400."""
     result = await handle_submit_insight_feedback({
         "insight_id": 42,
@@ -172,7 +176,7 @@ async def test_invalid_feedback_type():
 
 
 @pytest.mark.asyncio
-async def test_missing_feedback_type():
+async def test_missing_feedback_type(with_project_context):
     """Missing feedback_type returns 400."""
     result = await handle_submit_insight_feedback({
         "insight_id": 42,
@@ -185,7 +189,7 @@ async def test_missing_feedback_type():
 
 
 @pytest.mark.asyncio
-async def test_feedback_type_enum_validation():
+async def test_feedback_type_enum_validation(with_project_context):
     """Only valid enum values accepted."""
     valid_types = ["helpful", "not_relevant", "not_now"]
 
@@ -216,7 +220,7 @@ async def test_feedback_type_enum_validation():
 # =============================================================================
 
 @pytest.mark.asyncio
-async def test_insight_not_found():
+async def test_insight_not_found(with_project_context):
     """AC-8: Returns 404 for unknown insight."""
     with patch('mcp_server.db.connection.get_connection') as mock_get_conn:
         # Setup mock
@@ -240,7 +244,7 @@ async def test_insight_not_found():
 
 
 @pytest.mark.asyncio
-async def test_soft_deleted_insight():
+async def test_soft_deleted_insight(with_project_context):
     """AC-8: Soft-deleted insights return 404 (like update/delete)."""
     with patch('mcp_server.db.connection.get_connection') as mock_get_conn:
         # Setup mock
@@ -268,7 +272,7 @@ async def test_soft_deleted_insight():
 # =============================================================================
 
 @pytest.mark.asyncio
-async def test_missing_insight_id():
+async def test_missing_insight_id(with_project_context):
     """Missing insight_id returns 400."""
     result = await handle_submit_insight_feedback({
         "feedback_type": "helpful"
@@ -281,7 +285,7 @@ async def test_missing_insight_id():
 
 
 @pytest.mark.asyncio
-async def test_invalid_insight_id_type():
+async def test_invalid_insight_id_type(with_project_context):
     """Non-integer insight_id returns 400."""
     result = await handle_submit_insight_feedback({
         "insight_id": "not_an_int",
@@ -293,7 +297,7 @@ async def test_invalid_insight_id_type():
 
 
 @pytest.mark.asyncio
-async def test_invalid_insight_id_negative():
+async def test_invalid_insight_id_negative(with_project_context):
     """Negative insight_id returns 400."""
     result = await handle_submit_insight_feedback({
         "insight_id": -1,
@@ -305,7 +309,7 @@ async def test_invalid_insight_id_negative():
 
 
 @pytest.mark.asyncio
-async def test_invalid_context_type():
+async def test_invalid_context_type(with_project_context):
     """Non-string context returns 400."""
     result = await handle_submit_insight_feedback({
         "insight_id": 42,
@@ -322,7 +326,7 @@ async def test_invalid_context_type():
 # =============================================================================
 
 @pytest.mark.asyncio
-async def test_no_ief_recalculate_on_submit():
+async def test_no_ief_recalculate_on_submit(with_project_context):
     """EP-4: Feedback submission does NOT trigger IEF recalculate."""
     with patch('mcp_server.db.connection.get_connection') as mock_get_conn:
         # Setup mock
