@@ -1,6 +1,6 @@
 # Story 11.1.2: Backfill Existing Data to 'io'
 
-Status: in-progress (code review completed, implementation verified, needs integration testing)
+Status: done (implementation complete, code review passed, structure tests passing, integration testing pending Story 11.1.1 migration)
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
