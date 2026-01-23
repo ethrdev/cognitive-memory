@@ -1,0 +1,47 @@
+{
+  "metadata": {
+    "timestamp": "2026-01-23T20:48:00.000Z",
+    "postgres_version": "PostgreSQL 17.7",
+    "hardware_info": {
+      "cpu_count": 8,
+      "platform": "Linux-6.18.5-arch1-1-x86_64",
+      "python_version": "3.13.11"
+    },
+    "row_counts": {
+      "nodes": 9554,
+      "edges": 3168,
+      "l2_insights": 242
+    },
+    "notes": "Partial baseline from Story 11.1.0 - hybrid_search and compress_to_l2_insight skipped (requires OPENAI_API_KEY and raw_dialogues table). Graph queries measured successfully with BYPASSRLS role bypass."
+  },
+  "baselines": {
+    "graph_query_neighbors_1hop": {
+      "p50_ms": 223.5,
+      "p95_ms": 230.5,
+      "p99_ms": 240.0,
+      "samples": 100
+    },
+    "graph_query_neighbors_3hop": {
+      "p50_ms": 225.5,
+      "p95_ms": 245.5,
+      "p99_ms": 270.5,
+      "samples": 100
+    },
+    "hybrid_search_semantic_top10": {
+      "p50_ms": 0,
+      "p95_ms": 0,
+      "p99_ms": 0,
+      "samples": 0,
+      "skipped": true,
+      "skip_reason": "OpenAI API key not configured - requires OPENAI_API_KEY environment variable"
+    },
+    "compress_to_l2_insight": {
+      "p50_ms": 0,
+      "p95_ms": 0,
+      "p99_ms": 0,
+      "samples": 0,
+      "skipped": true,
+      "skip_reason": "raw_dialogues table does not exist in database"
+    }
+  }
+}

@@ -23,8 +23,8 @@ import argparse
 import json
 import logging
 import random
-import statistics
 import time
+from typing import Any
 
 import numpy as np
 from dotenv import load_dotenv
@@ -187,26 +187,26 @@ def seed_nodes(distribution: dict[str, int]) -> dict[str, int]:
                 })
 
                 # Use synchronous version for script
-                batch_nodes.append((label, node_name, properties, None))
+                # Include project_id for Epic 11 namespace isolation
+                batch_nodes.append((label, node_name, properties, None, project))
 
             # Insert batch using sync connection
             try:
                 with get_connection_sync() as conn:
                     cursor = conn.cursor()
 
-                    for label, name, props, vector_id in batch_nodes:
-                        cursor.execute(
-                            """
-                            INSERT INTO nodes (label, name, properties, vector_id)
-                            VALUES (%s, %s, %s::jsonb, %s)
-                            ON CONFLICT (name) DO UPDATE SET
-                                label = EXCLUDED.label,
-                                properties = EXCLUDED.properties
-                            RETURNING id;
-                            """,
-                            (label, name, props, vector_id)
-                        )
-                        nodes_created += 1
+                    # Use executemany for faster batch inserts
+                    cursor.executemany(
+                        """
+                        INSERT INTO nodes (label, name, properties, vector_id, project_id)
+                        VALUES (%s, %s, %s::jsonb, %s, %s)
+                        ON CONFLICT (project_id, name) DO UPDATE SET
+                            label = EXCLUDED.label,
+                            properties = EXCLUDED.properties
+                        """,
+                        batch_nodes
+                    )
+                    nodes_created += len(batch_nodes)
 
                     conn.commit()
 
@@ -218,7 +218,7 @@ def seed_nodes(distribution: dict[str, int]) -> dict[str, int]:
             creation_times.append(batch_time)
 
             if (batch_end // batch_size) % 10 == 0:
-                avg_time = statistics.mean(creation_times[-10:]) if creation_times else 0
+                avg_time = sum(creation_times[-10:]) / len(creation_times[-10:]) if creation_times else 0
                 logger.info(
                     f"  Progress: {batch_end}/{count} nodes for {project} "
                     f"(avg batch time: {avg_time:.2f}s)"
@@ -285,7 +285,7 @@ def seed_edges(distribution: dict[str, int]) -> dict[str, int]:
         return {"edges_created": 0}
 
     # Create edges (mix of intra-project and inter-project)
-    total_target_edges = sum(distinction * 3 for distinction in distribution.values())
+    total_target_edges = sum(count * 3 for count in distribution.values())
 
     for batch_start in range(0, total_target_edges, batch_size):
         batch_end = min(batch_start + batch_size, total_target_edges)
@@ -330,17 +330,19 @@ def seed_edges(distribution: dict[str, int]) -> dict[str, int]:
                         "created_for": "performance_test",
                         "batch": batch_start // batch_size
                     })
+                    # Use source_project for project_id (edges belong to source project)
+                    project_id = source_project
 
                     cursor.execute(
                         """
-                        INSERT INTO edges (source_id, target_id, relation, weight, properties, memory_sector)
-                        VALUES (%s::uuid, %s::uuid, %s, %s, %s::jsonb, 'semantic')
+                        INSERT INTO edges (source_id, target_id, relation, weight, properties, memory_sector, project_id)
+                        VALUES (%s::uuid, %s::uuid, %s, %s, %s::jsonb, 'semantic', %s)
                         ON CONFLICT (source_id, target_id, relation) DO UPDATE SET
                             weight = EXCLUDED.weight,
                             properties = EXCLUDED.properties
                         RETURNING id;
                         """,
-                        (source_id, target_id, relation, weight, properties)
+                        (source_id, target_id, relation, weight, properties, project_id)
                     )
 
                     edges_created += 1
@@ -355,7 +357,7 @@ def seed_edges(distribution: dict[str, int]) -> dict[str, int]:
         creation_times.append(batch_time)
 
         if (batch_end // batch_size) % 10 == 0:
-            avg_time = statistics.mean(creation_times[-10:]) if creation_times else 0
+            avg_time = sum(creation_times[-10:]) / len(creation_times[-10:]) if creation_times else 0
             logger.info(
                 f"  Progress: {batch_end}/{total_target_edges} edges "
                 f"(avg batch time: {avg_time:.2f}s)"
@@ -400,6 +402,8 @@ def seed_l2_insights(distribution: dict[str, int]) -> dict[str, int]:
             with get_connection_sync() as conn:
                 cursor = conn.cursor()
 
+                # Build batch data first
+                batch_insights = []
                 for i in range(batch_start, batch_end):
                     # Determine project based on distribution
                     rand_val = random.random() * total_nodes
@@ -420,16 +424,21 @@ def seed_l2_insights(distribution: dict[str, int]) -> dict[str, int]:
                     # Convert embedding to pgvector format
                     embedding_str = "[" + ",".join(str(x) for x in embedding) + "]"
 
-                    cursor.execute(
-                        """
-                        INSERT INTO l2_insights (content, embedding, memory_strength)
-                        VALUES (%s, %s::vector, %s)
-                        RETURNING id;
-                        """,
-                        (content, embedding_str, memory_strength)
-                    )
+                    # For performance testing, use empty array for source_ids
+                    # (NOT NULL constraint requires non-null value)
+                    source_ids: list[int] = []
 
-                    insights_created += 1
+                    batch_insights.append((content, embedding_str, memory_strength, source_ids, selected_project))
+
+                # Use executemany for faster batch inserts
+                cursor.executemany(
+                    """
+                    INSERT INTO l2_insights (content, embedding, memory_strength, source_ids, project_id)
+                    VALUES (%s, %s::vector, %s, %s, %s)
+                    """,
+                    batch_insights
+                )
+                insights_created += len(batch_insights)
 
                 conn.commit()
 
@@ -441,7 +450,7 @@ def seed_l2_insights(distribution: dict[str, int]) -> dict[str, int]:
         creation_times.append(batch_time)
 
         if (batch_end // batch_size) % 10 == 0:
-            avg_time = statistics.mean(creation_times[-10:]) if creation_times else 0
+            avg_time = sum(creation_times[-10:]) / len(creation_times[-10:]) if creation_times else 0
             logger.info(
                 f"  Progress: {batch_end}/{TARGET_L2_INSIGHTS} insights "
                 f"(avg batch time: {avg_time:.2f}s)"
@@ -472,21 +481,26 @@ def seed_episodes() -> dict[str, int]:
             with get_connection_sync() as conn:
                 cursor = conn.cursor()
 
+                # Build batch data first
+                batch_episodes = []
                 for i in range(batch_start, batch_end):
                     query = f"Performance test query {i}"
                     reward = random.uniform(-0.5, 1.0)
                     reflection = f"Test reflection for episode {i}: Learning pattern observed"
+                    # Generate 1536-dim embedding for episode (same as l2_insights)
+                    embedding = np.random.rand(1536).tolist()
 
-                    cursor.execute(
-                        """
-                        INSERT INTO episode_memory (query, reward, reflection)
-                        VALUES (%s, %s, %s)
-                        RETURNING id;
-                        """,
-                        (query, reward, reflection)
-                    )
+                    batch_episodes.append((query, reward, reflection, embedding, 'io'))
 
-                    episodes_created += 1
+                # Use executemany for faster batch inserts
+                cursor.executemany(
+                    """
+                    INSERT INTO episode_memory (query, reward, reflection, embedding, project_id)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    batch_episodes
+                )
+                episodes_created += len(batch_episodes)
 
                 conn.commit()
 
@@ -518,20 +532,22 @@ def seed_working_memory() -> dict[str, int]:
         with get_connection_sync() as conn:
             cursor = conn.cursor()
 
+            # Build batch data first
+            batch_working_memory = []
             for i in range(TARGET_WORKING_MEMORY):
                 content = f"Performance test working memory entry {i}"
                 importance = random.uniform(0.3, 1.0)
+                batch_working_memory.append((content, importance, 'io'))
 
-                cursor.execute(
-                    """
-                    INSERT INTO working_memory (content, importance)
-                    VALUES (%s, %s)
-                    RETURNING id;
-                    """,
-                    (content, importance)
-                )
-
-                working_memory_created += 1
+            # Use executemany for faster batch inserts
+            cursor.executemany(
+                """
+                INSERT INTO working_memory (content, importance, project_id)
+                VALUES (%s, %s, %s)
+                """,
+                batch_working_memory
+            )
+            working_memory_created = len(batch_working_memory)
 
             conn.commit()
 

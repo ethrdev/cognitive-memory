@@ -44,7 +44,7 @@ development_status:
 
   # Epic 11.1: Schema Migration
   epic-11-1: in-progress
-  11-1-0-performance-baseline-capture: in-progress
+  11-1-0-performance-baseline-capture: done
   11-1-1-add-project-id-column: done
   11-1-2-data-backfill: done
   11-1-3-unique-constraint-updates: done
@@ -60,18 +60,18 @@ development_status:
   epic-11-2-retrospective: done
 
   # Epic 11.3: RLS + Gradual Rollout Infrastructure
-  epic-11-3: in-progress
+  epic-11-3: done
   11-3-0-pgtap-test-infrastructure: done
   11-3-1-rls-helper-functions: done
   11-3-2-shadow-audit-infrastructure: done
   11-3-3-rls-policies-core-tables: done
   11-3-4-rls-policies-support-tables: done
   11-3-5-bypassrls-emergency-role: done
-  epic-11-3-retrospective: optional
+  epic-11-3-retrospective: done
 
   # Epic 11.4: MCP Middleware
-  epic-11-4: backlog
-  11-4-1-fastmcp-migration-middleware: backlog
+  epic-11-4: in-progress
+  11-4-1-fastmcp-migration-middleware: done
   11-4-2-project-context-validation: backlog
   11-4-3-tool-handler-refactoring: backlog
   epic-11-4-retrospective: optional

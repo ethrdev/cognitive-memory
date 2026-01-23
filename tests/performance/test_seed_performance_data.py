@@ -103,7 +103,7 @@ class TestSeedPerformanceDataScript:
             [sys.executable, str(script_path), "--seed"],
             capture_output=True,
             text=True,
-            timeout=600
+            timeout=1800  # 30 minutes - adjusted for remote database latency
         )
 
         assert result.returncode == 0, f"Seeding failed: {result.stderr}"

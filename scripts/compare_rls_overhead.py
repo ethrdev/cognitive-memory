@@ -432,7 +432,6 @@ async def main_async():
 
 def main():
     """Main entry point for script."""
-    import asyncio
     try:
         return asyncio.run(main_async())
     except KeyboardInterrupt:

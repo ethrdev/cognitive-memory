@@ -25,8 +25,12 @@ from typing import Any
 
 import psycopg2
 import psycopg2.extras
-from mcp.server import Server
-from mcp.types import Tool
+try:
+    from mcp.server import Server
+    from mcp.types import Tool
+    MCP_V1_AVAILABLE = True
+except ImportError:
+    MCP_V1_AVAILABLE = False
 from openai import APIConnectionError, OpenAI, RateLimitError
 from pgvector.psycopg2 import register_vector
 from psycopg2.extensions import cursor as cursor_type
@@ -2201,19 +2205,24 @@ async def handle_ping(arguments: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def register_tools(server: Server) -> list[Tool]:
+def register_tools(server) -> list:
     """
     Register all MCP tools with the server.
 
+    Supports both FastMCP (decorator pattern) and legacy MCP SDK (callback pattern).
+
     Args:
-        server: MCP server instance
+        server: FastMCP instance or MCP Server instance
 
     Returns:
         List of registered tools
     """
     logger = logging.getLogger(__name__)
 
-    # Tool definitions with JSON schemas for parameter validation
+    # Check if this is FastMCP or legacy MCP SDK
+    is_fastmcp = hasattr(server, 'tool') and callable(getattr(server, 'tool', None))
+
+    # Tool definitions with JSON schemas for parameter validation (for legacy SDK)
     tools = [
         Tool(
             name="store_raw_dialogue",
@@ -3012,41 +3021,175 @@ def register_tools(server: Server) -> list[Tool]:
         "reclassify_memory_sector": handle_reclassify_memory_sector,
     }
 
-    # Register tool call handler (define once, outside the loop)
-    @server.call_tool()  # type: ignore[misc]
-    async def call_tool_handler(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        """Handle tool calls with parameter validation."""
-        if name not in tool_handlers:
-            raise ValueError(f"Unknown tool: {name}")
+    if is_fastmcp:
+        # FastMCP decorator pattern (Story 11.4.1)
+        # Register tools using @server.tool() decorators
+        @server.tool()
+        async def store_raw_dialogue(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_store_raw_dialogue(arguments)
 
-        # Find tool schema for validation
-        tool_schema = next((t.inputSchema for t in tools if t.name == name), None)
+        @server.tool()
+        async def compress_to_l2_insight(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_compress_to_l2_insight(arguments)
 
-        if tool_schema:
+        @server.tool()
+        async def hybrid_search(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_hybrid_search(arguments)
+
+        @server.tool()
+        async def update_working_memory(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_update_working_memory(arguments)
+
+        @server.tool()
+        async def delete_working_memory(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_delete_working_memory(arguments)
+
+        @server.tool()
+        async def store_episode(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_store_episode(arguments)
+
+        @server.tool()
+        async def store_dual_judge_scores(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_store_dual_judge_scores(arguments)
+
+        @server.tool()
+        async def get_golden_test_results(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_get_golden_test_results(arguments)
+
+        @server.tool()
+        async def ping(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_ping(arguments)
+
+        @server.tool()
+        async def graph_add_node(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_graph_add_node(arguments)
+
+        @server.tool()
+        async def graph_add_edge(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_graph_add_edge(arguments)
+
+        @server.tool()
+        async def graph_query_neighbors(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_graph_query_neighbors(arguments)
+
+        @server.tool()
+        async def graph_find_path(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_graph_find_path(arguments)
+
+        @server.tool()
+        async def get_node_by_name(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_get_node_by_name(arguments)
+
+        @server.tool()
+        async def get_edge(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_get_edge(arguments)
+
+        @server.tool()
+        async def count_by_type(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_count_by_type(arguments)
+
+        @server.tool()
+        async def list_episodes(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_list_episodes(arguments)
+
+        @server.tool()
+        async def get_insight_by_id(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_get_insight_by_id(arguments)
+
+        @server.tool()
+        async def update_insight(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_update_insight(arguments)
+
+        @server.tool()
+        async def delete_insight(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_delete_insight(arguments)
+
+        @server.tool()
+        async def submit_insight_feedback(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_submit_insight_feedback(arguments)
+
+        @server.tool()
+        async def get_insight_history(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_get_insight_history(arguments)
+
+        @server.tool()
+        async def dissonance_check(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_dissonance_check(arguments)
+
+        @server.tool()
+        async def resolve_dissonance(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_resolve_dissonance(arguments)
+
+        @server.tool()
+        async def smf_pending_proposals(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_smf_pending_proposals(arguments)
+
+        @server.tool()
+        async def smf_review(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_smf_review(arguments)
+
+        @server.tool()
+        async def smf_approve(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_smf_approve(arguments)
+
+        @server.tool()
+        async def smf_reject(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_smf_reject(arguments)
+
+        @server.tool()
+        async def smf_undo(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_smf_undo(arguments)
+
+        @server.tool()
+        async def smf_bulk_approve(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_smf_bulk_approve(arguments)
+
+        @server.tool()
+        async def suggest_lateral_edges(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_suggest_lateral_edges(arguments)
+
+        @server.tool()
+        async def reclassify_memory_sector(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_reclassify_memory_sector(arguments)
+
+        logger.info(f"Registered {len(tool_handlers)} tools using FastMCP decorator pattern")
+        return list(tool_handlers.keys())
+    else:
+        # Legacy MCP SDK callback pattern (backward compatibility)
+        @server.call_tool()  # type: ignore[misc]
+        async def call_tool_handler(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+            """Handle tool calls with parameter validation."""
+            if name not in tool_handlers:
+                raise ValueError(f"Unknown tool: {name}")
+
+            # Find tool schema for validation
+            tool_schema = next((t.inputSchema for t in tools if t.name == name), None)
+
+            if tool_schema:
+                try:
+                    validate_parameters(arguments, tool_schema)
+                except ParameterValidationError as e:
+                    logger.error(f"Parameter validation failed for {name}: {e}")
+                    return {
+                        "error": "Parameter validation failed",
+                        "details": str(e),
+                        "tool": name,
+                    }
+
             try:
-                validate_parameters(arguments, tool_schema)
-            except ParameterValidationError as e:
-                logger.error(f"Parameter validation failed for {name}: {e}")
+                logger.info(
+                    f"Calling tool: {name} with arguments: {list(arguments.keys())}"
+                )
+                result = await tool_handlers[name](arguments)
+                logger.info(f"Tool {name} completed successfully")
+                return result
+            except Exception as e:
+                logger.error(f"Tool {name} failed: {e}")
                 return {
-                    "error": "Parameter validation failed",
+                    "error": "Tool execution failed",
                     "details": str(e),
                     "tool": name,
                 }
 
-        try:
-            logger.info(
-                f"Calling tool: {name} with arguments: {list(arguments.keys())}"
-            )
-            result = await tool_handlers[name](arguments)
-            logger.info(f"Tool {name} completed successfully")
-            return result
-        except Exception as e:
-            logger.error(f"Tool {name} failed: {e}")
-            return {
-                "error": "Tool execution failed",
-                "details": str(e),
-                "tool": name,
-            }
-
-    logger.info(f"Registered {len(tools)} tools")
-    return tools
+        logger.info(f"Registered {len(tools)} tools using legacy MCP SDK callback pattern")
+        return tools

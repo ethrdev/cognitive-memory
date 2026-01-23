@@ -1,5 +1,6 @@
 # Core dependencies
 mcp>=1.23.0  # CVE fix: DNS rebinding protection
+fastmcp>=3.0.0b1,<4  # Story 11.4.1: FastMCP 3.x beta for middleware and HTTP transport support
 urllib3>=2.6.0  # CVE fix: compressed data handling
 psycopg2-binary>=2.9.0
 pgvector>=0.2.0
