@@ -66,7 +66,7 @@ development_status:
   11-3-2-shadow-audit-infrastructure: done
   11-3-3-rls-policies-core-tables: done
   11-3-4-rls-policies-support-tables: done
-  11-3-5-bypassrls-emergency-role: backlog
+  11-3-5-bypassrls-emergency-role: done
   epic-11-3-retrospective: optional
 
   # Epic 11.4: MCP Middleware
