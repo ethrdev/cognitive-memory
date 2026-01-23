@@ -8,7 +8,10 @@
 
 SET lock_timeout = '5s';
 
--- Drop table first (no CASCADE needed if run before 11.2.2)
+-- Drop trigger first (attached to table)
+DROP TRIGGER IF EXISTS update_project_registry_updated_at ON project_registry;
+
+-- Drop table (no CASCADE needed if run before 11.2.2)
 DROP TABLE IF EXISTS project_registry;
 
 -- Drop enum type

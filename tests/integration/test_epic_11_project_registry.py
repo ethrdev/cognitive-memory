@@ -1,7 +1,7 @@
 """Tests for Story 11.2.1: Create project_registry Table
 
 These tests verify the migration creates the project_registry table
-with the correct schema, enum type, and indexes.
+with the correct schema, enum type, indexes, and updated_at trigger.
 
 Uses asyncpg with its own fixture (not the global psycopg2 conn fixture).
 """
@@ -22,6 +22,7 @@ class TestProjectRegistryMigration:
 
         Uses TEST_DATABASE_URL or falls back to default test database.
         Each test runs in a transaction that is rolled back.
+        Uses context manager pattern for safe transaction handling.
         """
         db_url = os.environ.get(
             "TEST_DATABASE_URL",
@@ -33,27 +34,23 @@ class TestProjectRegistryMigration:
             pytest.skip(f"Could not connect to database: {e}")
             return
 
-        # Start transaction for isolation
-        tr = conn.transaction()
-        await tr.start()
+        # Use context manager for safe transaction handling
+        async with conn.transaction():
+            yield conn
 
-        yield conn
-
-        # Rollback to clean up
-        await tr.rollback()
         await conn.close()
 
     @pytest.fixture
     def migration_path(self) -> Path:
         """Path to the migration SQL file."""
-        path = Path(__file__).parent.parent / "mcp_server" / "db" / "migrations" / "030_create_project_registry.sql"
+        path = Path(__file__).parent.parent.parent / "mcp_server" / "db" / "migrations" / "030_create_project_registry.sql"
         assert path.exists(), f"Migration file not found at {path}"
         return path
 
     @pytest.fixture
     def rollback_path(self) -> Path:
         """Path to the rollback SQL file."""
-        path = Path(__file__).parent.parent / "mcp_server" / "db" / "migrations" / "030_create_project_registry_rollback.sql"
+        path = Path(__file__).parent.parent.parent / "mcp_server" / "db" / "migrations" / "030_create_project_registry_rollback.sql"
         assert path.exists(), f"Rollback file not found at {path}"
         return path
 
@@ -285,6 +282,79 @@ class TestProjectRegistryMigration:
             )
         """)
         assert enum_exists_after is False, "Enum should be dropped after rollback"
+
+    # =========================================================================
+    # Trigger Tests (added by code review)
+    # =========================================================================
+
+    @pytest.mark.P1
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_updated_at_trigger_exists(self, test_db, migration_path) -> None:
+        """INTEGRATION: Verify updated_at trigger is created
+
+        GIVEN migration 030 has been applied
+        WHEN checking pg_trigger
+        THEN update_project_registry_updated_at trigger exists
+        """
+        await self._run_migration(test_db, migration_path)
+
+        result = await test_db.fetchval("""
+            SELECT EXISTS (
+                SELECT 1 FROM pg_trigger
+                WHERE tgname = 'update_project_registry_updated_at'
+            )
+        """)
+
+        assert result is True, "updated_at trigger should exist"
+
+    @pytest.mark.P1
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_updated_at_auto_updates(self, test_db, migration_path) -> None:
+        """INTEGRATION: Verify updated_at is automatically updated on row change
+
+        GIVEN a row exists in project_registry
+        WHEN the row is updated
+        THEN updated_at timestamp changes automatically
+        """
+        await self._run_migration(test_db, migration_path)
+
+        # Insert a row
+        await test_db.execute("""
+            INSERT INTO project_registry (project_id, name, access_level)
+            VALUES ('trigger-test', 'Trigger Test Project', 'isolated')
+        """)
+
+        # Get initial timestamps
+        initial = await test_db.fetchrow("""
+            SELECT created_at, updated_at FROM project_registry
+            WHERE project_id = 'trigger-test'
+        """)
+
+        # Small delay to ensure timestamp difference
+        import asyncio
+        await asyncio.sleep(0.01)
+
+        # Update the row
+        await test_db.execute("""
+            UPDATE project_registry SET name = 'Updated Name'
+            WHERE project_id = 'trigger-test'
+        """)
+
+        # Get new timestamps
+        updated = await test_db.fetchrow("""
+            SELECT created_at, updated_at FROM project_registry
+            WHERE project_id = 'trigger-test'
+        """)
+
+        # created_at should not change
+        assert initial['created_at'] == updated['created_at'], \
+            "created_at should not change on update"
+
+        # updated_at should be newer
+        assert updated['updated_at'] >= initial['updated_at'], \
+            "updated_at should be updated by trigger"
 
     # =========================================================================
     # Idempotency & Additional Tests

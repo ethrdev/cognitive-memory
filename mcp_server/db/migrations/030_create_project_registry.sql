@@ -66,4 +66,27 @@ COMMENT ON COLUMN project_registry.updated_at IS
 COMMENT ON INDEX idx_project_registry_project_id IS
     'Index for efficient project_id lookups in ACL checks';
 
+-- ============================================================================
+-- TRIGGER for updated_at auto-update
+-- ============================================================================
+
+-- Reuse existing trigger function from migration 003 (update_updated_at_column)
+-- If it doesn't exist, create it (idempotent)
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger for project_registry
+DROP TRIGGER IF EXISTS update_project_registry_updated_at ON project_registry;
+CREATE TRIGGER update_project_registry_updated_at
+    BEFORE UPDATE ON project_registry
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+COMMENT ON TRIGGER update_project_registry_updated_at ON project_registry IS
+    'Automatically updates updated_at timestamp on row modification';
+
 RESET lock_timeout;
