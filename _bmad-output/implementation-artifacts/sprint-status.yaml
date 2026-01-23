@@ -49,11 +49,11 @@ development_status:
   11-1-2-data-backfill: done
   11-1-3-unique-constraint-updates: done
   11-1-4-composite-indexes: done
-  epic-11-1-retrospective: optional
+  epic-11-1-retrospective: done
 
   # Epic 11.2: Access Control + Migration Tracking
-  epic-11-2: backlog
-  11-2-1-project-registry-table: backlog
+  epic-11-2: in-progress
+  11-2-1-project-registry-table: done
   11-2-2-project-read-permissions-table: backlog
   11-2-3-rls-migration-status-table: backlog
   11-2-4-seed-initial-data: backlog
