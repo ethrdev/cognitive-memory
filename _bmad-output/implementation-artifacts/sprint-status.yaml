@@ -52,16 +52,16 @@ development_status:
   epic-11-1-retrospective: done
 
   # Epic 11.2: Access Control + Migration Tracking
-  epic-11-2: in-progress
+  epic-11-2: done
   11-2-1-project-registry-table: done
-  11-2-2-project-read-permissions-table: backlog
-  11-2-3-rls-migration-status-table: backlog
-  11-2-4-seed-initial-data: backlog
-  epic-11-2-retrospective: optional
+  11-2-2-project-read-permissions-table: done
+  11-2-3-rls-migration-status-table: done
+  11-2-4-seed-initial-data: done
+  epic-11-2-retrospective: done
 
   # Epic 11.3: RLS + Gradual Rollout Infrastructure
-  epic-11-3: backlog
-  11-3-0-pgtap-test-infrastructure: backlog
+  epic-11-3: in-progress
+  11-3-0-pgtap-test-infrastructure: done
   11-3-1-rls-helper-functions: backlog
   11-3-2-shadow-audit-infrastructure: backlog
   11-3-3-rls-policies-core-tables: backlog

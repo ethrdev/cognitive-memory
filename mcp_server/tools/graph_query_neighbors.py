@@ -16,6 +16,7 @@ import logging
 import time
 from typing import Any
 
+from mcp_server.audit.shadow_logger import ShadowAuditLogger
 from mcp_server.db.graph import get_node_by_name, query_neighbors
 
 logger = logging.getLogger(__name__)
@@ -173,6 +174,24 @@ async def handle_graph_query_neighbors(arguments: dict[str, Any]) -> dict[str, A
                 use_ief=use_ief,
                 query_embedding=query_embedding
             )
+
+            # Story 11.3.2: Shadow audit for SELECT operations
+            # Log cross-project violations if in shadow mode (non-blocking)
+            try:
+                shadow_logger = ShadowAuditLogger()
+                # Get current project from session variable
+                from mcp_server.db.connection import get_connection
+                async with get_connection() as audit_conn:
+                    cur = audit_conn.cursor()
+                    cur.execute("SELECT current_setting('app.current_project', TRUE) AS project_id")
+                    row = cur.fetchone()
+                    current_project = row.get("project_id") if row else None
+
+                if current_project:
+                    await shadow_logger.log_select_violations(result, current_project)
+            except Exception as audit_error:
+                # Shadow audit failures never block response
+                logger.warning("Shadow audit logging failed (non-blocking)", extra={"error": str(audit_error)})
 
             # Calculate execution time
             execution_time = (time.time() - start_time) * 1000  # Convert to milliseconds
