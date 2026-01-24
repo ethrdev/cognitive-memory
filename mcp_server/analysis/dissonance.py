@@ -1,6 +1,8 @@
 """
 Dissonance Engine for detecting conflicts in self-narrative.
 
+Story 11.7.1: Added project context support for RLS filtering.
+
 This module provides functionality to detect and classify dissonances
 between edges in the knowledge graph based on AGM belief revision theory.
 """
@@ -14,13 +16,19 @@ from datetime import datetime, timezone, timedelta
 from enum import Enum
 from typing import Any, Optional
 
-from mcp_server.db.connection import get_connection, get_connection_sync
+from mcp_server.db.connection import (
+    get_connection,
+    get_connection_sync,
+    get_connection_with_project_context,
+    get_connection_with_project_context_sync,
+)
 from mcp_server.db.graph import get_or_create_node, add_edge, get_edge_by_id
 from mcp_server.external.anthropic_client import HaikuClient
 from mcp_server.analysis.smf import (
     TriggerType, ApprovalLevel, create_smf_proposal,
     generate_neutral_reasoning, validate_neutrality, validate_safeguards, IMMUTABLE_SAFEGUARDS
 )
+from mcp_server.middleware.context import get_current_project
 
 logger = logging.getLogger(__name__)
 
@@ -93,13 +101,16 @@ class DissonanceEngine:
     """
     Engine for detecting and classifying dissonances in knowledge graph edges.
 
+    Story 11.7.1: Added project_id parameter for RLS filtering.
+
     Based on AGM belief revision theory for handling contradictions in
     constitutive knowledge graphs.
     """
 
-    def __init__(self, haiku_client: Optional[HaikuClient] = None):
+    def __init__(self, haiku_client: Optional[HaikuClient] = None, project_id: Optional[str] = None):
         """Initialize the dissonance engine."""
         self.haiku_client = haiku_client or HaikuClient()
+        self.project_id = project_id  # Story 11.7.1
 
     async def dissonance_check(
         self,
@@ -108,6 +119,8 @@ class DissonanceEngine:
     ) -> DissonanceCheckResult:
         """
         Prüft Edges auf Dissonanzen und klassifiziert Konflikte.
+
+        Story 11.7.1: Use project-scoped connection for RLS filtering.
 
         Args:
             context_node: Name des Nodes dessen Edges geprüft werden (z.B. "I/O")
@@ -120,10 +133,14 @@ class DissonanceEngine:
         if scope not in ["recent", "full"]:
             raise ValueError(f"Invalid scope '{scope}'. Must be 'recent' or 'full'")
 
+        # Story 11.7.1: Get project context if not provided
+        if self.project_id is None:
+            self.project_id = get_current_project()
+
         # Validate UUID format for context_node
         if not re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', context_node):
-            # If not UUID, try to find node by name
-            async with get_connection() as conn:
+            # Story 11.7.1: Use project-scoped connection for RLS filtering
+            async with get_connection_with_project_context(read_only=True) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     "SELECT id FROM nodes WHERE name = %s",
@@ -268,8 +285,12 @@ class DissonanceEngine:
             raise
 
     def _fetch_edges(self, context_node_id: str, scope: str) -> list[dict[str, Any]]:
-        """Fetch edges based on scope criteria."""
-        with get_connection_sync() as conn:
+        """
+        Fetch edges based on scope criteria.
+
+        Story 11.7.1: Use get_connection_with_project_context_sync() for RLS filtering.
+        """
+        with get_connection_with_project_context_sync(read_only=True) as conn:
             cursor = conn.cursor()
 
             if scope == "recent":

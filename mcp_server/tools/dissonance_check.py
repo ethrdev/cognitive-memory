@@ -1,8 +1,7 @@
 """
 MCP Tool for checking dissonances in knowledge graph edges.
 
-This tool provides the dissonance_check function as an MCP tool
-that can be called from Claude Code or other MCP clients.
+Story 11.7.1: SMF Read Operations - Added project context support for RLS filtering.
 """
 
 import logging
@@ -11,6 +10,7 @@ from typing import Any
 from mcp.server import Server
 from mcp.types import Tool, TextContent
 from mcp_server.analysis.dissonance import DissonanceEngine
+from mcp_server.middleware.context import get_current_project
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +45,8 @@ async def handle_dissonance_check(
     """
     Handle dissonance check tool invocation.
 
+    Story 11.7.1: Get project_id from middleware context for RLS filtering.
+
     Args:
         server: MCP server instance
         context_node: Name of the node whose edges to check
@@ -53,9 +55,12 @@ async def handle_dissonance_check(
     Returns:
         List of TextContent with the dissonance check results
     """
+    # Story 11.7.1: Get project context for RLS filtering
+    project_id = get_current_project()
+
     try:
-        # Initialize dissonance engine
-        engine = DissonanceEngine()
+        # Initialize dissonance engine with project context
+        engine = DissonanceEngine(project_id=project_id)
 
         # Perform dissonance check
         result = await engine.dissonance_check(
