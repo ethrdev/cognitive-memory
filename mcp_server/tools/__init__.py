@@ -258,8 +258,9 @@ def semantic_search(
 
     # Cosine distance: <=> operator
     # Lower distance = higher similarity
+    # Story 11.6.1: Include project_id in SELECT for result metadata tracking
     query = f"""
-        SELECT id, content, source_ids, metadata, io_category, is_identity, source_file, memory_strength,
+        SELECT id, content, source_ids, metadata, io_category, is_identity, source_file, memory_strength, project_id,
                embedding <=> %s::vector AS distance
         FROM l2_insights
         WHERE is_deleted = FALSE {filter_clause}{sector_clause}
@@ -269,24 +270,26 @@ def semantic_search(
 
     # Combine parameters: embedding, filter_values, sector_params, top_k
     params = [query_embedding] + filter_values + sector_params + [top_k]
-    
+
     cursor.execute(query, params)
 
     results = cursor.fetchall()
 
     # Add rank position (1-indexed)
+    # Story 11.6.1: Include project_id in result metadata
     return [
         {
             "id": row["id"],
             "content": row["content"],
             "source_ids": row["source_ids"],
-            "metadata": row["metadata"],
+            "metadata": row["metadata"] or {},
             "io_category": row["io_category"],
             "is_identity": row["is_identity"],
             "source_file": row["source_file"],
             "memory_strength": row["memory_strength"],  # Story 26.1: I/O's Bedeutungszuweisung
             "distance": row["distance"],
             "rank": idx + 1,
+            "project_id": row["project_id"],  # Story 11.6.1: Track source project
         }
         for idx, row in enumerate(results)
     ]
@@ -342,8 +345,9 @@ def keyword_search(
     # ts_rank: Relevance score (higher = better match)
     # plainto_tsquery: Converts plain text to tsquery (handles spaces, punctuation)
     # Using parameterized language config for multi-language support
+    # Story 11.6.1: Include project_id in SELECT for result metadata tracking
     query = f"""
-        SELECT id, content, source_ids, metadata, io_category, is_identity, source_file, memory_strength,
+        SELECT id, content, source_ids, metadata, io_category, is_identity, source_file, memory_strength, project_id,
                ts_rank(
                    to_tsvector('{language}', content),
                    plainto_tsquery('{language}', %s)
@@ -364,18 +368,20 @@ def keyword_search(
     results = cursor.fetchall()
 
     # Add rank position (1-indexed)
+    # Story 11.6.1: Include project_id in result metadata
     return [
         {
             "id": row["id"],
             "content": row["content"],
             "source_ids": row["source_ids"],
-            "metadata": row["metadata"],
+            "metadata": row["metadata"] or {},
             "io_category": row["io_category"],
             "is_identity": row["is_identity"],
             "source_file": row["source_file"],
             "memory_strength": row["memory_strength"],  # Story 26.1: I/O's Bedeutungszuweisung
             "rank": row["rank"],
             "rank_position": idx + 1,
+            "project_id": row["project_id"],  # Story 11.6.1: Track source project
         }
         for idx, row in enumerate(results)
     ]
@@ -411,8 +417,9 @@ def episode_semantic_search(
 
     # Cosine distance: <=> operator
     # Lower distance = higher similarity
+    # Story 11.6.1: Include project_id in SELECT for result metadata tracking
     query = """
-        SELECT id, query, reflection, reward, created_at,
+        SELECT id, query, reflection, reward, created_at, project_id,
                embedding <=> %s::vector AS distance
         FROM episode_memory
         ORDER BY distance
@@ -423,6 +430,7 @@ def episode_semantic_search(
     results = cursor.fetchall()
 
     # Format results for RRF fusion (needs 'id' and 'content' keys)
+    # Story 11.6.1: Include project_id in result metadata
     return [
         {
             "id": f"episode_{row['id']}",  # Prefix to distinguish from l2_insights
@@ -435,6 +443,7 @@ def episode_semantic_search(
             "created_at": row["created_at"].isoformat() if row["created_at"] else None,
             "distance": row["distance"],
             "rank": idx + 1,
+            "project_id": row["project_id"],  # Story 11.6.1: Track source project
         }
         for idx, row in enumerate(results)
     ]
@@ -462,8 +471,9 @@ def episode_keyword_search(
 
     # Search in both query and reflection fields
     # Using 'simple' language for better multi-language support
+    # Story 11.6.1: Include project_id in SELECT for result metadata tracking
     query = f"""
-        SELECT id, query, reflection, reward, created_at,
+        SELECT id, query, reflection, reward, created_at, project_id,
                ts_rank(
                    to_tsvector('{language}', query || ' ' || reflection),
                    plainto_tsquery('{language}', %s)
@@ -479,6 +489,7 @@ def episode_keyword_search(
     results = cursor.fetchall()
 
     # Format results for RRF fusion
+    # Story 11.6.1: Include project_id in result metadata
     return [
         {
             "id": f"episode_{row['id']}",  # Prefix to distinguish from l2_insights
@@ -491,6 +502,7 @@ def episode_keyword_search(
             "created_at": row["created_at"].isoformat() if row["created_at"] else None,
             "rank": row["rank"],
             "rank_position": idx + 1,
+            "project_id": row["project_id"],  # Story 11.6.1: Track source project
         }
         for idx, row in enumerate(results)
     ]
@@ -704,11 +716,12 @@ async def graph_search(
             seen_ids.add(vector_id)
 
             # Fetch L2 Insight from database
+            # Story 11.6.1: Include project_id in SELECT for result metadata tracking
             try:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
-                    SELECT id, content, source_ids, metadata, io_category, is_identity, source_file
+                    SELECT id, content, source_ids, metadata, io_category, is_identity, source_file, project_id
                     FROM l2_insights
                     WHERE id = %s;
                     """,
@@ -734,7 +747,7 @@ async def graph_search(
                         "id": insight["id"],
                         "content": insight["content"],
                         "source_ids": insight["source_ids"],
-                        "metadata": insight["metadata"],
+                        "metadata": insight["metadata"] or {},
                         "io_category": insight.get("io_category"),
                         "is_identity": insight.get("is_identity"),
                         "source_file": insight.get("source_file"),
@@ -742,6 +755,7 @@ async def graph_search(
                         "graph_distance": distance,
                         "source_entity": entity,
                         "source_relation": neighbor.get("relation", "UNKNOWN"),
+                        "project_id": insight["project_id"],  # Story 11.6.1: Track source project
                     })
 
             except Exception as e:
@@ -1433,20 +1447,32 @@ async def handle_hybrid_search(arguments: dict[str, Any]) -> dict[str, Any]:
         # Select top-k results
         final_results = fused_results[:top_k]
 
-        # Story 11.6.1: Add project_id to each result's metadata
+        # Story 11.6.1: Move result's project_id to metadata
         # AC #Response Metadata: "each result includes project_id in metadata"
-        project_id = get_current_project()
+        # All search functions (semantic_search, keyword_search, graph_search) return
+        # project_id at the result level - move it from result root into metadata dict
+        requesting_project = get_current_project()
         for result in final_results:
-            # Add project_id to each result's metadata dictionary
+            # Ensure metadata dict exists
             if "metadata" not in result:
                 result["metadata"] = {}
-            result["metadata"]["project_id"] = project_id
+            # Move the result's source project_id into metadata
+            if "project_id" in result:
+                result["metadata"]["project_id"] = result.pop("project_id")
+            else:
+                # This should never happen - all search functions return project_id
+                # Log warning but don't assign wrong value (requesting_project != source project)
+                logger.warning(
+                    f"Result missing project_id: id={result.get('id', 'unknown')}, "
+                    f"content={result.get('content', 'unknown')[:50]}, "
+                    f"requesting_project={requesting_project}"
+                )
 
         logger.info(
             f"Hybrid search completed: {len(semantic_results)} l2_semantic, "
             f"{len(episode_semantic_results)} episode_semantic, "
             f"{len(keyword_results)} l2_keyword, {len(episode_keyword_results)} episode_keyword, "
-            f"{len(graph_results)} graph, {len(final_results)} fused (query_type={query_type}, project_id={project_id})"
+            f"{len(graph_results)} graph, {len(final_results)} fused (query_type={query_type}, requesting_project={requesting_project})"
         )
 
         # Extended response format with episode counts and project metadata
@@ -1466,8 +1492,8 @@ async def handle_hybrid_search(arguments: dict[str, Any]) -> dict[str, Any]:
             "weights": applied_weights,                 # Backwards-compatible alias
             # Story 9-4: Include sector_filter in response
             "sector_filter": sector_filter,
-            # Story 11.6.1: Add project_id to response metadata
-            "project_id": project_id,
+            # Story 11.6.1: Add requesting project_id to response metadata
+            "project_id": requesting_project,
             "status": "success",
         }
 
