@@ -79,7 +79,7 @@ development_status:
   # Epic 11.5: Write Operations
   epic-11-5: in-progress
   11-5-1-graph-write-operations: done
-  11-5-2-l2-insight-write-operations: backlog
+  11-5-2-l2-insight-write-operations: done
   11-5-3-memory-write-operations: backlog
   11-5-4-smf-dissonance-write-operations: backlog
   epic-11-5-retrospective: optional

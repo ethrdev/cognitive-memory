@@ -163,13 +163,16 @@ async def write_insight_history(
     new_content: str | None,
     old_memory_strength: float | None,
     new_memory_strength: float | None,
-    reason: str
+    reason: str,
+    project_id: str
 ) -> int:
     """
     Write a history entry for an insight mutation (EP-3).
 
     EP-3: History-on-Mutation Pattern - This should be called BEFORE the mutation,
     in the SAME transaction as the update.
+
+    Story 11.5.2: Added project_id parameter for namespace isolation.
 
     Args:
         insight_id: The ID of the insight being mutated
@@ -180,6 +183,7 @@ async def write_insight_history(
         old_memory_strength: Previous memory strength
         new_memory_strength: New memory strength
         reason: Reason for the mutation (required)
+        project_id: Project ID for scoping (Story 11.5.2)
 
     Returns:
         history_id: The ID of the created history entry
@@ -191,16 +195,16 @@ async def write_insight_history(
         async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
 
-            # Insert history entry
+            # Story 11.5.2: Insert history entry with project_id
             cursor.execute(
                 """
                 INSERT INTO l2_insight_history
-                (insight_id, action, actor, old_content, new_content,
+                (project_id, insight_id, action, actor, old_content, new_content,
                  old_memory_strength, new_memory_strength, reason)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
-                (insight_id, action, actor, old_content, new_content,
+                (project_id, insight_id, action, actor, old_content, new_content,
                  old_memory_strength, new_memory_strength, reason),
             )
 
@@ -210,7 +214,7 @@ async def write_insight_history(
             conn.commit()
             cursor.close()
 
-            logger.info(f"Wrote history: insight_id={insight_id}, action={action}, history_id={history_id}")
+            logger.info(f"Wrote history: insight_id={insight_id}, action={action}, history_id={history_id}, project_id={project_id}")
             return history_id
 
     except Exception as e:
@@ -231,6 +235,8 @@ async def execute_update_with_history(
     This combines the update and history write in a SINGLE transaction.
     If the update fails, the history is rolled back too (atomic).
 
+    Story 11.5.2: Added project_id to history entries for namespace isolation.
+
     Args:
         insight_id: The ID of the insight to update
         new_content: New content (optional)
@@ -245,6 +251,8 @@ async def execute_update_with_history(
         ValueError: If validation fails (not found, no changes, empty content)
         Exception: If database operation fails
     """
+    from mcp_server.middleware.context import get_current_project
+
     # AC-3: Reason required
     if not reason:
         raise ValueError("reason required")
@@ -260,15 +268,16 @@ async def execute_update_with_history(
     try:
         async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
+            project_id = get_current_project()
 
             # Start transaction
             cursor.execute("BEGIN")
 
             try:
-                # Get current state (for history)
+                # Get current state (for history) - Story 11.5.2: also get project_id
                 cursor.execute(
                     """
-                    SELECT content, memory_strength
+                    SELECT content, memory_strength, project_id
                     FROM l2_insights
                     WHERE id = %s AND is_deleted = FALSE
                     """,
@@ -281,17 +290,18 @@ async def execute_update_with_history(
 
                 old_content = row["content"]
                 old_memory_strength = row.get("memory_strength", 0.5)
+                insight_project_id = row["project_id"]  # Story 11.5.2: Get the insight's project_id
 
-                # Step 1: Write history FIRST (EP-3)
+                # Step 1: Write history FIRST (EP-3) with project_id (Story 11.5.2)
                 cursor.execute(
                     """
                     INSERT INTO l2_insight_history
-                    (insight_id, action, actor, old_content, new_content,
+                    (project_id, insight_id, action, actor, old_content, new_content,
                      old_memory_strength, new_memory_strength, reason)
-                    VALUES (%s, 'UPDATE', %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, 'UPDATE', %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
-                    (insight_id, actor, old_content, new_content,
+                    (insight_project_id, insight_id, actor, old_content, new_content,
                      old_memory_strength, new_memory_strength, reason),
                 )
 
@@ -319,7 +329,7 @@ async def execute_update_with_history(
                 cursor.execute("COMMIT")
                 conn.commit()
 
-                logger.info(f"Executed update with history: insight_id={insight_id}, history_id={history_id}")
+                logger.info(f"Executed update with history: insight_id={insight_id}, history_id={history_id}, project_id={insight_project_id}")
                 return {
                     "success": True,
                     "insight_id": insight_id,
@@ -357,6 +367,8 @@ async def execute_delete_with_history(
     This combines the soft-delete and history write in a SINGLE transaction.
     If either operation fails, both are rolled back (atomic).
 
+    Story 11.5.2: Added project_id to history entries for namespace isolation.
+
     Args:
         insight_id: The ID of the insight to soft-delete
         actor: Who is making the change ("I/O" or "ethr")
@@ -369,6 +381,8 @@ async def execute_delete_with_history(
         ValueError: If validation fails (not found, already deleted, no reason)
         Exception: If database operation fails
     """
+    from mcp_server.middleware.context import get_current_project
+
     # AC-6: Reason required
     if not reason:
         raise ValueError("reason required")
@@ -381,10 +395,10 @@ async def execute_delete_with_history(
             cursor.execute("BEGIN")
 
             try:
-                # Step 1: Get current state (for history)
+                # Step 1: Get current state (for history) - Story 11.5.2: also get project_id
                 cursor.execute(
                     """
-                    SELECT content, memory_strength, is_deleted
+                    SELECT content, memory_strength, is_deleted, project_id
                     FROM l2_insights
                     WHERE id = %s
                     """,
@@ -400,17 +414,18 @@ async def execute_delete_with_history(
 
                 old_content = row["content"]
                 old_memory_strength = row.get("memory_strength", 0.5)
+                insight_project_id = row["project_id"]  # Story 11.5.2: Get the insight's project_id
 
-                # Step 2: Write history FIRST (EP-3)
+                # Step 2: Write history FIRST (EP-3) with project_id (Story 11.5.2)
                 cursor.execute(
                     """
                     INSERT INTO l2_insight_history
-                    (insight_id, action, actor, old_content, new_content,
+                    (project_id, insight_id, action, actor, old_content, new_content,
                      old_memory_strength, new_memory_strength, reason)
-                    VALUES (%s, 'DELETE', %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, 'DELETE', %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
-                    (insight_id, actor, old_content, None,
+                    (insight_project_id, insight_id, actor, old_content, None,
                      old_memory_strength, None, reason),
                 )
 
@@ -434,7 +449,7 @@ async def execute_delete_with_history(
                 cursor.execute("COMMIT")
                 conn.commit()
 
-                logger.info(f"Executed soft-delete with history: insight_id={insight_id}, history_id={history_id}")
+                logger.info(f"Executed soft-delete with history: insight_id={insight_id}, history_id={history_id}, project_id={insight_project_id}")
                 return {
                     "success": True,
                     "insight_id": insight_id,

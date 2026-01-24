@@ -4,8 +4,9 @@ update_insight Tool Implementation
 MCP tool for updating an existing L2 insight.
 Implements EP-1 (Consent-Aware) and EP-3 (History-on-Mutation) patterns.
 
-Story 26.2: UPDATE Operation
+Story 11.5.2: L2 Insight Write Operations - Added custom error handling for cross-project updates
 Story 11.4.3: Tool Handler Refactoring - Added project context usage and metadata
+Story 26.2: UPDATE Operation
 """
 
 from __future__ import annotations
@@ -191,6 +192,17 @@ async def handle_update_insight(arguments: dict[str, Any]) -> dict[str, Any]:
                     }, project_id)
 
             except Exception as e:
+                # Check if this is an RLS error (cross-project access)
+                error_msg = str(e)
+                if "permission denied" in error_msg.lower() or "rls" in error_msg.lower():
+                    logger.warning(f"RLS blocked update attempt for insight {insight_id} from project {project_id}")
+                    return add_response_metadata({
+                        "error": {
+                            "code": 403,
+                            "message": "Cannot modify insight from another project"
+                        }
+                    }, project_id)
+
                 logger.error(f"Failed to update insight {insight_id}: {e}")
                 return add_response_metadata({
                     "error": {

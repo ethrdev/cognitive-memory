@@ -1048,12 +1048,13 @@ async def handle_compress_to_l2_insight(arguments: dict[str, Any]) -> dict[str, 
     Compress dialogue data to L2 insight with OpenAI embedding.
 
     Story 11.4.3: Tool Handler Refactoring - Added project context usage and metadata
+    Story 11.5.2: L2 Insight Write Operations - Added project_id to INSERT for namespace isolation
 
     Args:
         arguments: Tool arguments containing content and source_ids
 
     Returns:
-        Dict with insight ID, embedding status, and fidelity score
+        Dict with insight ID, embedding status, fidelity score, and project_id
     """
     logger = logging.getLogger(__name__)
 
@@ -1146,29 +1147,30 @@ async def handle_compress_to_l2_insight(arguments: dict[str, Any]) -> dict[str, 
 
         # Store in database
         try:
-            async with get_connection() as conn:
+            async with get_connection_with_project_context() as conn:
                 # Register vector type for pgvector
                 register_vector(conn)
 
                 cursor = conn.cursor()
 
-                # Insert insight with embedding and metadata
+                # Story 11.5.2: Insert insight with project_id for namespace isolation
                 cursor.execute(
                     """
-                    INSERT INTO l2_insights (content, embedding, source_ids, metadata, memory_strength)
-                    VALUES (%s, %s, %s, %s, %s)
-                    RETURNING id, created_at;
+                    INSERT INTO l2_insights (project_id, content, embedding, source_ids, metadata, memory_strength)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    RETURNING id, project_id, created_at;
                     """,
-                    (content, embedding, source_ids, json.dumps(metadata), memory_strength),
+                    (project_id, content, embedding, source_ids, json.dumps(metadata), memory_strength),
                 )
 
                 result = cursor.fetchone()
                 conn.commit()
 
                 insight_id = int(result["id"])
+                created_project_id = result["project_id"]
                 created_at = result["created_at"].isoformat()
                 logger.info(
-                    f"Successfully stored L2 insight {insight_id} with {len(embedding)}-dimensional embedding"
+                    f"Successfully stored L2 insight {insight_id} with {len(embedding)}-dimensional embedding for project {created_project_id}"
                 )
 
                 return add_response_metadata({
