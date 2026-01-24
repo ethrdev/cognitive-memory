@@ -95,7 +95,7 @@ development_status:
   # Epic 11.7: SMF & Utility Operations
   epic-11-7: in-progress
   11-7-1-smf-read-operations: done
-  11-7-2-utility-read-operations: backlog
+  11-7-2-utility-read-operations: done
   11-7-3-golden-test-verification-operations: backlog
   epic-11-7-retrospective: optional
 
