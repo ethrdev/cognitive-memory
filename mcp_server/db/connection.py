@@ -5,6 +5,7 @@ Provides connection pooling for PostgreSQL database with health checks
 and graceful shutdown capabilities.
 
 Story 11.4.2: Adds RLS context integration with get_connection_with_project_context().
+Story 11.6.1: Adds pgvector 0.8.0 iterative scan configuration.
 """
 
 from __future__ import annotations
@@ -113,6 +114,77 @@ def _is_transient_error(error: Exception) -> bool:
     """Check if an error is transient and should be retried."""
     error_str = str(error).lower()
     return any(pattern.lower() in error_str for pattern in _TRANSIENT_ERROR_PATTERNS)
+
+
+async def configure_pgvector_iterative_scans(conn: connection) -> None:
+    """
+    Configure pgvector 0.8.0+ iterative scans for optimal RLS performance.
+
+    Story 11.6.1: Adds iterative scan configuration to handle RLS filtering
+    without significant performance degradation.
+
+    When RLS filters rows AFTER the HNSW scan, pgvector may need to scan
+    more tuples to return the requested top_k results. The iterative_scan
+    mode allows pgvector to continue scanning until enough results pass
+    the RLS filter.
+
+    Configuration:
+    - hnsw.iterative_scan = 'relaxed_order': Allow approximate ordering
+      for better performance when RLS filters are active
+    - hnsw.max_scan_tuples = 20000: Maximum tuples to scan before
+      stopping (prevents runaway queries)
+
+    Called once per connection at acquisition in get_connection_with_project_context().
+
+    Args:
+        conn: PostgreSQL connection object
+
+    Reference:
+        https://github.com/pgvector/pgvector#iterative-scan
+    """
+    try:
+        # Enable iterative scan with relaxed ordering
+        await conn.execute("SET hnsw.iterative_scan = 'relaxed_order'")
+        # Set maximum tuples to scan (prevents runaway queries)
+        await conn.execute("SET hnsw.max_scan_tuples = 20000")
+        logging.getLogger(__name__).debug(
+            "pgvector iterative scans configured: relaxed_order, max_scan_tuples=20000"
+        )
+    except Exception as e:
+        logging.getLogger(__name__).warning(
+            f"Failed to configure pgvector iterative scans (pgvector may not be 0.8.0+): {e}"
+        )
+        # Non-fatal: continue without iterative scan optimization
+
+
+def configure_pgvector_iterative_scans_sync(conn: connection) -> None:
+    """
+    Synchronous version of configure_pgvector_iterative_scans.
+
+    Story 11.6.1: Adds iterative scan configuration to handle RLS filtering
+    without significant performance degradation.
+
+    Args:
+        conn: PostgreSQL connection object
+
+    Reference:
+        https://github.com/pgvector/pgvector#iterative-scan
+    """
+    try:
+        cursor = conn.cursor()
+        # Enable iterative scan with relaxed ordering
+        cursor.execute("SET hnsw.iterative_scan = 'relaxed_order'")
+        # Set maximum tuples to scan (prevents runaway queries)
+        cursor.execute("SET hnsw.max_scan_tuples = 20000")
+        cursor.close()
+        logging.getLogger(__name__).debug(
+            "pgvector iterative scans configured: relaxed_order, max_scan_tuples=20000 (sync)"
+        )
+    except Exception as e:
+        logging.getLogger(__name__).warning(
+            f"Failed to configure pgvector iterative scans (pgvector may not be 0.8.0+): {e}"
+        )
+        # Non-fatal: continue without iterative scan optimization
 
 
 @asynccontextmanager
@@ -324,6 +396,7 @@ async def get_connection_with_project_context(
     Get a database connection with RLS project context automatically set.
 
     Story 11.4.2: Project Context Validation and RLS Integration
+    Story 11.6.1: Added pgvector iterative scan configuration
 
     This wrapper extends get_connection() to:
     1. Get project_id from the project_context contextvar (set by TenantMiddleware)
@@ -417,6 +490,9 @@ async def get_connection_with_project_context(
 
                 raise ConnectionHealthError(f"Connection health check failed: {e}") from e
 
+            # Story 11.6.1: Configure pgvector iterative scans BEFORE setting RLS context
+            await configure_pgvector_iterative_scans(conn)
+
             # CRITICAL: Set RLS context with appropriate transaction scoping
             # For read-only: SET LOCAL valid for single query with autocommit
             # For write: SET LOCAL valid for entire transaction
@@ -509,6 +585,9 @@ def get_connection_with_project_context_sync(
     """
     Synchronous version of get_connection_with_project_context.
 
+    Story 11.4.2: Project Context Validation and RLS Integration
+    Story 11.6.1: Added pgvector iterative scan configuration
+
     Use this for non-async code paths (middleware validation, batch jobs).
     For MCP tools running in async context, use get_connection_with_project_context() instead.
 
@@ -584,6 +663,10 @@ def get_connection_with_project_context_sync(
                     continue
 
                 raise ConnectionHealthError(f"Connection health check failed: {e}") from e
+
+            # Story 11.6.1: Configure pgvector iterative scans BEFORE setting RLS context
+            # Note: This is the sync version, so we call the sync function
+            configure_pgvector_iterative_scans_sync(conn)
 
             # CRITICAL: Set RLS context with appropriate transaction scoping
             try:

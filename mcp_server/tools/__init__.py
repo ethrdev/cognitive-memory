@@ -1262,6 +1262,7 @@ async def handle_hybrid_search(arguments: dict[str, Any]) -> dict[str, Any]:
     Perform hybrid semantic + keyword + graph search with RRF fusion.
 
     Story 4.6: Extended with graph search integration and query routing.
+    Story 11.6.1: Project-aware filtering with RLS and pgvector iterative scans.
 
     Args:
         arguments: Tool arguments containing query_text, optional query_embedding, top_k, weights
@@ -1393,18 +1394,26 @@ async def handle_hybrid_search(arguments: dict[str, Any]) -> dict[str, Any]:
             applied_weights = get_adjusted_weights(is_relational)
 
         # Execute searches
-        async with get_connection() as conn:
+        # Story 11.6.1: Use get_connection_with_project_context for RLS filtering
+        # This ensures:
+        # 1. RLS context is set from project_context contextvar
+        # 2. pgvector iterative scans are configured
+        # 3. Queries automatically respect project boundaries
+        async with get_connection_with_project_context(read_only=True) as conn:
             # Run L2 Insights searches (Story 9-4: Pass sector_filter)
+            # RLS filters results by project_id automatically
             semantic_results = semantic_search(query_embedding, top_k, conn, filter_params, sector_filter)
             keyword_results = keyword_search(query_text, top_k, conn, filter_params, sector_filter)
 
             # Bug Fix 2025-12-06: Run Episode Memory searches
             # Episodes contain valuable lessons that should be searchable
             # Story 9-4: Episodes not filtered by sector (future enhancement)
+            # RLS filters results by project_id automatically
             episode_semantic_results = episode_semantic_search(query_embedding, top_k, conn)
             episode_keyword_results = episode_keyword_search(query_text, top_k, conn)
 
             # Story 4.6: Run graph search (Story 9-4: Pass sector_filter)
+            # RLS filters results by project_id automatically
             graph_results = await graph_search(query_text, top_k, conn, sector_filter)
 
         # Bug Fix 2025-12-06: Merge episode results with L2 results for RRF fusion
@@ -1424,14 +1433,23 @@ async def handle_hybrid_search(arguments: dict[str, Any]) -> dict[str, Any]:
         # Select top-k results
         final_results = fused_results[:top_k]
 
+        # Story 11.6.1: Add project_id to each result's metadata
+        # AC #Response Metadata: "each result includes project_id in metadata"
+        project_id = get_current_project()
+        for result in final_results:
+            # Add project_id to each result's metadata dictionary
+            if "metadata" not in result:
+                result["metadata"] = {}
+            result["metadata"]["project_id"] = project_id
+
         logger.info(
             f"Hybrid search completed: {len(semantic_results)} l2_semantic, "
             f"{len(episode_semantic_results)} episode_semantic, "
             f"{len(keyword_results)} l2_keyword, {len(episode_keyword_results)} episode_keyword, "
-            f"{len(graph_results)} graph, {len(final_results)} fused (query_type={query_type})"
+            f"{len(graph_results)} graph, {len(final_results)} fused (query_type={query_type}, project_id={project_id})"
         )
 
-        # Extended response format with episode counts
+        # Extended response format with episode counts and project metadata
         return {
             "results": final_results,
             "query_embedding_dimension": len(query_embedding),
@@ -1448,6 +1466,8 @@ async def handle_hybrid_search(arguments: dict[str, Any]) -> dict[str, Any]:
             "weights": applied_weights,                 # Backwards-compatible alias
             # Story 9-4: Include sector_filter in response
             "sector_filter": sector_filter,
+            # Story 11.6.1: Add project_id to response metadata
+            "project_id": project_id,
             "status": "success",
         }
 

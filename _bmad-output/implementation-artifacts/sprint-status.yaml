@@ -77,16 +77,17 @@ development_status:
   epic-11-4-retrospective: done
 
   # Epic 11.5: Write Operations
-  epic-11-5: in-progress
+  epic-11-5: done
   11-5-1-graph-write-operations: done
   11-5-2-l2-insight-write-operations: done
   11-5-3-memory-write-operations: done
   11-5-4-smf-dissonance-write-operations: done
-  epic-11-5-retrospective: optional
+  epic-11-5-retrospective: done
+  epic-11-5-retro-file: epic-11-5-retro-2026-01-24.md
 
   # Epic 11.6: Core Read Operations
-  epic-11-6: backlog
-  11-6-1-hybrid-search-project-aware: backlog
+  epic-11-6: in-progress
+  11-6-1-hybrid-search-project-aware: review
   11-6-2-graph-query-operations: backlog
   11-6-3-insight-read-operations: backlog
   epic-11-6-retrospective: optional
