@@ -32,7 +32,7 @@
 # - SM typically creates next story after previous one is 'done' to incorporate learnings
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
-generated: 2026-01-22
+generated: 2026-01-24
 project: cognitive-memory
 tracking_system: file-system
 story_location: "_bmad-output/implementation-artifacts"
@@ -93,15 +93,16 @@ development_status:
   epic-11-6-retrospective: optional
 
   # Epic 11.7: SMF & Utility Operations
-  epic-11-7: in-progress
+  epic-11-7: done
   11-7-1-smf-read-operations: done
   11-7-2-utility-read-operations: done
   11-7-3-golden-test-verification-operations: done
-  epic-11-7-retrospective: optional
+  epic-11-7-retrospective: done
+  epic-11-7-retro-file: epic-11-7-retro-2026-01-24.md
 
   # Epic 11.8: Gradual Rollout Execution
-  epic-11-8: backlog
-  11-8-1-migration-scripts-tooling: backlog
+  epic-11-8: in-progress
+  11-8-1-migration-scripts-tooling: done
   11-8-2-shadow-phase-execution-monitoring: backlog
   11-8-3-enforcing-phase-activation-validation: backlog
   epic-11-8-retrospective: optional
