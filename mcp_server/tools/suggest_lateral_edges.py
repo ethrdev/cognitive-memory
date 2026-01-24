@@ -19,6 +19,7 @@ from typing import Any
 from openai import APIConnectionError, OpenAI, RateLimitError
 
 from mcp_server.db.graph import get_node_by_name, query_neighbors
+from mcp_server.db.connection import get_connection_with_project_context
 from mcp_server.middleware.context import get_current_project
 from mcp_server.utils.response import add_response_metadata
 
@@ -123,7 +124,7 @@ async def handle_suggest_lateral_edges(arguments: dict[str, Any]) -> dict[str, A
 
         # 3. Perform semantic search for related nodes
         # We use hybrid_search via direct DB query for graph nodes only
-        from mcp_server.db.connection import get_connection
+        # Story 11.6.2: Use project-scoped connection for RLS filtering
 
         # Get embedding for the node name
         query_embedding = await _get_embedding(node_name)
@@ -135,16 +136,19 @@ async def handle_suggest_lateral_edges(arguments: dict[str, Any]) -> dict[str, A
                 "tool": "suggest_lateral_edges",
             }, project_id)
 
+        # Story 11.6.2: Use project-scoped connection for RLS filtering
         # Search for semantically similar L2 insights and check if they have graph connections
-        async with get_connection() as conn:
+        async with get_connection_with_project_context(read_only=True) as conn:
             cursor = conn.cursor()
 
             # First, search L2 insights for semantic matches
+            # Note: RLS policy filters by project_id at database level (defense in depth)
             cursor.execute(
                 """
                 SELECT
                     l2.id,
                     l2.content,
+                    l2.project_id,
                     1 - (l2.embedding <=> %s::vector) as similarity
                 FROM l2_insights l2
                 WHERE l2.embedding IS NOT NULL
@@ -156,6 +160,7 @@ async def handle_suggest_lateral_edges(arguments: dict[str, Any]) -> dict[str, A
             l2_results = cursor.fetchall()
 
             # Also search graph nodes directly by name similarity (keyword-based)
+            # Note: RLS policy filters by project_id at database level (defense in depth)
             cursor.execute(
                 """
                 SELECT
@@ -163,6 +168,7 @@ async def handle_suggest_lateral_edges(arguments: dict[str, Any]) -> dict[str, A
                     n.name,
                     n.label,
                     n.properties,
+                    n.project_id,
                     ts_rank(to_tsvector('german', n.name), plainto_tsquery('german', %s)) as rank
                 FROM nodes n
                 WHERE to_tsvector('german', n.name) @@ plainto_tsquery('german', %s)
@@ -197,8 +203,9 @@ async def handle_suggest_lateral_edges(arguments: dict[str, Any]) -> dict[str, A
             content = row["content"]
             similarity = float(row["similarity"])
 
+            # Story 11.6.2: Use project-scoped connection for RLS filtering
             # Search for nodes mentioned in the L2 content
-            async with get_connection() as conn:
+            async with get_connection_with_project_context(read_only=True) as conn:
                 cursor = conn.cursor()
                 # Find nodes whose names appear in this insight's content
                 cursor.execute(
