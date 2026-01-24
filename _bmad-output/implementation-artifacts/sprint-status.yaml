@@ -87,7 +87,7 @@ development_status:
 
   # Epic 11.6: Core Read Operations
   epic-11-6: in-progress
-  11-6-1-hybrid-search-project-aware: review
+  11-6-1-hybrid-search-project-aware: in-progress
   11-6-2-graph-query-operations: backlog
   11-6-3-insight-read-operations: backlog
   epic-11-6-retrospective: optional
