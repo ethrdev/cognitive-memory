@@ -142,16 +142,22 @@ async def configure_pgvector_iterative_scans(conn: connection) -> None:
     Reference:
         https://github.com/pgvector/pgvector#iterative-scan
     """
+    logger = logging.getLogger(__name__)
     try:
-        # Enable iterative scan with relaxed ordering
-        await conn.execute("SET hnsw.iterative_scan = 'relaxed_order'")
-        # Set maximum tuples to scan (prevents runaway queries)
-        await conn.execute("SET hnsw.max_scan_tuples = 20000")
-        logging.getLogger(__name__).debug(
-            "pgvector iterative scans configured: relaxed_order, max_scan_tuples=20000"
-        )
+        # Use cursor for proper psycopg2 connection handling
+        cursor = conn.cursor()
+        try:
+            # Enable iterative scan with relaxed ordering
+            cursor.execute("SET hnsw.iterative_scan = 'relaxed_order'")
+            # Set maximum tuples to scan (prevents runaway queries)
+            cursor.execute("SET hnsw.max_scan_tuples = 20000")
+            logger.debug(
+                "pgvector iterative scans configured: relaxed_order, max_scan_tuples=20000"
+            )
+        finally:
+            cursor.close()
     except Exception as e:
-        logging.getLogger(__name__).warning(
+        logger.warning(
             f"Failed to configure pgvector iterative scans (pgvector may not be 0.8.0+): {e}"
         )
         # Non-fatal: continue without iterative scan optimization
@@ -170,21 +176,25 @@ def configure_pgvector_iterative_scans_sync(conn: connection) -> None:
     Reference:
         https://github.com/pgvector/pgvector#iterative-scan
     """
+    logger = logging.getLogger(__name__)
+    cursor = None
     try:
         cursor = conn.cursor()
         # Enable iterative scan with relaxed ordering
         cursor.execute("SET hnsw.iterative_scan = 'relaxed_order'")
         # Set maximum tuples to scan (prevents runaway queries)
         cursor.execute("SET hnsw.max_scan_tuples = 20000")
-        cursor.close()
-        logging.getLogger(__name__).debug(
+        logger.debug(
             "pgvector iterative scans configured: relaxed_order, max_scan_tuples=20000 (sync)"
         )
     except Exception as e:
-        logging.getLogger(__name__).warning(
+        logger.warning(
             f"Failed to configure pgvector iterative scans (pgvector may not be 0.8.0+): {e}"
         )
         # Non-fatal: continue without iterative scan optimization
+    finally:
+        if cursor is not None:
+            cursor.close()
 
 
 @asynccontextmanager

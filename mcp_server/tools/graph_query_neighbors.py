@@ -187,9 +187,9 @@ async def handle_graph_query_neighbors(arguments: dict[str, Any]) -> dict[str, A
             # Log cross-project violations if in shadow mode (non-blocking)
             try:
                 shadow_logger = ShadowAuditLogger()
-                # Get current project from session variable
-                from mcp_server.db.connection import get_connection
-                async with get_connection() as audit_conn:
+                # Story 11.6.2: Use project-scoped connection for shadow audit consistency
+                from mcp_server.db.connection import get_connection_with_project_context
+                async with get_connection_with_project_context(read_only=True) as audit_conn:
                     cur = audit_conn.cursor()
                     cur.execute("SELECT current_setting('app.current_project', TRUE) AS project_id")
                     row = cur.fetchone()

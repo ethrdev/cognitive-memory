@@ -13,6 +13,7 @@ Usage:
     pytest tests/performance/test_hybrid_search_rls_overhead.py -v
 """
 
+import json
 import time
 import pytest
 from psycopg2.extensions import connection
@@ -38,9 +39,9 @@ class TestHybridSearchRLSOverhead:
 
             # Create test projects
             cur.execute("""
-                INSERT INTO projects (id, access_level)
-                VALUES ('perf_test_aa', 'shared'), ('perf_test_io', 'super')
-                ON CONFLICT (id) DO UPDATE SET access_level = EXCLUDED.access_level
+                INSERT INTO project_registry (project_id, name, access_level)
+                VALUES ('perf_test_aa', 'Performance Test AA', 'shared'), ('perf_test_io', 'Performance Test IO', 'super')
+                ON CONFLICT (project_id) DO UPDATE SET access_level = EXCLUDED.access_level
             """)
 
             # Set RLS to enforcing mode for performance testing
@@ -59,34 +60,28 @@ class TestHybridSearchRLSOverhead:
                 # Insert insight for aa project
                 cur.execute("""
                     INSERT INTO l2_insights (
-                        summary, content, importance, memory_strength,
-                        embedding, sector, project_id
+                        content, source_ids, embedding, metadata, project_id
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s)
                 """, (
-                    f"Test insight aa-{i}",
                     f"Test content for aa-{i}",
-                    0.5,
-                    0.5,
+                    [],
                     embedding,
-                    "semantic",
+                    json.dumps({"sector": "semantic"}),
                     "perf_test_aa"
                 ))
 
                 # Insert insight for io project
                 cur.execute("""
                     INSERT INTO l2_insights (
-                        summary, content, importance, memory_strength,
-                        embedding, sector, project_id
+                        content, source_ids, embedding, metadata, project_id
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s)
                 """, (
-                    f"Test insight io-{i}",
                     f"Test content for io-{i}",
-                    0.5,
-                    0.5,
+                    [],
                     embedding,
-                    "semantic",
+                    json.dumps({"sector": "semantic"}),
                     "perf_test_io"
                 ))
 
@@ -118,7 +113,7 @@ class TestHybridSearchRLSOverhead:
             cur.execute("DELETE FROM l2_insights WHERE project_id IN ('perf_test_aa', 'perf_test_io')")
             cur.execute("DELETE FROM nodes WHERE project_id IN ('perf_test_aa', 'perf_test_io')")
             cur.execute("DELETE FROM rls_migration_status WHERE project_id IN ('perf_test_aa', 'perf_test_io')")
-            cur.execute("DELETE FROM projects WHERE id IN ('perf_test_aa', 'perf_test_io')")
+            cur.execute("DELETE FROM project_registry WHERE project_id IN ('perf_test_aa', 'perf_test_io')")
             conn.commit()
 
     def test_rls_overhead_less_than_10ms(self, conn: connection):
@@ -135,10 +130,10 @@ class TestHybridSearchRLSOverhead:
             # Measure RLS query time
             start_time = time.perf_counter()
             cur.execute("""
-                SELECT summary, project_id
+                SELECT content, project_id
                 FROM l2_insights
                 WHERE project_id = 'perf_test_aa'
-                ORDER BY embedding <=> '[0]'::vector
+                ORDER BY embedding <=> array_fill(0.0::float, ARRAY[1536])::vector
                 LIMIT 5
             """)
             rls_results = cur.fetchall()
@@ -151,10 +146,10 @@ class TestHybridSearchRLSOverhead:
             cur.execute("SET LOCAL session_replication_role = 'replica'")
             start_time = time.perf_counter()
             cur.execute("""
-                SELECT summary, project_id
+                SELECT content, project_id
                 FROM l2_insights
                 WHERE project_id = 'perf_test_aa'
-                ORDER BY embedding <=> '[0]'::vector
+                ORDER BY embedding <=> array_fill(0.0::float, ARRAY[1536])::vector
                 LIMIT 5
             """)
             baseline_results = cur.fetchall()
@@ -188,10 +183,10 @@ class TestHybridSearchRLSOverhead:
             # Run EXPLAIN ANALYZE on vector similarity search
             cur.execute("""
                 EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
-                SELECT summary, project_id
+                SELECT content, project_id
                 FROM l2_insights
                 WHERE project_id = 'perf_test_aa'
-                ORDER BY embedding <=> '[0]'::vector
+                ORDER BY embedding <=> array_fill(0.0::float, ARRAY[1536])::vector
                 LIMIT 5
             """)
             explain_output = cur.fetchall()
@@ -219,25 +214,34 @@ class TestHybridSearchRLSOverhead:
         Story 11.6.1: hnsw.iterative_scan = 'relaxed_order'
                       hnsw.max_scan_tuples = 20000
         """
+        # First, configure pgvector settings as the connection wrapper would do
+        from mcp_server.db.connection import configure_pgvector_iterative_scans_sync
+        configure_pgvector_iterative_scans_sync(conn)
+
         with conn.cursor() as cur:
             # Check hnsw.iterative_scan setting
             cur.execute("SHOW hnsw.iterative_scan")
             iterative_scan_result = cur.fetchone()
 
-            # The setting should be configured at connection level
-            # It may not show in SHOW if not explicitly set, but we can verify
-            # it doesn't error (pgvector 0.8.0+ is installed)
+            # Verify the setting is configured correctly
             assert iterative_scan_result is not None, "Failed to query hnsw.iterative_scan setting"
+            # The result is a tuple: (value,)
+            actual_value = iterative_scan_result[0] if iterative_scan_result else None
+            assert actual_value == "relaxed_order", (
+                f"Expected hnsw.iterative_scan = 'relaxed_order', got '{actual_value}'. "
+                f"Story 11.6.1 requires pgvector 0.8.0+ iterative scan configuration."
+            )
 
             # Check hnsw.max_scan_tuples setting
             cur.execute("SHOW hnsw.max_scan_tuples")
             max_scan_result = cur.fetchone()
 
             assert max_scan_result is not None, "Failed to query hnsw.max_scan_tuples setting"
-
-            # Note: These settings may not persist across connections,
-            # but the configure_pgvector_iterative_scans() function should
-            # set them when acquiring a connection with project context
+            actual_max_scan = max_scan_result[0] if max_scan_result else None
+            assert actual_max_scan == "20000", (
+                f"Expected hnsw.max_scan_tuples = 20000, got '{actual_max_scan}'. "
+                f"Story 11.6.1 requires pgvector 0.8.0+ iterative scan configuration."
+            )
 
 
 @pytest.mark.performance
@@ -260,9 +264,9 @@ class TestHybridSearchRLSIndexUsage:
 
             # Create test project
             cur.execute("""
-                INSERT INTO projects (id, access_level)
-                VALUES ('idx_test', 'isolated')
-                ON CONFLICT (id) DO UPDATE SET access_level = EXCLUDED.access_level
+                INSERT INTO project_registry (project_id, name, access_level)
+                VALUES ('idx_test', 'Index Test', 'isolated')
+                ON CONFLICT (project_id) DO UPDATE SET access_level = EXCLUDED.access_level
             """)
 
             # Set RLS to enforcing mode
@@ -277,17 +281,14 @@ class TestHybridSearchRLSIndexUsage:
                 embedding = [0.0] * 1536
                 cur.execute("""
                     INSERT INTO l2_insights (
-                        summary, content, importance, memory_strength,
-                        embedding, sector, project_id
+                        content, source_ids, embedding, metadata, project_id
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s)
                 """, (
-                    f"Test insight {i}",
                     f"Test content {i}",
-                    0.5,
-                    0.5,
+                    [],
                     embedding,
-                    "semantic",
+                    json.dumps({"sector": "semantic"}),
                     "idx_test"
                 ))
 
@@ -307,7 +308,7 @@ class TestHybridSearchRLSIndexUsage:
             cur.execute("DELETE FROM l2_insights WHERE project_id = 'idx_test'")
             cur.execute("DELETE FROM nodes WHERE project_id = 'idx_test'")
             cur.execute("DELETE FROM rls_migration_status WHERE project_id = 'idx_test'")
-            cur.execute("DELETE FROM projects WHERE id = 'idx_test'")
+            cur.execute("DELETE FROM project_registry WHERE project_id = 'idx_test'")
             conn.commit()
 
     def test_composite_index_used_for_project_filter(self, conn: connection):
@@ -323,10 +324,10 @@ class TestHybridSearchRLSIndexUsage:
             # Run EXPLAIN ANALYZE
             cur.execute("""
                 EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
-                SELECT summary, project_id
+                SELECT content, project_id
                 FROM l2_insights
                 WHERE project_id = 'idx_test'
-                ORDER BY embedding <=> '[0]'::vector
+                ORDER BY embedding <=> array_fill(0.0::float, ARRAY[1536])::vector
                 LIMIT 5
             """)
             explain_output = cur.fetchall()
