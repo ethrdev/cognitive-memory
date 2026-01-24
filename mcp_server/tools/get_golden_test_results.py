@@ -25,7 +25,10 @@ import yaml
 from openai import OpenAI
 from pgvector.psycopg2 import register_vector
 
-from mcp_server.db.connection import get_connection_sync
+from mcp_server.db.connection import (
+    get_connection_sync,
+    get_connection_with_project_context_sync,
+)
 from mcp_server.middleware.context import get_current_project
 from mcp_server.utils.response import add_response_metadata
 
@@ -70,12 +73,23 @@ def load_config() -> dict[str, Any]:
 # =============================================================================
 
 
-def execute_golden_test() -> dict[str, Any]:
+def execute_golden_test(project_id: str | None = None) -> dict[str, Any]:
     """
     Execute Golden Test Set and calculate Precision@5 with drift detection.
 
     This is the CORE function - callable directly from cron jobs or Python scripts.
     Does NOT require MCP protocol overhead.
+
+    Story 11.7.3: Uses project-scoped connection for RLS filtering.
+    Each project calculates P@5 against its own golden test set.
+
+    Backward Compatibility:
+        The project_id parameter defaults to None, making this change backward compatible.
+        Existing cron jobs and scripts will continue to work, automatically using the current
+        project context from get_current_project().
+
+    Args:
+        project_id: Optional project ID (defaults to current project from context)
 
     Returns:
         Dict with:
@@ -88,12 +102,17 @@ def execute_golden_test() -> dict[str, Any]:
         - drop_percentage: float (0.0-1.0, relative drop from baseline)
         - avg_retrieval_time: float (milliseconds)
         - embedding_model_version: str | None
+        - project_id: str (project that executed this test)
 
     Raises:
         RuntimeError: If golden_test_set table is empty or API failures
     """
+    # Story 11.7.3: Get project context if not provided
+    if project_id is None:
+        project_id = get_current_project()
+
     start_time = time.time()
-    logger.info("Starting Golden Test Set execution...")
+    logger.info(f"Starting Golden Test Set execution for project {project_id}...")
 
     # Load configuration
     config = load_config()
@@ -115,24 +134,25 @@ def execute_golden_test() -> dict[str, Any]:
     openai_client = OpenAI(api_key=api_key)
     embedding_model_version = None  # Will extract from API response headers
 
-    # Load all queries from golden_test_set
-    with get_connection_sync() as conn:
+    # Story 11.7.3: Use project-scoped connection for RLS filtering
+    # RLS automatically filters golden_test_set by project_id
+    with get_connection_with_project_context_sync(read_only=True) as conn:
         cursor = conn.cursor()
 
-        # Check if golden_test_set has queries
+        # Check if golden_test_set has queries for this project
         cursor.execute("SELECT COUNT(*) FROM golden_test_set")
         count_result = cursor.fetchone()
         query_count = int(count_result[0])
 
         if query_count == 0:
             raise RuntimeError(
-                "golden_test_set table is empty! Cannot execute Golden Test. "
-                "Run Streamlit UI to label queries first."
+                f"golden_test_set table is empty for project {project_id}! "
+                "Cannot execute Golden Test. Run Streamlit UI to label queries first."
             )
 
-        logger.info(f"Found {query_count} queries in golden_test_set")
+        logger.info(f"Found {query_count} queries in golden_test_set for project {project_id}")
 
-        # Load all queries with expected_docs
+        # Load all queries with expected_docs (RLS filters by project_id)
         cursor.execute(
             """
             SELECT id, query, expected_docs
@@ -174,13 +194,14 @@ def execute_golden_test() -> dict[str, Any]:
 
         # Step 2: Call hybrid_search via internal function (not MCP tool)
         # We'll implement inline semantic + keyword search with RRF fusion
+        # Story 11.7.3: Use project-scoped connection for RLS filtering on l2_insights
         search_start = time.time()
 
-        with get_connection_sync() as conn:
+        with get_connection_with_project_context_sync(read_only=True) as conn:
             register_vector(conn)
             cursor = conn.cursor()
 
-            # Semantic search
+            # Semantic search (RLS filters l2_insights by project_id via Migration 037)
             cursor.execute(
                 """
                 SELECT id
@@ -192,7 +213,7 @@ def execute_golden_test() -> dict[str, Any]:
             )
             semantic_ids = [row[0] for row in cursor.fetchall()]
 
-            # Keyword search
+            # Keyword search (RLS filters l2_insights by project_id via Migration 037)
             cursor.execute(
                 """
                 SELECT id
@@ -247,12 +268,14 @@ def execute_golden_test() -> dict[str, Any]:
     )
 
     # Step 5: Drift Detection - Calculate 7-day rolling average baseline
+    # Story 11.7.3: Use project-scoped connection for RLS filtering on model_drift_log
     today = date.today()
 
-    with get_connection_sync() as conn:
+    with get_connection_with_project_context_sync(read_only=True) as conn:
         cursor = conn.cursor()
 
-        # Query last 7 days of data (excluding today)
+        # Query last 7 days of data for this project (excluding today)
+        # RLS automatically filters by project_id
         cursor.execute(
             """
             SELECT AVG(precision_at_5) as baseline
@@ -288,15 +311,17 @@ def execute_golden_test() -> dict[str, Any]:
             )
 
     # Step 6: Store metrics in model_drift_log (UPSERT)
-    with get_connection_sync() as conn:
+    # Story 11.7.3: Use project-scoped connection and include project_id in UPSERT
+    # Note: ON CONFLICT now uses composite key (date, project_id) instead of just (date)
+    with get_connection_with_project_context_sync() as conn:
         cursor = conn.cursor()
 
         cursor.execute(
             """
             INSERT INTO model_drift_log
-            (date, precision_at_5, num_queries, avg_retrieval_time, embedding_model_version, drift_detected, baseline_p5)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (date) DO UPDATE SET
+            (date, precision_at_5, num_queries, avg_retrieval_time, embedding_model_version, drift_detected, baseline_p5, project_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (date, project_id) DO UPDATE SET
                 precision_at_5 = EXCLUDED.precision_at_5,
                 num_queries = EXCLUDED.num_queries,
                 avg_retrieval_time = EXCLUDED.avg_retrieval_time,
@@ -312,11 +337,12 @@ def execute_golden_test() -> dict[str, Any]:
                 embedding_model_version,
                 drift_detected,
                 baseline_p5,
+                project_id,  # Story 11.7.3: Store results per project
             ),
         )
 
         conn.commit()
-        logger.info(f"Stored results in model_drift_log for date {today}")
+        logger.info(f"Stored results in model_drift_log for date {today}, project {project_id}")
 
     # Step 7: Return response
     total_time = time.time() - start_time
@@ -332,11 +358,12 @@ def execute_golden_test() -> dict[str, Any]:
         "avg_retrieval_time": avg_retrieval_time,
         "embedding_model_version": embedding_model_version,
         "total_execution_time": total_time,
+        "project_id": project_id,  # Story 11.7.3: Include project_id in response
         "status": "success",
     }
 
     logger.info(
-        f"Golden Test complete in {total_time:.2f}s: P@5={macro_avg_precision:.4f}, drift={drift_detected}"
+        f"Golden Test complete in {total_time:.2f}s for project {project_id}: P@5={macro_avg_precision:.4f}, drift={drift_detected}"
     )
 
     return result
@@ -354,6 +381,8 @@ async def handle_get_golden_test_results(arguments: dict[str, Any]) -> dict[str,
     This function is called via MCP protocol from Claude Code.
     It delegates to execute_golden_test() for actual implementation.
 
+    Story 11.7.3: Pass project_id from middleware context to execute_golden_test()
+
     Args:
         arguments: Empty dict (no parameters required)
 
@@ -366,8 +395,8 @@ async def handle_get_golden_test_results(arguments: dict[str, Any]) -> dict[str,
         # Story 11.4.3: Get project_id from middleware context
         project_id = get_current_project()
 
-        # Execute Golden Test (synchronous function)
-        result = execute_golden_test()
+        # Story 11.7.3: Execute Golden Test with project_id (synchronous function)
+        result = execute_golden_test(project_id=project_id)
         return add_response_metadata(result, project_id)
 
     except RuntimeError as e:

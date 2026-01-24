@@ -341,7 +341,7 @@ async def get_node_by_name(name: str) -> dict[str, Any] | None:
 
             cursor.execute(
                 """
-                SELECT id, label, name, properties, vector_id, created_at
+                SELECT id, label, name, properties, vector_id, created_at, project_id
                 FROM nodes
                 WHERE name = %s
                 LIMIT 1;
@@ -358,6 +358,7 @@ async def get_node_by_name(name: str) -> dict[str, Any] | None:
                     "properties": result["properties"],
                     "vector_id": result["vector_id"],
                     "created_at": result["created_at"].isoformat(),
+                    "project_id": result["project_id"],  # Story 11.7.3: Include project_id in response
                 }
 
             return None
@@ -706,7 +707,7 @@ async def get_edge_by_names(
             cursor.execute(
                 """
                 SELECT e.id, e.source_id, e.target_id, e.relation, e.weight,
-                       e.properties, e.memory_sector, e.created_at
+                       e.properties, e.memory_sector, e.created_at, e.project_id
                 FROM edges e
                 JOIN nodes ns ON e.source_id = ns.id
                 JOIN nodes nt ON e.target_id = nt.id
@@ -732,6 +733,7 @@ async def get_edge_by_names(
                     "properties": result["properties"],
                     "memory_sector": result["memory_sector"],  # Story 8-5: FR26
                     "created_at": result["created_at"].isoformat(),
+                    "project_id": result["project_id"],  # Story 11.7.3: Include project_id in response
                 }
 
             return None
