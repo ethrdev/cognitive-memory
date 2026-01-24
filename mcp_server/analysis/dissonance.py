@@ -444,14 +444,24 @@ class DissonanceEngine:
 
     async def create_smf_proposal(self, dissonance: DissonanceResult, edge_a: dict, edge_b: dict) -> None:
         """
-        Erstellt SMF Proposal für erkannte Dissonanzen (Story 7.9).
+        Create SMF proposal for dissonance resolution.
 
-        This integrates Self-Modification Framework with dissonance detection.
+        Story 11.5.4: Updated to propagate project context to SMF proposals.
+
+        Args:
+            dissonance: The detected dissonance
+            edge_a: First edge involved in dissonance
+            edge_b: Second edge involved in dissonance
         """
+        from mcp_server.middleware.context import get_current_project
+
         if dissonance.dissonance_type == DissonanceType.NONE:
             return
 
         try:
+            # Get project context
+            project_id = get_current_project()
+
             # Prüfe ob konstitutive Edges betroffen sind
             edge_a_props = edge_a.get("properties", {})
             edge_b_props = edge_b.get("properties", {})
@@ -534,16 +544,17 @@ class DissonanceEngine:
                 )
                 return
 
-            # Erstelle Proposal in Datenbank
+            # Create SMF proposal with project context
             proposal_id = create_smf_proposal(
                 trigger_type=TriggerType.DISSONANCE,
                 proposed_action=proposed_action,
                 affected_edges=[edge_a["id"], edge_b["id"]],
                 reasoning=reasoning_data["full_reasoning"],
-                approval_level=approval_level
+                approval_level=approval_level,
+                project_id=project_id  # NEW: Pass project context
             )
 
-            logger.info(f"Created SMF proposal {proposal_id} for {dissonance.dissonance_type.value} dissonance")
+            logger.info(f"Created SMF proposal {proposal_id} for {dissonance.dissonance_type.value} dissonance in project {project_id}")
 
         except Exception as e:
             logger.error(f"Failed to create SMF proposal: {e}")

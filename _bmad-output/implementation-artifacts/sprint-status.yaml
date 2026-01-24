@@ -81,7 +81,7 @@ development_status:
   11-5-1-graph-write-operations: done
   11-5-2-l2-insight-write-operations: done
   11-5-3-memory-write-operations: done
-  11-5-4-smf-dissonance-write-operations: backlog
+  11-5-4-smf-dissonance-write-operations: done
   epic-11-5-retrospective: optional
 
   # Epic 11.6: Core Read Operations

@@ -371,14 +371,32 @@ def create_smf_proposal(
     affected_edges: List[str],
     reasoning: str,
     approval_level: ApprovalLevel = ApprovalLevel.IO,
-    original_state: Optional[dict[str, Any]] = None
+    original_state: Optional[dict[str, Any]] = None,
+    project_id: Optional[str] = None
 ) -> int:
     """
     Erstellt einen SMF Proposal in der Datenbank.
 
+    Story 11.5.4: Added project_id parameter for namespace isolation.
+
+    Args:
+        trigger_type: Type of trigger (DISSONANCE, SESSION_END, MANUAL, PROACTIVE)
+        proposed_action: Action to be taken
+        affected_edges: List of affected edge IDs
+        reasoning: Neutral reasoning for the proposal
+        approval_level: Required approval level (IO or bilateral)
+        original_state: Optional snapshot for undo
+        project_id: Project ID for scoping (NEW in Story 11.5.4)
+
     Returns:
         proposal_id
     """
+    from mcp_server.middleware.context import get_current_project
+
+    # Get project context
+    if project_id is None:
+        project_id = get_current_project()
+
     proposal_id = str(uuid.uuid4())
     proposal_db_id = None
 
@@ -388,11 +406,12 @@ def create_smf_proposal(
         # Cast affected_edges to UUID[] - PostgreSQL requires explicit type cast
         cursor.execute("""
             INSERT INTO smf_proposals (
-                trigger_type, proposed_action, affected_edges, reasoning,
+                project_id, trigger_type, proposed_action, affected_edges, reasoning,
                 approval_level, status, original_state
-            ) VALUES (%s, %s, %s::uuid[], %s, %s, %s, %s)
-            RETURNING id
+            ) VALUES (%s, %s, %s, %s::uuid[], %s, %s, %s, %s)
+            RETURNING id, project_id
         """, (
+            project_id,
             trigger_type.value,
             json.dumps(proposed_action),
             affected_edges,
@@ -418,12 +437,17 @@ def create_smf_proposal(
             actor="system"
         )
 
-    logger.info(f"Created SMF proposal {proposal_db_id}: {trigger_type.value}")
+    logger.info(f"Created SMF proposal {proposal_db_id} for project {project_id}: {trigger_type.value}")
     return proposal_db_id
 
 
 def get_proposal(proposal_id: int) -> Optional[dict[str, Any]]:
-    """Lädt einen SMF Proposal aus der Datenbank."""
+    """
+    Lädt einen SMF Proposal aus der Datenbank.
+
+    Note: Row-Level Security (RLS) policies automatically filter proposals by project.
+    Only proposals from the current project context are accessible.
+    """
     with get_connection_sync() as conn:
         cursor = conn.cursor()
 
@@ -448,6 +472,9 @@ def get_pending_proposals(include_expired: bool = False) -> List[dict[str, Any]]
     Args:
         include_expired: If False (default), excludes proposals older than
                         APPROVAL_TIMEOUT_HOURS
+
+    Note: Row-Level Security (RLS) policies automatically filter proposals by project.
+    Only proposals from the current project context are returned.
     """
     proposals = []
 
@@ -503,9 +530,13 @@ def expire_old_proposals() -> int:
     Returns:
         Number of proposals expired
     """
-    count = 0
+    from mcp_server.db.connection import get_connection_with_project_context_sync
+    from mcp_server.middleware.context import get_current_project
 
-    with get_connection_sync() as conn:
+    count = 0
+    project_id = get_current_project()
+
+    with get_connection_with_project_context_sync(project_id) as conn:
         cursor = conn.cursor()
 
         timeout_threshold = datetime.now(timezone.utc) - timedelta(hours=APPROVAL_TIMEOUT_HOURS)
@@ -542,13 +573,17 @@ async def approve_proposal(
 
     Bei bilateral approval_level müssen BEIDE zustimmen.
     """
+    from mcp_server.db.connection import get_connection_with_project_context
+    from mcp_server.middleware.context import get_current_project
+
     proposal = get_proposal(proposal_id)
     if not proposal or proposal["status"] != "PENDING":
         raise ValueError(f"Proposal {proposal_id} not found or not PENDING")
 
     fully_approved = False
+    project_id = get_current_project()
 
-    async with get_connection() as conn:
+    async with get_connection_with_project_context(project_id) as conn:
         cursor = conn.cursor()
 
         # Update approval tracking
@@ -629,13 +664,17 @@ def reject_proposal(proposal_id: int, reason: str, actor: str) -> dict[str, Any]
     """
     Lehnt einen SMF-Vorschlag ab.
     """
+    from mcp_server.db.connection import get_connection_with_project_context_sync
+    from mcp_server.middleware.context import get_current_project
+
     proposal = get_proposal(proposal_id)
     if not proposal or proposal["status"] != "PENDING":
         raise ValueError(f"Proposal {proposal_id} not found or not PENDING")
 
     resolved_at = datetime.now(timezone.utc).isoformat()
+    project_id = get_current_project()
 
-    with get_connection_sync() as conn:
+    with get_connection_with_project_context_sync(project_id) as conn:
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -676,6 +715,9 @@ def undo_proposal(proposal_id: int, actor: str) -> dict[str, Any]:
     IMPORTANT: If the proposal affected constitutive edges, bilateral consent
     is required for the undo (Story 7.9, AC Zeile 651-653).
     """
+    from mcp_server.db.connection import get_connection_with_project_context_sync
+    from mcp_server.middleware.context import get_current_project
+
     proposal = get_proposal(proposal_id)
     if not proposal or proposal["status"] != "APPROVED":
         raise ValueError(f"Proposal {proposal_id} not found or not APPROVED")
@@ -699,13 +741,15 @@ def undo_proposal(proposal_id: int, actor: str) -> dict[str, Any]:
         except Exception:
             continue
 
+    project_id = get_current_project()
+
     if requires_bilateral:
         # Check if bilateral consent tracking exists for undo
         undo_io = proposal.get("undo_approved_by_io", False)
         undo_ethr = proposal.get("undo_approved_by_ethr", False)
 
         # Record this actor's consent
-        with get_connection_sync() as conn:
+        with get_connection_with_project_context_sync(project_id) as conn:
             cursor = conn.cursor()
 
             if actor == "I/O":
@@ -749,7 +793,7 @@ def undo_proposal(proposal_id: int, actor: str) -> dict[str, Any]:
 
     undone_at = datetime.now(timezone.utc).isoformat()
 
-    with get_connection_sync() as conn:
+    with get_connection_with_project_context_sync(project_id) as conn:
         cursor = conn.cursor()
 
         # Undo logic 1: Remove superseded flags from edges
