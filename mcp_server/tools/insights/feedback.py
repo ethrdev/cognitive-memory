@@ -44,7 +44,8 @@ async def handle_submit_insight_feedback(arguments: dict[str, Any]) -> dict[str,
     Raises:
         No exceptions - all errors return structured error responses (EP-5)
     """
-    from mcp_server.db.connection import get_connection
+    # Story 11.6.3: Use project-scoped connection for RLS filtering
+    from mcp_server.db.connection import get_connection_with_project_context
 
     logger = logging.getLogger(__name__)
 
@@ -112,8 +113,9 @@ async def handle_submit_insight_feedback(arguments: dict[str, Any]) -> dict[str,
         # ===== INSIGHT EXISTENCE CHECK (AC-8) =====
 
         # Check if insight exists and is not soft-deleted (EP-2)
+        # Story 11.6.3: Use project-scoped connection for RLS filtering
         # Use same pattern as update_insight and delete_insight
-        async with get_connection() as conn:
+        async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
 
             cursor.execute(

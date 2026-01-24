@@ -126,10 +126,10 @@ async def handle_get_insight_history(arguments: dict[str, Any]) -> dict[str, Any
                 ORDER BY version_id ASC
             """
 
-            # Import database connection
-            from mcp_server.db.connection import get_connection
+            # Story 11.6.3: Use project-scoped connection for RLS filtering
+            from mcp_server.db.connection import get_connection_with_project_context
 
-            async with get_connection() as conn:
+            async with get_connection_with_project_context(read_only=True) as conn:
                 cursor = conn.cursor()
                 cursor.execute(history_query, (insight_id,))
                 history_rows = cursor.fetchall()
