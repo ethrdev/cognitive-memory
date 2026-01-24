@@ -36,7 +36,10 @@ from pgvector.psycopg2 import register_vector
 from psycopg2.extensions import cursor as cursor_type
 from psycopg2.extras import DictRow
 
-from mcp_server.db.connection import get_connection
+from mcp_server.db.connection import (
+    get_connection,
+    get_connection_with_project_context,
+)
 from mcp_server.middleware.context import get_current_project
 from mcp_server.utils.response import add_response_metadata
 from mcp_server.tools.dual_judge import DualJudgeEvaluator
@@ -974,20 +977,16 @@ async def handle_store_raw_dialogue(arguments: dict[str, Any]) -> dict[str, Any]
     Store raw dialogue data to L0 memory.
 
     Story 11.4.3: Tool Handler Refactoring - Added project context usage and metadata
-
-    Args:
-        arguments: Tool arguments containing session_id, speaker, content, metadata
-
-    Returns:
-        Success response with id and timestamp, or error response
+    Story 11.5.3: Memory Write Operations - Use get_connection_with_project_context and add project_id
     """
 
     logger = logging.getLogger(__name__)
 
-    try:
-        # Story 11.4.3: Get project_id from middleware context
-        project_id = get_current_project()
+    # Story 11.4.3: Get project_id from middleware context
+    # Store early to use in error handling
+    project_id = get_current_project()
 
+    try:
         # Extract parameters
         session_id = arguments.get("session_id")
         speaker = arguments.get("speaker")
@@ -998,15 +997,17 @@ async def handle_store_raw_dialogue(arguments: dict[str, Any]) -> dict[str, Any]
         metadata_json = json.dumps(metadata) if metadata else None
 
         # Insert into database
-        async with get_connection() as conn:
+        # Story 11.5.3: Use get_connection_with_project_context for RLS context
+        async with get_connection_with_project_context() as conn:
             cursor: cursor_type = conn.cursor()
+            # Story 11.5.3: Explicitly include project_id in INSERT for namespace isolation
             cursor.execute(
                 """
-                INSERT INTO l0_raw (session_id, speaker, content, metadata)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO l0_raw (session_id, speaker, content, metadata, project_id)
+                VALUES (%s, %s, %s, %s, %s)
                 RETURNING id, timestamp;
                 """,
-                (session_id, speaker, content, metadata_json),
+                (session_id, speaker, content, metadata_json, project_id),
             )
             result = cursor.fetchone()
 
@@ -1033,14 +1034,14 @@ async def handle_store_raw_dialogue(arguments: dict[str, Any]) -> dict[str, Any]
             "error": "Database operation failed",
             "details": str(e),
             "tool": "store_raw_dialogue",
-        }, get_current_project())
+        }, project_id)
     except Exception as e:
         logger.error(f"Unexpected error in store_raw_dialogue: {e}")
         return add_response_metadata({
             "error": "Tool execution failed",
             "details": str(e),
             "tool": "store_raw_dialogue",
-        }, get_current_project())
+        }, project_id)
 
 
 async def handle_compress_to_l2_insight(arguments: dict[str, Any]) -> dict[str, Any]:
@@ -1467,15 +1468,21 @@ async def handle_hybrid_search(arguments: dict[str, Any]) -> dict[str, Any]:
 
 
 async def add_working_memory_item(
-    content: str, importance: float, conn: psycopg2.extensions.connection
+    content: str,
+    importance: float,
+    conn: psycopg2.extensions.connection,
+    project_id: str | None = None,
 ) -> int:
     """
     Add a new item to working memory with importance score and timestamp.
+
+    Story 11.5.3: Memory Write Operations - Added project_id parameter for namespace isolation
 
     Args:
         content: Content to store in working memory
         importance: Importance score (0.0-1.0)
         conn: PostgreSQL connection
+        project_id: Project ID for namespace isolation (uses current_project context if None)
 
     Returns:
         ID of the inserted item
@@ -1490,14 +1497,19 @@ async def add_working_memory_item(
     if not (0.0 <= importance <= 1.0):
         raise ValueError(f"Importance must be between 0.0 and 1.0, got {importance}")
 
-    # Insert item with automatic timestamp
+    # Use current project context if project_id not provided
+    if project_id is None:
+        project_id = get_current_project()
+
+    # Insert item with project_id and automatic timestamp
+    # Story 11.5.3: Explicitly include project_id in INSERT for namespace isolation
     cursor.execute(
         """
-        INSERT INTO working_memory (content, importance, last_accessed)
-        VALUES (%s, %s, NOW())
+        INSERT INTO working_memory (content, importance, last_accessed, project_id)
+        VALUES (%s, %s, NOW(), %s)
         RETURNING id;
         """,
-        (content, importance),
+        (content, importance, project_id),
     )
 
     result = cursor.fetchone()
@@ -1507,30 +1519,41 @@ async def add_working_memory_item(
     return int(result["id"])
 
 
-async def evict_lru_item(conn: psycopg2.extensions.connection) -> int | None:
+async def evict_lru_item(
+    conn: psycopg2.extensions.connection, project_id: str | None = None
+) -> int | None:
     """
     Find oldest non-critical item for LRU eviction.
+
+    Story 11.5.3: Memory Write Operations - Added project_id filter for namespace isolation
 
     Critical Items (importance >0.8) are NEVER evicted via LRU.
     If all items are critical, return None.
 
     Args:
         conn: PostgreSQL connection
+        project_id: Project ID for namespace isolation (uses current_project context if None)
 
     Returns:
         Item ID to evict, or None if no evictable items
     """
     cursor: cursor_type = conn.cursor()
 
-    # Find oldest non-critical item
+    # Use current project context if project_id not provided
+    if project_id is None:
+        project_id = get_current_project()
+
+    # Find oldest non-critical item in the current project
+    # Story 11.5.3: Eviction MUST be scoped to project to avoid cross-project data loss
     cursor.execute(
         """
         SELECT id, content, importance, last_accessed
         FROM working_memory
-        WHERE importance <= 0.8
+        WHERE importance <= 0.8 AND project_id = %s
         ORDER BY last_accessed ASC
         LIMIT 1;
-        """
+        """,
+        (project_id,),
     )
 
     result = cursor.fetchone()
@@ -1543,15 +1566,20 @@ async def evict_lru_item(conn: psycopg2.extensions.connection) -> int | None:
     return int(result["id"])
 
 
-async def force_evict_oldest_critical(conn: psycopg2.extensions.connection) -> int:
+async def force_evict_oldest_critical(
+    conn: psycopg2.extensions.connection, project_id: str | None = None
+) -> int:
     """
     Force eviction of oldest item when all items are critical.
+
+    Story 11.5.3: Memory Write Operations - Added project_id filter for namespace isolation
 
     Called when evict_lru_item() returns None (all items importance >0.8)
     but capacity is exceeded. Hard capacity limit overrides importance protection.
 
     Args:
         conn: PostgreSQL connection
+        project_id: Project ID for namespace isolation (uses current_project context if None)
 
     Returns:
         Item ID to force evict (oldest by last_accessed, ignoring importance)
@@ -1561,14 +1589,21 @@ async def force_evict_oldest_critical(conn: psycopg2.extensions.connection) -> i
     """
     cursor: cursor_type = conn.cursor()
 
-    # Find oldest item, IGNORING importance
+    # Use current project context if project_id not provided
+    if project_id is None:
+        project_id = get_current_project()
+
+    # Find oldest item in the current project, IGNORING importance
+    # Story 11.5.3: Eviction MUST be scoped to project to avoid cross-project data loss
     cursor.execute(
         """
         SELECT id
         FROM working_memory
+        WHERE project_id = %s
         ORDER BY last_accessed ASC
         LIMIT 1;
-        """
+        """,
+        (project_id,),
     )
 
     result = cursor.fetchone()
@@ -1580,15 +1615,18 @@ async def force_evict_oldest_critical(conn: psycopg2.extensions.connection) -> i
 
 
 async def archive_to_stale_memory(
-    item_id: int, reason: str, conn: psycopg2.extensions.connection
+    item_id: int, reason: str, conn: psycopg2.extensions.connection, project_id: str | None = None
 ) -> int:
     """
     Archive Working Memory item to Stale Memory before deletion.
+
+    Story 11.5.3: Memory Write Operations - Added project_id parameter for namespace isolation
 
     Args:
         item_id: Working Memory item ID
         reason: "LRU_EVICTION" or "MANUAL_ARCHIVE"
         conn: PostgreSQL connection
+        project_id: Project ID for namespace isolation (uses current_project context if None)
 
     Returns:
         Stale Memory archive ID
@@ -1598,28 +1636,36 @@ async def archive_to_stale_memory(
     """
     cursor: cursor_type = conn.cursor()
 
-    # Load item from working_memory
+    # Use current project context if project_id not provided
+    if project_id is None:
+        project_id = get_current_project()
+
+    # Load item from working_memory (scoped to project)
     cursor.execute(
-        "SELECT content, importance FROM working_memory WHERE id=%s;", (item_id,)
+        "SELECT content, importance FROM working_memory WHERE id=%s AND project_id=%s;",
+        (item_id, project_id)
     )
     item = cursor.fetchone()
 
     if not item:
-        raise ValueError(f"Working Memory item {item_id} not found")
+        raise ValueError(f"Working Memory item {item_id} not found in project {project_id}")
 
-    # Insert into stale_memory
+    # Insert into stale_memory with project_id
+    # Story 11.5.3: Explicitly include project_id in INSERT for namespace isolation
     cursor.execute(
         """
         INSERT INTO stale_memory
-        (original_content, importance, reason, archived_at)
-        VALUES (%s, %s, %s, NOW())
-        RETURNING id;
+        (project_id, original_content, importance, reason, archived_at)
+        VALUES (%s, %s, %s, %s, NOW())
+        RETURNING id, project_id;
         """,
-        (item["content"], item["importance"], reason),
+        (project_id, item["content"], item["importance"], reason),
     )
 
     archive_result = cursor.fetchone()
     archive_id = int(archive_result["id"])
+    logger = logging.getLogger(__name__)
+    logger.info(f"Archived to stale memory: id={archive_id}, project_id={project_id}, reason={reason}")
     return archive_id
 
 
@@ -1628,14 +1674,9 @@ async def handle_update_working_memory(arguments: dict[str, Any]) -> dict[str, A
     Add item to Working Memory with atomic eviction handling.
 
     Story 11.4.3: Tool Handler Refactoring - Added project context usage and metadata
-
-    Args:
-        arguments: Tool arguments containing content (string), importance (float, default 0.5)
-
-    Returns:
-        Success response with {added_id: int, evicted_id: Optional[int], archived_id: Optional[int]}
-        or error response
+    Story 11.5.3: Memory Write Operations - Use get_connection_with_project_context
     """
+
     logger = logging.getLogger(__name__)
 
     try:
@@ -1668,15 +1709,20 @@ async def handle_update_working_memory(arguments: dict[str, Any]) -> dict[str, A
             }, project_id)
 
         # ENTIRE operation in single transaction to prevent race conditions
-        async with get_connection() as conn:
+        # Story 11.5.3: Use get_connection_with_project_context for RLS context
+        async with get_connection_with_project_context() as conn:
             try:
                 cursor: cursor_type = conn.cursor()
 
-                # 1. Add item
-                added_id = await add_working_memory_item(content, importance, conn)
+                # 1. Add item with project_id
+                added_id = await add_working_memory_item(content, importance, conn, project_id)
 
-                # 2. Check capacity
-                cursor.execute("SELECT COUNT(*) as count FROM working_memory;")
+                # 2. Check capacity (scoped to current project)
+                # Story 11.5.3: Capacity check MUST include project_id filter
+                cursor.execute(
+                    "SELECT COUNT(*) as count FROM working_memory WHERE project_id = %s;",
+                    (project_id,)
+                )
                 count_result = cursor.fetchone()
                 count = int(count_result["count"])
                 # 3. Evict if needed (with fallback)
@@ -1684,18 +1730,20 @@ async def handle_update_working_memory(arguments: dict[str, Any]) -> dict[str, A
                 archived_id = None
 
                 if count > 10:
-                    evicted_id = await evict_lru_item(conn)
+                    # Pass project_id to ensure eviction is scoped correctly
+                    evicted_id = await evict_lru_item(conn, project_id)
 
                     # FALLBACK: All items critical → force evict oldest
                     if evicted_id is None:
-                        evicted_id = await force_evict_oldest_critical(conn)
+                        evicted_id = await force_evict_oldest_critical(conn, project_id)
 
                     # 4. Archive + Delete (within same transaction)
+                    # Story 11.5.3: Pass project_id to archive function for namespace isolation
                     archived_id = await archive_to_stale_memory(
-                        evicted_id, "LRU_EVICTION", conn
+                        evicted_id, "LRU_EVICTION", conn, project_id
                     )
                     cursor.execute(
-                        "DELETE FROM working_memory WHERE id=%s;", (evicted_id,)
+                        "DELETE FROM working_memory WHERE id=%s AND project_id=%s;", (evicted_id, project_id)
                     )
 
                 # SINGLE COMMIT for entire operation
@@ -1723,21 +1771,21 @@ async def handle_update_working_memory(arguments: dict[str, Any]) -> dict[str, A
             "error": "Validation failed",
             "details": str(e),
             "tool": "update_working_memory",
-        }, get_current_project())
+        }, project_id)
     except psycopg2.Error as e:
         logger.error(f"Database error in update_working_memory: {e}")
         return add_response_metadata({
             "error": "Database operation failed",
             "details": str(e),
             "tool": "update_working_memory",
-        }, get_current_project())
+        }, project_id)
     except Exception as e:
         logger.error(f"Unexpected error in update_working_memory: {e}")
         return add_response_metadata({
             "error": "Tool execution failed",
             "details": str(e),
             "tool": "update_working_memory",
-        }, get_current_project())
+        }, project_id)
 
 
 async def handle_delete_working_memory(arguments: dict[str, Any]) -> dict[str, Any]:
@@ -1745,15 +1793,9 @@ async def handle_delete_working_memory(arguments: dict[str, Any]) -> dict[str, A
     Delete item from Working Memory by ID (idempotent).
 
     Story 11.4.3: Tool Handler Refactoring - Added project context usage and metadata
-
-    Args:
-        arguments: Tool arguments containing 'id' (integer)
-
-    Returns:
-        {deleted_id: int, status: "success"} if entry was deleted,
-        {deleted_id: null, status: "not_found"} if entry did not exist.
-        Idempotent: goal (entry not present) is achieved in both cases.
+    Story 11.5.3: Memory Write Operations - Use get_connection_with_project_context
     """
+
     logger = logging.getLogger(__name__)
 
     try:
@@ -1786,19 +1828,24 @@ async def handle_delete_working_memory(arguments: dict[str, Any]) -> dict[str, A
             }, project_id)
 
         # Delete operation
-        async with get_connection() as conn:
+        # Story 11.5.3: Use get_connection_with_project_context for RLS context
+        async with get_connection_with_project_context() as conn:
             cursor: cursor_type = conn.cursor()
 
-            # Check if entry exists before delete
+            # Check if entry exists in current project before delete
+            # Story 11.5.3: Include project_id in WHERE clause for proper scoping
             cursor.execute(
-                "SELECT id FROM working_memory WHERE id = %s;", (item_id,)
+                "SELECT id FROM working_memory WHERE id = %s AND project_id = %s;",
+                (item_id, project_id)
             )
             exists = cursor.fetchone() is not None
 
             if exists:
                 # Delete the entry (hard delete, no archiving)
+                # Story 11.5.3: Include project_id in WHERE clause for proper scoping
                 cursor.execute(
-                    "DELETE FROM working_memory WHERE id = %s;", (item_id,)
+                    "DELETE FROM working_memory WHERE id = %s AND project_id = %s;",
+                    (item_id, project_id)
                 )
                 conn.commit()
                 logger.info(f"Deleted working memory entry: id={item_id}")
@@ -1831,21 +1878,28 @@ async def handle_delete_working_memory(arguments: dict[str, Any]) -> dict[str, A
 
 
 async def add_episode(
-    query: str, reward: float, reflection: str, conn: Any
+    query: str, reward: float, reflection: str, conn: Any, project_id: str | None = None
 ) -> dict[str, Any]:
     """
     Store episode in database with embedding.
+
+    Story 11.5.3: Memory Write Operations - Added project_id parameter for namespace isolation
 
     Args:
         query: User query that triggered the episode
         reward: Reward score (-1.0 to 1.0)
         reflection: Verbalized lesson learned
         conn: Database connection
+        project_id: Project ID for namespace isolation (uses current_project context if None)
 
     Returns:
         Dictionary with episode ID, embedding status, and episode data
     """
     logger = logging.getLogger(__name__)
+
+    # Use current project context if project_id not provided
+    if project_id is None:
+        project_id = get_current_project()
 
     # Initialize OpenAI client
     api_key = os.getenv("OPENAI_API_KEY")
@@ -1868,14 +1922,15 @@ async def add_episode(
 
     cursor = conn.cursor()
 
-    # Insert episode with embedding
+    # Insert episode with embedding and project_id
+    # Story 11.5.3: Explicitly include project_id in INSERT for namespace isolation
     cursor.execute(
         """
-        INSERT INTO episode_memory (query, reward, reflection, embedding, created_at)
-        VALUES (%s, %s, %s, %s, NOW())
+        INSERT INTO episode_memory (query, reward, reflection, embedding, created_at, project_id)
+        VALUES (%s, %s, %s, %s, NOW(), %s)
         RETURNING id, created_at;
         """,
-        (query, reward, reflection, embedding),
+        (query, reward, reflection, embedding, project_id),
     )
 
     result = cursor.fetchone()
@@ -1901,13 +1956,9 @@ async def handle_store_episode(arguments: dict[str, Any]) -> dict[str, Any]:
     Store episode memory with query, reward, and reflection.
 
     Story 11.4.3: Tool Handler Refactoring - Added project context usage and metadata
-
-    Args:
-        arguments: Tool arguments containing query, reward, reflection
-
-    Returns:
-        Success response with episode ID or error response
+    Story 11.5.3: Memory Write Operations - Use get_connection_with_project_context
     """
+
     logger = logging.getLogger(__name__)
     # Story 11.4.3: Get project_id from middleware context
     project_id = get_current_project()
@@ -1961,8 +2012,9 @@ async def handle_store_episode(arguments: dict[str, Any]) -> dict[str, Any]:
 
     # Store episode in database
     try:
-        async with get_connection() as conn:
-            result = await add_episode(query, reward, reflection, conn)
+        # Story 11.5.3: Use get_connection_with_project_context for RLS context
+        async with get_connection_with_project_context() as conn:
+            result = await add_episode(query, reward, reflection, conn, project_id)
             logger.info(f"Successfully stored episode with ID: {result['id']}")
             return add_response_metadata(result, project_id)
 
