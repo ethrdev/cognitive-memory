@@ -70,15 +70,15 @@ development_status:
   epic-11-3-retrospective: done
 
   # Epic 11.4: MCP Middleware
-  epic-11-4: in-progress
+  epic-11-4: done
   11-4-1-fastmcp-migration-middleware: done
   11-4-2-project-context-validation: done
   11-4-3-tool-handler-refactoring: done
-  epic-11-4-retrospective: optional
+  epic-11-4-retrospective: done
 
   # Epic 11.5: Write Operations
-  epic-11-5: backlog
-  11-5-1-graph-write-operations: backlog
+  epic-11-5: in-progress
+  11-5-1-graph-write-operations: done
   11-5-2-l2-insight-write-operations: backlog
   11-5-3-memory-write-operations: backlog
   11-5-4-smf-dissonance-write-operations: backlog

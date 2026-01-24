@@ -133,8 +133,10 @@ async def add_node(
     """
     Add a node to the graph with idempotent operation.
 
-    Uses INSERT ... ON CONFLICT (label, name) DO NOTHING RETURNING id
-    to ensure the same label+name combination returns the existing node.
+    Story 11.5.1: Added project_id scoping for namespace isolation.
+
+    Uses INSERT ... ON CONFLICT (project_id, name) DO UPDATE
+    to ensure nodes are scoped to projects.
 
     Args:
         label: Node type/category (e.g., "Project", "Technology", "Client")
@@ -148,66 +150,75 @@ async def add_node(
         - created: boolean (True if newly created, False if existing)
         - label: confirmed label from database
         - name: confirmed name from database
+        - project_id: project_id from context
     """
+    from mcp_server.middleware.context import get_current_project
+
     logger = logging.getLogger(__name__)
+    project_id = get_current_project()
 
     try:
         async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
 
-            # Attempt to insert new node with idempotent conflict resolution
-            # UNIQUE constraint is on (name) only - nodes are globally unique by name
-            # On conflict: update label and properties to latest values
+            # Story 11.5.1: Include project_id in INSERT and ON CONFLICT
             cursor.execute(
                 """
-                INSERT INTO nodes (label, name, properties, vector_id)
-                VALUES (%s, %s, %s::jsonb, %s)
-                ON CONFLICT (name) DO UPDATE SET
+                INSERT INTO nodes (project_id, label, name, properties, vector_id)
+                VALUES (%s, %s, %s, %s::jsonb, %s)
+                ON CONFLICT (project_id, name) DO UPDATE SET
                     label = EXCLUDED.label,
-                    properties = EXCLUDED.properties,
-                    vector_id = COALESCE(EXCLUDED.vector_id, nodes.vector_id)
-                RETURNING id, label, name, created_at,
+                    properties = nodes.properties || EXCLUDED.properties,
+                    vector_id = COALESCE(EXCLUDED.vector_id, nodes.vector_id),
+                    updated_at = NOW()
+                RETURNING id, label, name, project_id, created_at,
                     (xmax = 0) AS was_inserted;
                 """,
-                (label, name, properties, vector_id),
+                (project_id, label, name, properties, vector_id),
             )
 
             result = cursor.fetchone()
 
             if result:
                 node_id = str(result["id"])
-                created_label = result["label"]
                 created_name = result["name"]
-                # xmax = 0 means row was inserted, not updated
+                created_project_id = result["project_id"]
                 created = result["was_inserted"]
 
                 if created:
-                    logger.debug(f"Created new node: id={node_id}, label={created_label}, name={created_name}")
+                    logger.debug(
+                        f"Created new node: id={node_id}, project_id={created_project_id}, "
+                        f"label={label}, name={created_name}"
+                    )
                 else:
-                    logger.debug(f"Updated existing node: id={node_id}, label={created_label}, name={created_name}")
+                    logger.debug(
+                        f"Updated existing node: id={node_id}, project_id={created_project_id}, "
+                        f"label={label}, name={created_name}"
+                    )
 
             else:
                 # Fallback: fetch existing node (should not happen with RETURNING)
                 cursor.execute(
                     """
-                    SELECT id, label, name, created_at
+                    SELECT id, label, name, project_id, created_at
                     FROM nodes
-                    WHERE name = %s
+                    WHERE project_id = %s AND name = %s
                     LIMIT 1;
                     """,
-                    (name,),
+                    (project_id, name),
                 )
 
                 existing_result = cursor.fetchone()
                 if not existing_result:
-                    raise RuntimeError(f"Failed to find existing node after conflict: name={name}")
+                    raise RuntimeError(f"Failed to find existing node after conflict: project_id={project_id}, name={name}")
 
                 node_id = str(existing_result["id"])
                 created_label = existing_result["label"]
                 created_name = existing_result["name"]
+                created_project_id = existing_result["project_id"]
                 created = False
 
-                logger.debug(f"Found existing node: id={node_id}, label={created_label}, name={created_name}")
+                logger.debug(f"Found existing node: id={node_id}, project_id={created_project_id}, label={created_label}, name={created_name}")
 
             # Commit transaction
             conn.commit()
@@ -215,12 +226,13 @@ async def add_node(
             return {
                 "node_id": node_id,
                 "created": created,
-                "label": created_label,
+                "label": label,
                 "name": created_name,
+                "project_id": created_project_id,
             }
 
     except Exception as e:
-        logger.error(f"Failed to add node: label={label}, name={name}, error={e}")
+        logger.error(f"Failed to add node: project_id={project_id}, label={label}, name={name}, error={e}")
         raise
 
 
@@ -739,12 +751,14 @@ async def get_or_create_node(name: str, label: str = "Entity") -> dict[str, Any]
     Helper function that uses add_node internally for auto-upsert logic.
     Returns the node ID (either newly created or existing).
 
+    Story 11.5.1: Returns project_id in result for consistency.
+
     Args:
         name: Unique name identifier for the node
         label: Node type/category (defaults to "Entity")
 
     Returns:
-        Dict with node_id and created status
+        Dict with node_id, created status, and project_id
     """
     logger = logging.getLogger(__name__)
 
@@ -752,7 +766,8 @@ async def get_or_create_node(name: str, label: str = "Entity") -> dict[str, Any]
         result = await add_node(label=label, name=name, properties="{}", vector_id=None)
         return {
             "node_id": result["node_id"],
-            "created": result["created"]
+            "created": result["created"],
+            "project_id": result["project_id"]
         }
     except Exception as e:
         logger.error(f"Failed to get or create node: name={name}, label={label}, error={e}")
@@ -770,8 +785,10 @@ async def add_edge(
     """
     Add an edge between nodes with idempotent operation.
 
-    Uses INSERT ... ON CONFLICT (source_id, target_id, relation) DO UPDATE
-    to ensure the same source+target+relation combination updates existing edge.
+    Story 11.5.1: Added project_id scoping for namespace isolation.
+
+    Uses INSERT ... ON CONFLICT (project_id, source_id, target_id, relation) DO UPDATE
+    to ensure edges are scoped to projects.
 
     Args:
         source_id: UUID string of source node
@@ -790,10 +807,13 @@ async def add_edge(
         - relation: confirmed relation type
         - weight: confirmed weight
         - memory_sector: confirmed memory sector
+        - project_id: project_id from context
     """
+    from mcp_server.middleware.context import get_current_project
     import json
 
     logger = logging.getLogger(__name__)
+    project_id = get_current_project()
 
     # Parse properties to add entrenchment_level (Story 7.4, Task 5: AC #7, #8)
     try:
@@ -816,15 +836,12 @@ async def add_edge(
         async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
 
-            # Insert edge with idempotent conflict resolution
-            # Use xmax = 0 to detect if row was inserted vs updated
-            # On UPDATE: Also set last_engaged and modified_at (Decay fix 2026-01-07)
-            # Story 8.3: Add memory_sector for auto-classification
+            # Story 11.5.1: Include project_id in INSERT and ON CONFLICT
             cursor.execute(
                 """
-                INSERT INTO edges (source_id, target_id, relation, weight, properties, memory_sector)
-                VALUES (%s::uuid, %s::uuid, %s, %s, %s::jsonb, %s)
-                ON CONFLICT (source_id, target_id, relation)
+                INSERT INTO edges (project_id, source_id, target_id, relation, weight, properties, memory_sector)
+                VALUES (%s, %s::uuid, %s::uuid, %s, %s, %s::jsonb, %s)
+                ON CONFLICT (project_id, source_id, target_id, relation)
                 DO UPDATE SET
                     weight = EXCLUDED.weight,
                     properties = EXCLUDED.properties,
@@ -833,16 +850,17 @@ async def add_edge(
                     last_engaged = NOW(),
                     last_accessed = NOW(),
                     access_count = GREATEST(COALESCE(edges.access_count, 0), 0) + 1
-                RETURNING id, source_id, target_id, relation, weight, memory_sector, created_at,
+                RETURNING id, project_id, source_id, target_id, relation, weight, memory_sector, created_at,
                     (xmax = 0) AS was_inserted;
                 """,
-                (source_id, target_id, relation, weight, properties, memory_sector),
+                (project_id, source_id, target_id, relation, weight, properties, memory_sector),
             )
 
             result = cursor.fetchone()
 
             if result:
                 edge_id = str(result["id"])
+                created_project_id = result["project_id"]
                 created_source_id = str(result["source_id"])
                 created_target_id = str(result["target_id"])
                 created_relation = result["relation"]
@@ -851,25 +869,30 @@ async def add_edge(
                 # xmax = 0 means row was inserted, not updated
                 created = result["was_inserted"]
 
-                logger.debug(f"{'Created new' if created else 'Updated existing'} edge: id={edge_id}, source={created_source_id}, target={created_target_id}, relation={created_relation}")
+                logger.debug(
+                    f"{'Created new' if created else 'Updated existing'} edge: "
+                    f"id={edge_id}, project_id={created_project_id}, "
+                    f"source={created_source_id}, target={created_target_id}, relation={created_relation}"
+                )
 
             else:
                 # Edge already exists, fetch the existing one
                 cursor.execute(
                     """
-                    SELECT id, source_id, target_id, relation, weight, memory_sector, created_at
+                    SELECT id, project_id, source_id, target_id, relation, weight, memory_sector, created_at
                     FROM edges
-                    WHERE source_id = %s::uuid AND target_id = %s::uuid AND relation = %s
+                    WHERE project_id = %s AND source_id = %s::uuid AND target_id = %s::uuid AND relation = %s
                     LIMIT 1;
                     """,
-                    (source_id, target_id, relation),
+                    (project_id, source_id, target_id, relation),
                 )
 
                 existing_result = cursor.fetchone()
                 if not existing_result:
-                    raise RuntimeError(f"Failed to find existing edge after conflict: source={source_id}, target={target_id}, relation={relation}")
+                    raise RuntimeError(f"Failed to find existing edge after conflict: project_id={project_id}, source={source_id}, target={target_id}, relation={relation}")
 
                 edge_id = str(existing_result["id"])
+                created_project_id = existing_result["project_id"]
                 created_source_id = str(existing_result["source_id"])
                 created_target_id = str(existing_result["target_id"])
                 created_relation = existing_result["relation"]
@@ -877,7 +900,10 @@ async def add_edge(
                 created_memory_sector = existing_result["memory_sector"]
                 created = False
 
-                logger.debug(f"Found existing edge: id={edge_id}, source={created_source_id}, target={created_target_id}, relation={created_relation}")
+                logger.debug(
+                    f"Found existing edge: id={edge_id}, project_id={created_project_id}, "
+                    f"source={created_source_id}, target={created_target_id}, relation={created_relation}"
+                )
 
             # Commit transaction
             conn.commit()
@@ -890,10 +916,11 @@ async def add_edge(
                 "relation": created_relation,
                 "weight": created_weight,
                 "memory_sector": created_memory_sector,
+                "project_id": created_project_id,
             }
 
     except Exception as e:
-        logger.error(f"Failed to add edge: source={source_id}, target={target_id}, relation={relation}, error={e}")
+        logger.error(f"Failed to add edge: project_id={project_id}, source={source_id}, target={target_id}, relation={relation}, error={e}")
         raise
 
 
