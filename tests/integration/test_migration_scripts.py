@@ -242,6 +242,87 @@ class TestMigrationScripts:
         phase = await self._get_migration_phase(test_db, "test-migrate-1")
         assert phase == "pending", f"Expected 'pending' after rollback, got '{phase}'"
 
+    @pytest.mark.P0
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_migration_logs_to_audit_trail(
+        self, test_db: asyncpg.Connection, setup_test_projects
+    ) -> None:
+        """INTEGRATION: Test that migration operations are logged to audit trail
+
+        GIVEN project 'test-migrate-1' in 'pending' phase
+        WHEN running migrate_project.py --project test-migrate-1 --phase shadow
+        THEN migration is logged to rls_audit_log
+        AND audit log contains correct migration details
+        """
+        # Run migration script
+        result = subprocess.run(
+            ["python", "scripts/migrate_project.py", "--project", "test-migrate-1", "--phase", "shadow"],
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+
+        # Verify audit log entry exists
+        audit_record = await test_db.fetchrow("""
+            SELECT project_id, table_name, operation, row_project_id,
+                   would_be_denied, new_data->>'migration_phase' as phase,
+                   new_data->>'operation' as op_type
+            FROM rls_audit_log
+            WHERE project_id = 'test-migrate-1'
+              AND table_name = 'rls_migration_status'
+              AND operation = 'UPDATE'
+            ORDER BY logged_at DESC
+            LIMIT 1
+        """)
+
+        assert audit_record is not None, "Audit log entry not found"
+        assert audit_record["project_id"] == "test-migrate-1"
+        assert audit_record["table_name"] == "rls_migration_status"
+        assert audit_record["operation"] == "UPDATE"
+        assert audit_record["row_project_id"] == "test-migrate-1"
+        assert audit_record["would_be_denied"] is False, "Migration should not be denied"
+        assert audit_record["phase"] == "shadow", f"Expected 'shadow', got '{audit_record['phase']}'"
+        assert audit_record["op_type"] == "migration", f"Expected 'migration', got '{audit_record['op_type']}'"
+
+    @pytest.mark.P0
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_batch_migration_logs_to_audit_trail(
+        self, test_db: asyncpg.Connection, setup_test_projects
+    ) -> None:
+        """INTEGRATION: Test that batch migration logs to audit trail
+
+        GIVEN multiple projects in 'pending' phase
+        WHEN running migrate_project.py --batch "test-migrate-1,test-migrate-2" --phase shadow
+        THEN both migrations are logged to rls_audit_log
+        """
+        # Run batch migration script
+        result = subprocess.run(
+            ["python", "scripts/migrate_project.py", "--batch", "test-migrate-1,test-migrate-2", "--phase", "shadow"],
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == 0, f"Batch migration failed: {result.stderr}"
+
+        # Verify both projects have audit log entries
+        for project in ["test-migrate-1", "test-migrate-2"]:
+            audit_record = await test_db.fetchrow("""
+                SELECT project_id, new_data->>'migration_phase' as phase,
+                       new_data->>'operation' as op_type
+                FROM rls_audit_log
+                WHERE project_id = $1
+                  AND table_name = 'rls_migration_status'
+                ORDER BY logged_at DESC
+                LIMIT 1
+            """, project)
+
+            assert audit_record is not None, f"Audit log entry not found for {project}"
+            assert audit_record["phase"] == "shadow", f"Expected 'shadow' for {project}"
+            assert audit_record["op_type"] == "batch_migration", f"Expected 'batch_migration' for {project}"
+
     # =========================================================================
     # Task 6: Batch migration support
     # =========================================================================

@@ -77,9 +77,25 @@ def migrate_project(project_id: str, target_phase: MigrationPhase) -> dict[str, 
                 if not result:
                     raise ValueError(f"Project not found: {project_id}")
 
+                # Log migration operation to audit trail
+                cur.execute("""
+                    INSERT INTO rls_audit_log (
+                        project_id, table_name, operation, row_project_id,
+                        would_be_denied, new_data, session_user
+                    ) VALUES (
+                        %s, 'rls_migration_status', 'UPDATE', %s,
+                        FALSE, %s::jsonb, %s
+                    )
+                """, (
+                    project_id,
+                    project_id,
+                    '{"migration_phase": "%s", "operation": "migration"}' % target_phase,
+                    'system'
+                ))
+
                 conn.commit()
 
-                logger.info(f"Project {project_id} migrated to phase: {target_phase}")
+                logger.info(f"✓ Project {project_id} migrated to phase: {target_phase}")
 
                 return {
                     "status": "success",
@@ -88,7 +104,7 @@ def migrate_project(project_id: str, target_phase: MigrationPhase) -> dict[str, 
                     "rls_enabled": result[2]
                 }
     except Exception as e:
-        logger.error(f"Failed to migrate project {project_id}: {e}")
+        logger.error(f"✗ Failed to migrate project {project_id}: {e}")
         raise
 
 
@@ -126,12 +142,28 @@ def migrate_batch(project_ids: list[str], target_phase: MigrationPhase) -> dict[
                     if not result:
                         raise ValueError(f"Project not found: {project_id}")
 
+                    # Log each project migration to audit trail
+                    cur.execute("""
+                        INSERT INTO rls_audit_log (
+                            project_id, table_name, operation, row_project_id,
+                            would_be_denied, new_data, session_user
+                        ) VALUES (
+                            %s, 'rls_migration_status', 'UPDATE', %s,
+                            FALSE, %s::jsonb, %s
+                        )
+                    """, (
+                        project_id,
+                        project_id,
+                        '{"migration_phase": "%s", "operation": "batch_migration"}' % target_phase,
+                        'system'
+                    ))
+
                     results.append({"project_id": result[0], "phase": result[1]})
 
                 # All successful - commit transaction
                 conn.commit()
 
-                logger.info(f"Batch migration complete: {len(results)} projects to phase {target_phase}")
+                logger.info(f"✓ Batch migration complete: {len(results)} projects to phase {target_phase}")
 
                 return {
                     "status": "success",
@@ -142,7 +174,7 @@ def migrate_batch(project_ids: list[str], target_phase: MigrationPhase) -> dict[
 
     except Exception as e:
         # Transaction automatically rolled back on error
-        logger.error(f"Batch migration failed: {e}")
+        logger.error(f"✗ Batch migration failed: {e}")
         logger.error("Transaction rolled back - no projects were migrated")
         return {
             "status": "error",

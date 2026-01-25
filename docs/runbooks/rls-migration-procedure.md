@@ -35,6 +35,7 @@ python scripts/check_shadow_violations.py --project sm
 python scripts/migrate_project.py --project sm --phase enforcing
 
 # Verify isolation test passes (create test suite if needed)
+# NOTE: tests/e2e/test_rls_validation_suite.py must be committed first
 # pytest tests/e2e/test_rls_validation_suite.py -k test_isolation
 
 # Mark complete
@@ -64,6 +65,7 @@ python scripts/check_shadow_violations.py --project bap
 python scripts/migrate_project.py --batch "ab,aa,bap" --phase enforcing
 
 # Verify shared access tests pass (create test suite if needed)
+# NOTE: tests/e2e/test_rls_validation_suite.py must be committed first
 # pytest tests/e2e/test_rls_validation_suite.py -k test_shared_access
 ```
 
@@ -146,6 +148,7 @@ After each enforcing transition, run validation suite:
 
 ```bash
 # Create test suite if needed
+# NOTE: tests/e2e/test_rls_validation_suite.py must be committed first
 # pytest tests/e2e/test_rls_validation_suite.py -v
 pytest tests/integration/test_migration_scripts.py -v
 ```
