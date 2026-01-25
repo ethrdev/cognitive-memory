@@ -81,7 +81,7 @@ def migrate_project(project_id: str, target_phase: MigrationPhase) -> dict[str, 
                 cur.execute("""
                     INSERT INTO rls_audit_log (
                         project_id, table_name, operation, row_project_id,
-                        would_be_denied, new_data, session_user
+                        would_be_denied, new_data, session_user_name
                     ) VALUES (
                         %s, 'rls_migration_status', 'UPDATE', %s,
                         FALSE, %s::jsonb, %s
@@ -146,7 +146,7 @@ def migrate_batch(project_ids: list[str], target_phase: MigrationPhase) -> dict[
                     cur.execute("""
                         INSERT INTO rls_audit_log (
                             project_id, table_name, operation, row_project_id,
-                            would_be_denied, new_data, session_user
+                            would_be_denied, new_data, session_user_name
                         ) VALUES (
                             %s, 'rls_migration_status', 'UPDATE', %s,
                             FALSE, %s::jsonb, %s

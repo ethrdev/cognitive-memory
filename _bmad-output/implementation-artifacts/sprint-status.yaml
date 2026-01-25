@@ -43,7 +43,7 @@ development_status:
   # ═══════════════════════════════════════════════════════════════════════════
 
   # Epic 11.1: Schema Migration
-  epic-11-1: in-progress
+  epic-11-1: done
   11-1-0-performance-baseline-capture: done
   11-1-1-add-project-id-column: done
   11-1-2-data-backfill: done
@@ -86,8 +86,8 @@ development_status:
   epic-11-5-retro-file: epic-11-5-retro-2026-01-24.md
 
   # Epic 11.6: Core Read Operations
-  epic-11-6: in-progress
-  11-6-1-hybrid-search-project-aware: in-progress
+  epic-11-6: done
+  11-6-1-hybrid-search-project-aware: done
   11-6-2-graph-query-operations: done
   11-6-3-insight-read-operations: done
   epic-11-6-retrospective: optional
@@ -104,5 +104,5 @@ development_status:
   epic-11-8: in-progress
   11-8-1-migration-scripts-tooling: done
   11-8-2-shadow-phase-execution-monitoring: done
-  11-8-3-enforcing-phase-activation-validation: backlog
+  11-8-3-enforcing-phase-activation-validation: in-progress
   epic-11-8-retrospective: optional

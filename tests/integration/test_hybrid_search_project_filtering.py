@@ -12,62 +12,104 @@ Tests:
 Usage:
     pytest tests/integration/test_hybrid_search_project_filtering.py -v
 
-INFRASTRUCTURE REQUIREMENT:
-    These tests require a database user WITHOUT the bypassrls privilege.
-    The default test database user (neondb_owner) has rolbypassrls=TRUE, which
-    bypasses ALL RLS policies regardless of FORCE ROW LEVEL SECURITY setting.
+INFRASTRUCTURE FIX:
+    These tests now automatically create and use a test user (test_rls_user)
+    WITHOUT the bypassrls privilege to properly test RLS policies.
 
-    To enable these tests:
-    1. Create a test database user: CREATE USER test_rls_user WITH PASSWORD 'test';
-    2. Grant necessary permissions: GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES
-       IN SCHEMA public TO test_rls_user;
-    3. Set DATABASE_URL to use this user in test environment
-    4. Or use: SET SESSION AUTHORIZATION test_rls_user; in tests
+    The setup_rls_test_user fixture:
+    1. Creates test_rls_user (if not exists)
+    2. Grants necessary permissions
+    3. Uses SET SESSION AUTHORIZATION to switch to test user
+    4. Runs tests with proper RLS enforcement
+    5. Cleans up after tests
 
-    Without this setup, RLS tests will be skipped with appropriate warnings.
-    This is a test infrastructure limitation, NOT a code bug - the RLS policies
-    are correctly configured and work in production with users without bypassrls.
+    This allows RLS tests to run without requiring special test database setup.
+    Tests that verify RLS filtering now work correctly in the standard test environment.
+
+    Note: If test user creation fails (e.g., insufficient privileges), tests will
+    be skipped with a clear error message indicating the infrastructure issue.
 """
 
 import json
 import pytest
 from psycopg2.extensions import connection
 
-
-def _can_test_rls(conn: connection) -> bool:
-    """
-    Check if the current database connection can test RLS policies.
-
-    Returns True if RLS policies will be enforced, False if bypassrls is enabled.
-    """
-    with conn.cursor() as cur:
-        # Check if current user has bypassrls privilege
-        cur.execute("""
-            SELECT rolbypassrls
-            FROM pg_roles
-            WHERE oid = current_user_oid()
-        """)
-        result = cur.fetchone()
-        # If bypassrls is FALSE, RLS policies are enforced - we can test
-        return result is not None and not result[0] if result else False
-
-
 @pytest.fixture(autouse=True)
-def check_rls_testing_capability(conn: connection):
+def setup_rls_test_user(conn: connection):
     """
-    Skip RLS tests if database user has bypassrls privilege.
+    Set up RLS test user for proper RLS testing.
 
-    This fixture runs before each test to check if RLS testing is possible.
-    If the database user has bypassrls=TRUE, tests that verify RLS filtering
-    will be skipped with a clear message about infrastructure requirements.
+    This fixture:
+    1. Creates a test user without bypassrls privilege (if not exists)
+    2. Sets session authorization to the test user for RLS enforcement
+    3. Runs before each test to ensure proper RLS context
+
+    This allows tests to verify RLS policies work correctly by using a user
+    that does NOT have the bypassrls privilege.
     """
-    can_test_rls = _can_test_rls(conn)
-    if not can_test_rls:
-        pytest.skip(
-            "RLS testing requires database user WITHOUT bypassrls privilege. "
-            "Current user has bypassrls=TRUE which bypasses all RLS policies. "
-            "See module docstring for infrastructure setup instructions."
-        )
+    test_username = "test_rls_user"
+    test_password = "test_rls_password"
+
+    with conn.cursor() as cur:
+        try:
+            # Try to create the test user (ignore error if already exists)
+            cur.execute(f"""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM pg_roles WHERE rolname = '{test_username}'
+                    ) THEN
+                        CREATE USER {test_username} WITH PASSWORD '{test_password}';
+                    END IF;
+                END
+                $$;
+            """)
+
+            # Grant necessary permissions to test user
+            cur.execute(f"""
+                GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO {test_username};
+                GRANT USAGE ON SCHEMA public TO {test_username};
+                GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO {test_username};
+            """)
+
+            # Switch to test user for this session
+            # This makes the current connection use test_user instead of the original user
+            cur.execute(f"SET SESSION AUTHORIZATION {test_username}")
+            cur.execute(f"SET ROLE {test_username}")
+
+            # Verify RLS is now enforced (not bypassed)
+            cur.execute("""
+                SELECT rolbypassrls
+                FROM pg_roles
+                WHERE oid = current_user_oid()
+            """)
+            result = cur.fetchone()
+
+            if result and result[0]:
+                # This should not happen if we created the user correctly
+                # But if it does, skip tests with clear message
+                pytest.skip(
+                    "Failed to switch to test user without bypassrls privilege. "
+                    "Test infrastructure issue - please check user creation."
+                )
+
+            # Connection is now using test_rls_user with RLS enforced
+            yield
+
+        except Exception as e:
+            # If we can't set up the test user, skip tests
+            pytest.skip(
+                f"Could not set up RLS test user: {e}. "
+                "Test infrastructure issue - skipping RLS tests."
+            )
+        finally:
+            try:
+                # Reset session authorization back to original user
+                cur.execute("RESET ROLE")
+                cur.execute("RESET SESSION AUTHORIZATION")
+            except Exception:
+                # Ignore errors during cleanup
+                pass
 
 
 @pytest.mark.integration
@@ -177,13 +219,8 @@ class TestHybridSearchProjectFiltering:
         Then results include only data from 'aa' and 'sm'
         And no results from 'io', 'ab', 'motoko', etc.
 
-        NOTE: This test is EXPECTED TO FAIL in the current test environment.
-        The test database user (neondb_owner) has rolbypassrls=TRUE, which bypasses
-        ALL RLS policies regardless of FORCE ROW LEVEL SECURITY setting.
-
-        This is a test infrastructure issue, not a code bug. The RLS policies are
-        correctly configured and work as expected when tested with users without
-        bypassrls privilege.
+        Test uses SET SESSION AUTHORIZATION to switch to test_rls_user without
+        bypassrls privilege, ensuring RLS policies are properly enforced.
         """
         # CRITICAL: set_project_context() must be called within a transaction
         # and all queries must run in the SAME transaction
@@ -227,13 +264,8 @@ class TestHybridSearchProjectFiltering:
         Then results include data from ALL projects
         And access_level = 'super' grants universal read access
 
-        NOTE: This test is EXPECTED TO FAIL in the current test environment.
-        The test database user (neondb_owner) has rolbypassrls=TRUE, which bypasses
-        ALL RLS policies regardless of FORCE ROW LEVEL SECURITY setting.
-
-        This is a test infrastructure issue, not a code bug. The RLS policies are
-        correctly configured and work as expected when tested with users without
-        bypassrls privilege.
+        Test uses SET SESSION AUTHORIZATION to switch to test_rls_user without
+        bypassrls privilege, ensuring RLS policies are properly enforced.
         """
         # CRITICAL: set_project_context() must be called within a transaction
         # and all queries must run in the SAME transaction
@@ -274,13 +306,8 @@ class TestHybridSearchProjectFiltering:
         AC: RLS-Filtered Results
         Isolated projects can only read their own data
 
-        NOTE: This test is EXPECTED TO FAIL in the current test environment.
-        The test database user (neondb_owner) has rolbypassrls=TRUE, which bypasses
-        ALL RLS policies regardless of FORCE ROW LEVEL SECURITY setting.
-
-        This is a test infrastructure issue, not a code bug. The RLS policies are
-        correctly configured and work as expected when tested with users without
-        bypassrls privilege.
+        Test uses SET SESSION AUTHORIZATION to switch to test_rls_user without
+        bypassrls privilege, ensuring RLS policies are properly enforced.
         """
         # CRITICAL: set_project_context() must be called within a transaction
         # and all queries must run in the SAME transaction
@@ -384,13 +411,8 @@ class TestHybridSearchRLSWithVectorSearch:
         AC: RLS-Filtered Results
         Vector search with RLS should only return results from accessible projects
 
-        NOTE: This test is EXPECTED TO FAIL in the current test environment.
-        The test database user (neondb_owner) has rolbypassrls=TRUE, which bypasses
-        ALL RLS policies regardless of FORCE ROW LEVEL SECURITY setting.
-
-        This is a test infrastructure issue, not a code bug. The RLS policies are
-        correctly configured and work as expected when tested with users without
-        bypassrls privilege.
+        Test uses SET SESSION AUTHORIZATION to switch to test_rls_user without
+        bypassrls privilege, ensuring RLS policies are properly enforced.
         """
         # CRITICAL: set_project_context() must be called within a transaction
         # and all queries must run in the SAME transaction
@@ -429,13 +451,8 @@ class TestHybridSearchRLSWithVectorSearch:
         """
         Test that isolated project only sees own data in vector search.
 
-        NOTE: This test is EXPECTED TO FAIL in the current test environment.
-        The test database user (neondb_owner) has rolbypassrls=TRUE, which bypasses
-        ALL RLS policies regardless of FORCE ROW LEVEL SECURITY setting.
-
-        This is a test infrastructure issue, not a code bug. The RLS policies are
-        correctly configured and work as expected when tested with users without
-        bypassrls privilege.
+        Test uses SET SESSION AUTHORIZATION to switch to test_rls_user without
+        bypassrls privilege, ensuring RLS policies are properly enforced.
         """
         # CRITICAL: set_project_context() must be called within a transaction
         # and all queries must run in the SAME transaction

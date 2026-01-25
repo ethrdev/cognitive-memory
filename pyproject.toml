@@ -136,14 +136,15 @@ python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 markers = [
-    "asyncio: marks tests as async",
-    "integration: marks tests as integration tests requiring real database",
-    "unit: marks tests as unit tests (no database required)",
-    "performance: marks tests as performance tests",
     "P0: Critical path - must pass for merge",
     "P1: High priority - feature validation",
     "P2: Medium priority - edge cases",
     "P3: Low priority - nice to have",
+    "asyncio: marks tests as async",
+    "e2e: End-to-end tests",
+    "integration: marks tests as integration tests requiring real database",
+    "unit: marks tests as unit tests (no database required)",
+    "performance: marks tests as performance tests",
 ]
 asyncio_mode = "auto"
 

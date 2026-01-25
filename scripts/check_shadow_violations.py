@@ -124,7 +124,7 @@ def check_shadow_violations(project_id: str | None = None) -> list[ViolationRepo
 
                     # Sample violations (top 5)
                     cur.execute("""
-                        SELECT table_name, operation, row_project_id, session_user, logged_at
+                        SELECT table_name, operation, row_project_id, session_user_name, logged_at
                         FROM rls_audit_log
                         WHERE would_be_denied = TRUE
                           AND project_id = %s
