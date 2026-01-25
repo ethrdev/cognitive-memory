@@ -1,7 +1,7 @@
 # async/await Bug Investigation - Remaining Issues
 
 **Date:** 2026-01-14
-**Status:** OPEN - Requires deeper investigation
+**Status:** ✅ FIXED (commit 3b7582a, b8bbee1)
 
 ---
 
@@ -10,10 +10,8 @@
 Fixed async/await issues in Phase 3:
 - ✅ Changed `semantic_search`, `keyword_search`, `episode_semantic_search`, `episode_keyword_search` from `async def` to `def` (sync-only functions)
 - ✅ These functions use psycopg2 cursor.execute() which is sync
-
-**Remaining issue:**
-- ❌ `handle_compress_to_l2_insight` still has "'coroutine' object has no attribute 'execute'" error
-- ❌ `handle_hybrid_search` has same issue
+- ✅ `handle_compress_to_l2_insight` fixed
+- ✅ `handle_hybrid_search` fixed
 
 ## Error Analysis
 

@@ -4,7 +4,7 @@
 **Analysiert von:** I/O
 **Repository:** cognitive-memory
 **Severity:** HIGH
-**Status:** OPEN
+**Status:** ✅ FIXED (2026-01-14, commit 3b7582a)
 
 ---
 
@@ -16,7 +16,7 @@ Drei MCP-Tools scheitern mit async-bezogenen Fehlern. Nach Code-Analyse:
 
 ---
 
-## Bug 1: `get_insight_by_id` - EINDEUTIG IDENTIFIZIERT
+## Bug 1: `get_insight_by_id` - ✅ BEHOBEN
 
 ### Fehlermeldung
 ```json
@@ -56,7 +56,7 @@ grep -n "insight = get_insight_by_id" mcp_server/tools/get_insight_by_id.py
 
 ---
 
-## Bug 2: `get_insight_history` - WEITERER DEBUG NÖTIG
+## Bug 2: `get_insight_history` - ✅ BEHOBEN
 
 ### Fehlermeldung
 ```json
@@ -107,7 +107,7 @@ grep -rn "def get_connection" mcp_server/
 
 ---
 
-## Bug 3: `hybrid_search` - WEITERER DEBUG NÖTIG
+## Bug 3: `hybrid_search` - ✅ BEHOBEN
 
 ### Fehlermeldung
 ```json

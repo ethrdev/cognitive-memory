@@ -1,11 +1,13 @@
 """
 Database Connection Pool Module
 
-Provides connection pooling for PostgreSQL database with health checks
-and graceful shutdown capabilities.
+Provides connection pooling for PostgreSQL database with health checks,
+TCP keep-alive for SSL timeout prevention, and graceful shutdown capabilities.
 
 Story 11.4.2: Adds RLS context integration with get_connection_with_project_context().
 Story 11.6.1: Adds pgvector 0.8.0 iterative scan configuration.
+Tech-Debt SSL Fix: Adds TCP keep-alive and periodic connection validation to prevent
+                  SSL timeout errors after idle periods (>30 seconds).
 """
 
 from __future__ import annotations
@@ -13,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import threading
 import time
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
@@ -42,24 +45,42 @@ class ConnectionHealthError(Exception):
 _connection_pool: pool.SimpleConnectionPool | None = None
 _logger = logging.getLogger(__name__)
 
+# Background thread for periodic connection validation
+_pool_validator_thread: threading.Thread | None = None
+_pool_validator_stop_event = threading.Event()
+
 
 async def initialize_pool(
     min_connections: int = 1,
     max_connections: int = 10,
     connection_timeout: int = 5,
+    tcp_keepalives_idle: int = 10,
+    tcp_keepalives_interval: int = 10,
+    tcp_keepalives_count: int = 3,
 ) -> None:
     """
-    Initialize the PostgreSQL connection pool.
+    Initialize the PostgreSQL connection pool with TCP keep-alive settings.
+
+    TCP keep-alive settings prevent SSL timeout errors after idle periods:
+    - tcp_keepalives_idle: Seconds before sending keep-alive (default: 10s)
+    - tcp_keepalives_interval: Seconds between keep-alive probes (default: 10s)
+    - tcp_keepalives_count: Number of keep-alive probes before dropping (default: 3)
+
+    With default settings, connection is dropped after ~40 seconds of no activity
+    (10s idle + 3 * 10s interval = 40s), but this keeps connections alive.
 
     Args:
         min_connections: Minimum number of connections to maintain
         max_connections: Maximum number of connections allowed
         connection_timeout: Timeout in seconds for connection attempts
+        tcp_keepalives_idle: Seconds of inactivity before sending keep-alive probe
+        tcp_keepalives_interval: Seconds between keep-alive probes
+        tcp_keepalives_count: Number of keep-alive probes before connection is dropped
 
     Raises:
         PoolError: If pool initialization fails
     """
-    global _connection_pool
+    global _connection_pool, _pool_validator_thread, _pool_validator_stop_event
 
     if _connection_pool is not None:
         _logger.warning("Connection pool already initialized")
@@ -71,13 +92,29 @@ async def initialize_pool(
         if not database_url:
             raise PoolError("DATABASE_URL environment variable not set")
 
+        # Build connection options with TCP keep-alive settings
+        # These settings prevent SSL timeout errors after idle periods
+        connection_kwargs = {
+            "dsn": database_url,
+            "cursor_factory": DictCursor,
+            "connect_timeout": connection_timeout,
+            # TCP keep-alive settings to prevent SSL timeout errors
+            "keepalives_idle": tcp_keepalives_idle,  # Send keep-alive after 10s of idle
+            "keepalives_interval": tcp_keepalives_interval,  # Send probes every 10s
+            "keepalives_count": tcp_keepalives_count,  # Drop after 3 failed probes
+            # Note: statement_timeout not set here as Neon pooled connections don't support it
+        }
+
+        _logger.info(
+            f"Initializing connection pool with TCP keep-alive: "
+            f"idle={tcp_keepalives_idle}s, interval={tcp_keepalives_interval}s, count={tcp_keepalives_count}"
+        )
+
         # Initialize connection pool
         _connection_pool = pool.SimpleConnectionPool(
             minconn=min_connections,
             maxconn=max_connections,
-            dsn=database_url,
-            cursor_factory=DictCursor,
-            connect_timeout=connection_timeout,
+            **connection_kwargs,
         )
 
         _logger.info(
@@ -93,6 +130,17 @@ async def initialize_pool(
                 raise ConnectionHealthError("Initial connection health check failed")
 
         _logger.info("Connection pool health check passed")
+
+        # Start periodic pool validator to keep connections alive
+        # This prevents SSL timeout errors by pinging connections periodically
+        _pool_validator_stop_event.clear()
+        _pool_validator_thread = threading.Thread(
+            target=_pool_validator_loop,
+            daemon=True,
+            name="PoolValidator",
+        )
+        _pool_validator_thread.start()
+        _logger.info("Periodic pool validator started")
 
     except psycopg2.Error as e:
         _logger.error(f"Failed to initialize connection pool: {e}")
@@ -114,6 +162,73 @@ def _is_transient_error(error: Exception) -> bool:
     """Check if an error is transient and should be retried."""
     error_str = str(error).lower()
     return any(pattern.lower() in error_str for pattern in _TRANSIENT_ERROR_PATTERNS)
+
+
+def _pool_validator_loop(interval_seconds: int = 20) -> None:
+    """
+    Background thread loop to periodically validate connections in the pool.
+
+    This prevents SSL timeout errors by keeping connections alive with periodic
+    health checks. Stale connections are detected and removed from the pool.
+
+    Args:
+        interval_seconds: Seconds between validation cycles (default: 20)
+                         This is less than the 30s idle timeout to catch issues early.
+    """
+    global _connection_pool, _pool_validator_stop_event
+
+    logger = logging.getLogger(__name__)
+    logger.info(f"Pool validator thread started (interval: {interval_seconds}s)")
+
+    while not _pool_validator_stop_event.is_set():
+        try:
+            # Wait for the interval or stop event
+            if _pool_validator_stop_event.wait(timeout=interval_seconds):
+                # Stop event was set
+                break
+
+            if _connection_pool is None:
+                # Pool was closed
+                break
+
+            # Get a connection and validate it
+            # This keeps the connection alive and detects stale connections
+            try:
+                conn = _connection_pool.getconn()
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT 1 as pool_validator")
+                    result = cursor.fetchone()
+                    cursor.close()
+                    if result and result.get("pool_validator") == 1:
+                        logger.debug("Pool validator: connection is healthy")
+                    else:
+                        logger.warning("Pool validator: unexpected health check result")
+                        # Close this connection, don't return to pool
+                        _connection_pool.putconn(conn, close=True)
+                        conn = None
+                except (psycopg2.Error, Exception) as e:
+                    logger.warning(f"Pool validator: connection health check failed: {e}")
+                    # Close this connection, don't return to pool
+                    try:
+                        _connection_pool.putconn(conn, close=True)
+                    except Exception:
+                        pass
+                    conn = None
+                finally:
+                    # Return healthy connection to pool
+                    if conn is not None:
+                        _connection_pool.putconn(conn)
+
+            except pool.PoolError as e:
+                logger.warning(f"Pool validator: pool error (may be exhausted or closed): {e}")
+            except Exception as e:
+                logger.error(f"Pool validator: unexpected error: {e}")
+
+        except Exception as e:
+            logger.error(f"Pool validator loop error: {e}")
+
+    logger.info("Pool validator thread stopped")
 
 
 async def configure_pgvector_iterative_scans(conn: connection) -> None:
@@ -754,12 +869,24 @@ def get_connection_with_project_context_sync(
 
 def close_all_connections(timeout: int = 10) -> None:
     """
-    Close all connections in the pool gracefully.
+    Close all connections in the pool gracefully and stop the validator thread.
 
     Args:
         timeout: Maximum time in seconds to wait for connections to close
     """
-    global _connection_pool
+    global _connection_pool, _pool_validator_thread, _pool_validator_stop_event
+
+    # Stop the pool validator thread first
+    if _pool_validator_thread is not None:
+        _logger.info("Stopping pool validator thread...")
+        _pool_validator_stop_event.set()
+        # Wait for thread to stop (with timeout)
+        _pool_validator_thread.join(timeout=timeout)
+        if _pool_validator_thread.is_alive():
+            _logger.warning("Pool validator thread did not stop within timeout")
+        else:
+            _logger.info("Pool validator thread stopped")
+        _pool_validator_thread = None
 
     if _connection_pool is None:
         _logger.info("No connection pool to close")
@@ -859,9 +986,12 @@ def initialize_pool_sync(
     min_connections: int = 1,
     max_connections: int = 10,
     connection_timeout: int = 5,
+    tcp_keepalives_idle: int = 10,
+    tcp_keepalives_interval: int = 10,
+    tcp_keepalives_count: int = 3,
 ) -> None:
     """
-    Sync wrapper for initialize_pool().
+    Sync wrapper for initialize_pool() with TCP keep-alive settings.
 
     For async code, use: await initialize_pool()
 
@@ -869,6 +999,9 @@ def initialize_pool_sync(
         min_connections: Minimum number of connections to maintain
         max_connections: Maximum number of connections allowed
         connection_timeout: Timeout in seconds for connection attempts
+        tcp_keepalives_idle: Seconds of inactivity before sending keep-alive probe
+        tcp_keepalives_interval: Seconds between keep-alive probes
+        tcp_keepalives_count: Number of keep-alive probes before connection is dropped
 
     Raises:
         PoolError: If pool initialization fails
@@ -880,6 +1013,9 @@ def initialize_pool_sync(
                 min_connections=min_connections,
                 max_connections=max_connections,
                 connection_timeout=connection_timeout,
+                tcp_keepalives_idle=tcp_keepalives_idle,
+                tcp_keepalives_interval=tcp_keepalives_interval,
+                tcp_keepalives_count=tcp_keepalives_count,
             )
         )
     except Exception as e:
