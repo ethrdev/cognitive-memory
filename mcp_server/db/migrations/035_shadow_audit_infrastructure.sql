@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS rls_audit_log (
     would_be_denied BOOLEAN NOT NULL,        -- TRUE if RLS would block this
     old_data JSONB,                          -- Previous row state (UPDATE/DELETE)
     new_data JSONB,                          -- New row state (INSERT/UPDATE)
-    session_user VARCHAR(100)                -- Database user (app_user)
+    session_user_name VARCHAR(100)           -- Database user (app_user)
 );
 
 -- CRITICAL: NO RLS on this table - audit must always be writable
@@ -175,7 +175,7 @@ BEGIN
             would_be_denied,
             old_data,
             new_data,
-            session_user
+            session_user_name
         ) VALUES (
             v_current_project,
             TG_TABLE_NAME,
