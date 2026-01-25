@@ -36,7 +36,7 @@ def check_shadow_duration_thresholds() -> list[dict[str, any]]:
     with get_connection_sync() as conn:
         with conn.cursor() as cur:
             # Find projects in shadow phase >14 days
-            cur.execute("""
+            cur.execute(f"""
                 SELECT
                     rs.project_id,
                     pr.access_level,
@@ -49,8 +49,8 @@ def check_shadow_duration_thresholds() -> list[dict[str, any]]:
                 FROM rls_migration_status rs
                 JOIN project_registry pr ON rs.project_id = pr.project_id
                 WHERE rs.migration_phase = 'shadow'
-                  AND NOW() - rs.updated_at > INTERVAL '%s days'
-            """, (MAX_SHADOW_DAYS,))
+                  AND NOW() - rs.updated_at > INTERVAL '{MAX_SHADOW_DAYS} days'
+            """)
 
             for row in cur.fetchall():
                 alerts.append({

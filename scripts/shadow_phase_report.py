@@ -165,8 +165,13 @@ def generate_shadow_phase_report(project_id: str | None = None) -> dict[str, Any
         for pid in project_ids:
             try:
                 statuses.append(calculate_shadow_eligibility(pid))
+            except ValueError as e:
+                # Project-specific validation error (e.g., not in shadow phase)
+                print(f"⚠ SKIPPED {pid}: {e}")
             except Exception as e:
-                print(f"Error processing {pid}: {e}")
+                # Database or other critical error - fail fast
+                print(f"💥 CRITICAL ERROR processing {pid}: {e}")
+                raise
 
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
