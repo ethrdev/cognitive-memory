@@ -30,4 +30,4 @@ export LOG_LEVEL=INFO
 export PYTHONPATH="$SCRIPT_DIR:${PYTHONPATH:-}"
 
 # Start the MCP server
-exec "$SCRIPT_DIR/venv/bin/python" -m mcp_server
+exec "$SCRIPT_DIR/.venv/bin/python" -m mcp_server

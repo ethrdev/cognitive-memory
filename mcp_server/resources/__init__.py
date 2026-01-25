@@ -28,8 +28,7 @@ from datetime import datetime
 from typing import Any
 from urllib.parse import ParseResult, parse_qs, urlparse
 
-from mcp.server import Server
-from mcp.types import Resource
+from fastmcp import FastMCP
 from openai import OpenAI
 from pgvector.psycopg2 import register_vector  # type: ignore
 from psycopg2.extensions import connection as Psycopg2Connection
@@ -562,98 +561,341 @@ async def handle_stale_memory(uri: str) -> list[dict[str, Any]] | dict[str, Any]
         }
 
 
-def register_resources(server: Server) -> list[Resource]:
+def register_resources(server: FastMCP) -> list[str]:
     """
-    Register all MCP resources with the server.
+    Register all MCP resources with the FastMCP server.
+
+    Uses FastMCP 3.x decorator pattern with RFC 6570 query parameters.
 
     Args:
-        server: MCP server instance
+        server: FastMCP server instance
 
     Returns:
-        List of registered resources
+        List of registered resource URIs
     """
     logger = logging.getLogger(__name__)
+    registered_uris: list[str] = []
 
-    # Resource definitions
-    resources = [
-        Resource(
-            uri="memory://l2-insights",  # type: ignore[arg-type]
-            name="L2 Insights",
-            description="Read access to L2 compressed insights with optional search parameters",
-            mimeType="application/json",
-        ),
-        Resource(
-            uri="memory://working-memory",  # type: ignore[arg-type]
-            name="Working Memory",
-            description="Current state of working memory with importance-ranked items",
-            mimeType="application/json",
-        ),
-        Resource(
-            uri="memory://episode-memory",  # type: ignore[arg-type]
-            name="Episode Memory",
-            description="Read access to episode memories with similarity search",
-            mimeType="application/json",
-        ),
-        Resource(
-            uri="memory://l0-raw",  # type: ignore[arg-type]
-            name="L0 Raw Memory",
-            description="Read access to raw dialogue data by session or date range",
-            mimeType="application/json",
-        ),
-        Resource(
-            uri="memory://stale-memory",  # type: ignore[arg-type]
-            name="Stale Memory",
-            description="Read access to archived memory items with optional importance filtering",
-            mimeType="application/json",
-        ),
-    ]
+    # L2 Insights Resource - semantic search with query parameter
+    @server.resource(
+        "memory://l2-insights{?query,top_k}",
+        name="L2 Insights",
+        description="Read access to L2 compressed insights with semantic search",
+        mime_type="application/json",
+    )
+    async def read_l2_insights(query: str = "", top_k: int = 5) -> str:
+        """Handle L2 insights resource read with semantic search."""
+        if not query or not query.strip():
+            return json.dumps({
+                "error": "Invalid query parameter",
+                "details": "Query parameter is required and cannot be empty",
+                "resource": "memory://l2-insights",
+            })
 
-    # Resource handler mapping
-    resource_handlers = {
-        "memory://l2-insights": handle_l2_insights,
-        "memory://working-memory": handle_working_memory,
-        "memory://episode-memory": handle_episode_memory,
-        "memory://l0-raw": handle_l0_raw,
-        "memory://stale-memory": handle_stale_memory,
-    }
+        top_k = max(1, min(100, top_k))
 
-    # Register resource read handler
-    @server.read_resource()
-    async def read_resource_handler(uri: str) -> str:
-        """Handle resource read requests.
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key or api_key == "sk-your-openai-api-key-here":
+            return json.dumps({
+                "error": "Configuration error",
+                "details": "OpenAI API key not configured",
+                "resource": "memory://l2-insights",
+            })
 
-        Returns:
-            JSON string of the resource content. MCP SDK expects str | bytes,
-            not dict. The handlers return dicts which we serialize to JSON here.
+        client = OpenAI(api_key=api_key)
 
-        Note:
-            MCP SDK passes AnyUrl objects, not strings. We convert to str immediately
-            to avoid serialization issues with urlparse and json.dumps.
-        """
-        # Convert AnyUrl to string immediately (MCP SDK passes AnyUrl, not str)
-        uri_str = str(uri)
         try:
-            # Parse URI to get base path
-            path, params = parse_resource_uri(uri_str)
+            async with get_connection() as conn:
+                register_vector(conn)
+                embedding = await get_embedding_with_retry(client, query.strip())
 
-            # Find matching resource handler
-            if path in resource_handlers:
-                logger.info(f"Reading resource: {uri_str}")
-                result = await resource_handlers[path](uri_str)
-                logger.info(f"Resource {uri_str} read successfully")
-                # MCP SDK expects str | bytes, serialize dict to JSON
-                return json.dumps(result, default=str, ensure_ascii=False)
-            else:
-                raise ValueError(f"Unknown resource: {path}")
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT id, content, embedding <=> %s AS distance, source_ids
+                    FROM l2_insights
+                    ORDER BY distance
+                    LIMIT %s
+                    """,
+                    (embedding, top_k),
+                )
+
+                results = []
+                for row in cursor.fetchall():
+                    results.append({
+                        "id": row["id"],
+                        "content": row["content"],
+                        "score": 1.0 - row["distance"],
+                        "source_ids": row["source_ids"],
+                    })
+
+                logger.info(f"Retrieved {len(results)} L2 insights for query: {query[:50]}...")
+                return json.dumps(results, default=str, ensure_ascii=False)
 
         except Exception as e:
-            logger.error(f"Failed to read resource {uri_str}: {e}")
-            error_response = {
-                "error": "Resource read failed",
+            logger.error(f"Failed to read L2 insights: {e}")
+            return json.dumps({
+                "error": "Database query failed",
                 "details": str(e),
-                "resource": uri_str,
-            }
-            return json.dumps(error_response, ensure_ascii=False)
+                "resource": "memory://l2-insights",
+            })
 
-    logger.info(f"Registered {len(resources)} resources")
-    return resources
+    registered_uris.append("memory://l2-insights{?query,top_k}")
+
+    # Working Memory Resource
+    @server.resource(
+        "memory://working-memory{?limit}",
+        name="Working Memory",
+        description="Current state of working memory with importance-ranked items",
+        mime_type="application/json",
+    )
+    async def read_working_memory(limit: int = 100) -> str:
+        """Handle working memory resource read."""
+        limit = max(1, min(1000, limit))
+
+        try:
+            async with get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT id, content, importance, last_accessed, created_at
+                    FROM working_memory
+                    ORDER BY last_accessed DESC
+                    LIMIT %s
+                    """,
+                    (limit,),
+                )
+
+                results = []
+                for row in cursor.fetchall():
+                    results.append({
+                        "id": row["id"],
+                        "content": row["content"],
+                        "importance": row["importance"],
+                        "last_accessed": row["last_accessed"].isoformat(),
+                        "created_at": row["created_at"].isoformat(),
+                    })
+
+                logger.info(f"Retrieved {len(results)} working memory items (limit: {limit})")
+                return json.dumps(results, default=str, ensure_ascii=False)
+
+        except Exception as e:
+            logger.error(f"Failed to read working memory: {e}")
+            return json.dumps({
+                "error": "Database query failed",
+                "details": str(e),
+                "resource": "memory://working-memory",
+            })
+
+    registered_uris.append("memory://working-memory{?limit}")
+
+    # Episode Memory Resource - semantic search
+    @server.resource(
+        "memory://episode-memory{?query,min_similarity}",
+        name="Episode Memory",
+        description="Read access to episode memories with similarity search",
+        mime_type="application/json",
+    )
+    async def read_episode_memory(query: str = "", min_similarity: float = 0.70) -> str:
+        """Handle episode memory resource read with semantic search."""
+        if not query or not query.strip():
+            return json.dumps({
+                "error": "Invalid query parameter",
+                "details": "Query parameter is required and cannot be empty",
+                "resource": "memory://episode-memory",
+            })
+
+        min_similarity = max(0.0, min(1.0, min_similarity))
+
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key or api_key == "sk-your-openai-api-key-here":
+            return json.dumps({
+                "error": "Configuration error",
+                "details": "OpenAI API key not configured",
+                "resource": "memory://episode-memory",
+            })
+
+        client = OpenAI(api_key=api_key)
+
+        try:
+            async with get_connection() as conn:
+                register_vector(conn)
+                embedding = await get_embedding_with_retry(client, query.strip())
+
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT id, query, reward, reflection, embedding <=> %s AS distance
+                    FROM episode_memory
+                    WHERE (embedding <=> %s) <= %s
+                    ORDER BY distance
+                    LIMIT 3
+                    """,
+                    (embedding, embedding, 1.0 - min_similarity),
+                )
+
+                results = []
+                for row in cursor.fetchall():
+                    results.append({
+                        "id": row["id"],
+                        "query": row["query"],
+                        "reward": row["reward"],
+                        "reflection": row["reflection"],
+                        "similarity": 1.0 - row["distance"],
+                    })
+
+                logger.info(f"Retrieved {len(results)} episodes for query: {query[:50]}...")
+                return json.dumps(results, default=str, ensure_ascii=False)
+
+        except Exception as e:
+            logger.error(f"Failed to read episode memory: {e}")
+            return json.dumps({
+                "error": "Database query failed",
+                "details": str(e),
+                "resource": "memory://episode-memory",
+            })
+
+    registered_uris.append("memory://episode-memory{?query,min_similarity}")
+
+    # L0 Raw Memory Resource
+    @server.resource(
+        "memory://l0-raw{?session_id,date_range,limit}",
+        name="L0 Raw Memory",
+        description="Read access to raw dialogue data by session or date range",
+        mime_type="application/json",
+    )
+    async def read_l0_raw(
+        session_id: str = "", date_range: str = "", limit: int = 100
+    ) -> str:
+        """Handle L0 raw memory resource read."""
+        limit = max(1, min(1000, limit))
+
+        # Validate session_id format if provided
+        if session_id:
+            try:
+                uuid.UUID(session_id)
+            except ValueError:
+                return json.dumps({
+                    "error": "Invalid session_id parameter",
+                    "details": "session_id must be a valid UUID",
+                    "resource": "memory://l0-raw",
+                })
+
+        # Validate date_range format if provided
+        if date_range and not re.match(r"^\d{4}-\d{2}-\d{2}:\d{4}-\d{2}-\d{2}$", date_range):
+            return json.dumps({
+                "error": "Invalid date_range parameter",
+                "details": "date_range must be in format YYYY-MM-DD:YYYY-MM-DD",
+                "resource": "memory://l0-raw",
+            })
+
+        try:
+            async with get_connection() as conn:
+                query_sql = """
+                    SELECT id, session_id, timestamp, speaker, content, metadata
+                    FROM l0_raw
+                """
+                query_params: list[Any] = []
+                conditions = []
+
+                if session_id:
+                    conditions.append("session_id = %s")
+                    query_params.append(session_id)
+
+                if date_range:
+                    start_date, end_date = date_range.split(":")
+                    conditions.append("timestamp BETWEEN %s AND %s")
+                    query_params.extend([start_date, end_date])
+
+                if conditions:
+                    query_sql += " WHERE " + " AND ".join(conditions)
+
+                query_sql += " ORDER BY timestamp DESC LIMIT %s"
+                query_params.append(limit)
+
+                cursor = conn.cursor()
+                cursor.execute(query_sql, query_params)
+
+                results = []
+                for row in cursor.fetchall():
+                    results.append({
+                        "id": row["id"],
+                        "session_id": str(row["session_id"]),
+                        "timestamp": row["timestamp"].isoformat(),
+                        "speaker": row["speaker"],
+                        "content": row["content"],
+                        "metadata": row["metadata"],
+                    })
+
+                logger.info(f"Retrieved {len(results)} L0 raw entries (limit: {limit})")
+                return json.dumps(results, default=str, ensure_ascii=False)
+
+        except Exception as e:
+            logger.error(f"Failed to read L0 raw: {e}")
+            return json.dumps({
+                "error": "Database query failed",
+                "details": str(e),
+                "resource": "memory://l0-raw",
+            })
+
+    registered_uris.append("memory://l0-raw{?session_id,date_range,limit}")
+
+    # Stale Memory Resource
+    @server.resource(
+        "memory://stale-memory{?importance_min,limit}",
+        name="Stale Memory",
+        description="Read access to archived memory items with optional importance filtering",
+        mime_type="application/json",
+    )
+    async def read_stale_memory(importance_min: float = -1.0, limit: int = 100) -> str:
+        """Handle stale memory resource read."""
+        limit = max(1, min(1000, limit))
+
+        # -1.0 means no filter (default)
+        if importance_min >= 0.0:
+            importance_min = max(0.0, min(1.0, importance_min))
+
+        try:
+            async with get_connection() as conn:
+                query_sql = """
+                    SELECT id, original_content, archived_at, importance, reason
+                    FROM stale_memory
+                """
+                query_params: list[Any] = []
+
+                if importance_min >= 0.0:
+                    query_sql += " WHERE importance >= %s"
+                    query_params.append(importance_min)
+
+                query_sql += " ORDER BY archived_at DESC LIMIT %s"
+                query_params.append(limit)
+
+                cursor = conn.cursor()
+                cursor.execute(query_sql, query_params)
+
+                results = []
+                for row in cursor.fetchall():
+                    results.append({
+                        "id": row["id"],
+                        "original_content": row["original_content"],
+                        "archived_at": row["archived_at"].isoformat(),
+                        "importance": row["importance"],
+                        "reason": row["reason"],
+                    })
+
+                filter_desc = f" (importance >= {importance_min})" if importance_min >= 0.0 else ""
+                logger.info(f"Retrieved {len(results)} stale memory items{filter_desc} (limit: {limit})")
+                return json.dumps(results, default=str, ensure_ascii=False)
+
+        except Exception as e:
+            logger.error(f"Failed to read stale memory: {e}")
+            return json.dumps({
+                "error": "Database query failed",
+                "details": str(e),
+                "resource": "memory://stale-memory",
+            })
+
+    registered_uris.append("memory://stale-memory{?importance_min,limit}")
+
+    logger.info(f"Registered {len(registered_uris)} resources using FastMCP decorator pattern")
+    return registered_uris
