@@ -150,8 +150,16 @@ def mark_migration_complete(all_projects: bool = True) -> dict[str, Any]:
                 if non_enforcing and all_projects:
                     logger.warning(f"⚠️  Warning: {len(non_enforcing)} projects not in enforcing phase: {non_enforcing}")
 
-                # Update all projects to complete
-                cur.execute("""
+                # Build WHERE clause based on all_projects flag
+                # When all_projects=True: mark all projects as complete
+                # When all_projects=False: only mark enforcing projects as complete
+                if all_projects:
+                    where_clause = ""  # No WHERE clause = all rows
+                else:
+                    where_clause = "WHERE migration_phase = 'enforcing'"
+
+                # Update projects to complete phase
+                cur.execute(f"""
                     UPDATE rls_migration_status
                     SET migration_phase = 'complete'::migration_phase_enum,
                         updated_at = NOW(),
@@ -159,9 +167,9 @@ def mark_migration_complete(all_projects: bool = True) -> dict[str, Any]:
                             WHEN migrated_at IS NULL THEN NOW()
                             ELSE migrated_at
                         END
-                    WHERE migration_phase = 'enforcing' OR %s
+                    {where_clause}
                     RETURNING project_id, migration_phase, migrated_at
-                """, (all_projects,))
+                """)
 
                 results = cur.fetchall()
 
