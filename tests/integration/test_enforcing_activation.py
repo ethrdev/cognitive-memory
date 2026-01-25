@@ -401,3 +401,218 @@ class TestEnforcingActivation:
         final_phase = await self._get_migration_phase(test_db, "test-enf-1")
         assert final_phase == initial_phase, "Phase should not change in dry-run mode"
         assert final_phase == "shadow", "Phase should still be 'shadow'"
+
+    # =========================================================================
+    # CRITICAL: Test RLS enforcement is actually working
+    # =========================================================================
+
+    @pytest.mark.P0
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_rls_enforcement_blocks_cross_project_access(
+        self, test_db: asyncpg.Connection
+    ) -> None:
+        """INTEGRATION: Verify RLS actually blocks cross-project access in enforcing mode
+
+        CRITICAL: This test verifies that RLS is actually enforcing isolation.
+        Without this, we cannot trust that enforcing phase provides security.
+
+        GIVEN two projects in enforcing mode with different access levels
+        WHEN project A tries to access project B's data
+        THEN access is BLOCKED by RLS policies
+        """
+        # Setup: Create two test projects
+        await test_db.execute("""
+            INSERT INTO project_registry (project_id, name, access_level)
+            VALUES
+                ('rls-test-a', 'RLS Test A', 'isolated'),
+                ('rls-test-b', 'RLS Test B', 'isolated')
+            ON CONFLICT (project_id) DO NOTHING
+        """)
+
+        # Setup: Set both to enforcing phase
+        await test_db.execute("""
+            INSERT INTO rls_migration_status (project_id, migration_phase)
+            VALUES
+                ('rls-test-a', 'enforcing'),
+                ('rls-test-b', 'enforcing')
+            ON CONFLICT (project_id) DO UPDATE SET migration_phase = EXCLUDED.migration_phase
+        """)
+
+        # Setup: Create test node in project B
+        await test_db.execute("""
+            INSERT INTO nodes (id, project_id, name, label, embedding, created_at)
+            VALUES ('rls-test-node', 'rls-test-b', 'secret-data', 'Test Node', '[0.1, 0.2, 0.3]', NOW())
+            ON CONFLICT (id) DO NOTHING
+        """)
+
+        # Test 1: As project A, should NOT see project B's data
+        await test_db.execute("SET LOCAL app.current_project = 'rls-test-a'")
+
+        # Try to read the node that belongs to project B
+        result = await test_db.fetchrow("""
+            SELECT id, project_id, name
+            FROM nodes
+            WHERE id = 'rls-test-node'
+        """)
+
+        # RLS should return NULL (no rows) because project A cannot access project B's data
+        assert result is None, \
+            f"RLS FAILED: Project A should NOT see project B's data, but got: {result}"
+
+        # Test 2: Verify project A can see its own data
+        await test_db.execute("""
+            INSERT INTO nodes (id, project_id, name, label, embedding, created_at)
+            VALUES ('rls-test-a-node', 'rls-test-a', 'own-data', 'A Node', '[0.4, 0.5, 0.6]', NOW())
+            ON CONFLICT (id) DO NOTHING
+        """)
+
+        own_data = await test_db.fetchrow("""
+            SELECT id, project_id, name
+            FROM nodes
+            WHERE id = 'rls-test-a-node'
+        """)
+
+        assert own_data is not None, \
+            "Project A should see its own data"
+        assert own_data["project_id"] == "rls-test-a", \
+            "Should see own project_id"
+
+    @pytest.mark.P0
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_rls_allows_super_user_read_all_but_write_own_only(
+        self, test_db: asyncpg.Connection
+    ) -> None:
+        """INTEGRATION: Verify super-user can read all but write only own data
+
+        GIVEN super-user project and isolated project in enforcing mode
+        WHEN super-user tries to read isolated project's data
+        THEN read SUCCEEDS (super can read all)
+        WHEN super-user tries to write to isolated project's data
+        THEN write FAILS (super can only write own)
+        """
+        # Setup: Create super and isolated projects
+        await test_db.execute("""
+            INSERT INTO project_registry (project_id, name, access_level)
+            VALUES
+                ('rls-super', 'RLS Super', 'super'),
+                ('rls-iso', 'RLS Isolated', 'isolated')
+            ON CONFLICT (project_id) DO NOTHING
+        """)
+
+        # Setup: Set both to enforcing
+        await test_db.execute("""
+            INSERT INTO rls_migration_status (project_id, migration_phase)
+            VALUES
+                ('rls-super', 'enforcing'),
+                ('rls-iso', 'enforcing')
+            ON CONFLICT (project_id) DO UPDATE SET migration_phase = EXCLUDED.migration_phase
+        """)
+
+        # Setup: Create data in isolated project
+        await test_db.execute("""
+            INSERT INTO nodes (id, project_id, name, label, embedding, created_at)
+            VALUES ('super-test-node', 'rls-iso', 'isolated-data', 'Iso Node', '[0.7, 0.8, 0.9]', NOW())
+            ON CONFLICT (id) DO NOTHING
+        """)
+
+        # Test 1: As super-user, READ isolated project's data (should succeed)
+        await test_db.execute("SET LOCAL app.current_project = 'rls-super'")
+
+        isolated_data = await test_db.fetchrow("""
+            SELECT id, project_id, name
+            FROM nodes
+            WHERE id = 'super-test-node'
+        """)
+
+        assert isolated_data is not None, \
+            "Super-user should be able to READ isolated project's data"
+        assert isolated_data["project_id"] == "rls-iso", \
+            "Should see isolated project data"
+
+        # Test 2: As super-user, WRITE to isolated project (should fail)
+        with pytest.raises(Exception) as exc_info:
+            await test_db.execute("""
+                INSERT INTO nodes (id, project_id, name, label, embedding, created_at)
+                VALUES ('super-hack', 'rls-iso', 'hacked-data', 'Hack', '[1.0, 1.1, 1.2]', NOW())
+            """)
+
+        # RLS should block the write - either via insufficient privilege or constraint
+        assert exc_info.value is not None, \
+            "Super-user should NOT be able to WRITE to other projects"
+
+        # Verify the node was NOT created
+        hack_attempt = await test_db.fetchrow("""
+            SELECT id FROM nodes WHERE id = 'super-hack'
+        """)
+
+        assert hack_attempt is None, \
+            "Super-user write to other project should have been blocked"
+
+    @pytest.mark.P0
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_rls_blocks_cross_project_write_operations(
+        self, test_db: asyncpg.Connection
+    ) -> None:
+        """INTEGRATION: Verify RLS blocks all cross-project write operations
+
+        GIVEN two projects in enforcing mode
+        WHEN project A tries to INSERT, UPDATE, DELETE in project B
+        THEN all operations are BLOCKED
+        """
+        # Setup: Two isolated projects
+        await test_db.execute("""
+            INSERT INTO project_registry (project_id, name, access_level)
+            VALUES
+                ('write-test-a', 'Write Test A', 'isolated'),
+                ('write-test-b', 'Write Test B', 'isolated')
+            ON CONFLICT (project_id) DO NOTHING
+        """)
+
+        # Setup: Both in enforcing
+        await test_db.execute("""
+            INSERT INTO rls_migration_status (project_id, migration_phase)
+            VALUES
+                ('write-test-a', 'enforcing'),
+                ('write-test-b', 'enforcing')
+            ON CONFLICT (project_id) DO UPDATE SET migration_phase = EXCLUDED.migration_phase
+        """)
+
+        # Setup: Create target node in project B
+        await test_db.execute("""
+            INSERT INTO nodes (id, project_id, name, label, embedding, created_at)
+            VALUES ('write-target', 'write-test-b', 'target-data', 'Target', '[0.1, 0.1, 0.1]', NOW())
+            ON CONFLICT (id) DO NOTHING
+        """)
+
+        # Set context to project A
+        await test_db.execute("SET LOCAL app.current_project = 'write-test-a'")
+
+        # Test INSERT into project B (should fail)
+        with pytest.raises(Exception):
+            await test_db.execute("""
+                INSERT INTO nodes (id, project_id, name, label, embedding, created_at)
+                VALUES ('cross-insert', 'write-test-b', 'injected', 'Injected', '[0.2, 0.2, 0.2]', NOW())
+            """)
+
+        # Test UPDATE project B's data (should fail)
+        with pytest.raises(Exception):
+            await test_db.execute("""
+                UPDATE nodes
+                SET name = 'modified'
+                WHERE id = 'write-target'
+            """)
+
+        # Test DELETE project B's data (should fail)
+        with pytest.raises(Exception):
+            await test_db.execute("""
+                DELETE FROM nodes
+                WHERE id = 'write-target'
+            """)
+
+        # Verify target node still exists and unchanged
+        target = await test_db.fetchrow("SELECT id, name FROM nodes WHERE id = 'write-target'")
+        assert target is not None, "Target node should still exist"
+        assert target["name"] == "target-data", "Target node should be unchanged"
