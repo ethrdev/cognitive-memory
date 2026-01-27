@@ -259,11 +259,14 @@ def semantic_search(
     # Cosine distance: <=> operator
     # Lower distance = higher similarity
     # Story 11.6.1: Include project_id in SELECT for result metadata tracking
+    # Fix: Explicit project_id filter as defense-in-depth (neondb_owner has BYPASSRLS)
     query = f"""
         SELECT id, content, source_ids, metadata, io_category, is_identity, source_file, memory_strength, project_id,
                embedding <=> %s::vector AS distance
         FROM l2_insights
-        WHERE is_deleted = FALSE {filter_clause}{sector_clause}
+        WHERE is_deleted = FALSE
+          AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
+          {filter_clause}{sector_clause}
         ORDER BY distance
         LIMIT %s;
         """
@@ -346,6 +349,7 @@ def keyword_search(
     # plainto_tsquery: Converts plain text to tsquery (handles spaces, punctuation)
     # Using parameterized language config for multi-language support
     # Story 11.6.1: Include project_id in SELECT for result metadata tracking
+    # Fix: Explicit project_id filter as defense-in-depth (neondb_owner has BYPASSRLS)
     query = f"""
         SELECT id, content, source_ids, metadata, io_category, is_identity, source_file, memory_strength, project_id,
                ts_rank(
@@ -354,6 +358,7 @@ def keyword_search(
                ) AS rank
         FROM l2_insights
         WHERE is_deleted = FALSE
+          AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
           AND to_tsvector('{language}', content) @@ plainto_tsquery('{language}', %s)
         {filter_clause}{sector_clause}
         ORDER BY rank DESC
@@ -418,10 +423,12 @@ def episode_semantic_search(
     # Cosine distance: <=> operator
     # Lower distance = higher similarity
     # Story 11.6.1: Include project_id in SELECT for result metadata tracking
+    # Fix: Explicit project_id filter as defense-in-depth (neondb_owner has BYPASSRLS)
     query = """
         SELECT id, query, reflection, reward, created_at, project_id,
                embedding <=> %s::vector AS distance
         FROM episode_memory
+        WHERE project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
         ORDER BY distance
         LIMIT %s;
         """
@@ -472,6 +479,7 @@ def episode_keyword_search(
     # Search in both query and reflection fields
     # Using 'simple' language for better multi-language support
     # Story 11.6.1: Include project_id in SELECT for result metadata tracking
+    # Fix: Explicit project_id filter as defense-in-depth (neondb_owner has BYPASSRLS)
     query = f"""
         SELECT id, query, reflection, reward, created_at, project_id,
                ts_rank(
@@ -481,6 +489,7 @@ def episode_keyword_search(
         FROM episode_memory
         WHERE to_tsvector('{language}', query || ' ' || reflection)
               @@ plainto_tsquery('{language}', %s)
+          AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
         ORDER BY rank DESC
         LIMIT %s;
         """
