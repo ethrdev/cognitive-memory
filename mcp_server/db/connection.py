@@ -525,17 +525,17 @@ async def get_connection_with_project_context(
 
     This wrapper extends get_connection() to:
     1. Get project_id from the project_context contextvar (set by TenantMiddleware)
-    2. Call set_project_context(project_id) with appropriate transaction scoping
+    2. Call set_project_context(project_id) within an explicit transaction
     3. Ensure RLS session variables are active for all queries
     4. Maintain backward compatibility with existing connection pool retry logic
 
-    CRITICAL: Transaction scoping depends on read_only parameter:
-    - read_only=True: Uses autocommit mode (valid for single SELECT query)
-    - read_only=False: Uses explicit transaction (required for writes, valid for transaction duration)
+    CRITICAL: Always uses explicit transaction because SET LOCAL (used by
+    set_project_context) requires transaction context. The read_only parameter
+    is kept for API compatibility but does not affect transaction behavior.
 
     Args:
-        read_only: If True, use autocommit for SELECT-only operations.
-                  If False, use explicit transaction for write operations (default: False).
+        read_only: Kept for API compatibility. No effect on transaction behavior
+                  as SET LOCAL requires explicit transaction for all operations.
         max_retries: Maximum number of retry attempts for transient errors (default: 3)
         retry_delay: Initial delay between retries in seconds, doubles each attempt (default: 0.5)
 
@@ -548,19 +548,11 @@ async def get_connection_with_project_context(
         RLSContextError: If project context cannot be set (no project_id in contextvar)
 
     Example:
-        # For read-only operations (SELECT queries):
-        async with get_connection_with_project_context(read_only=True) as conn:
+        async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM nodes WHERE project_id = %s", (project_id,))
-            # RLS context active for single query, then autocommit
-        # Context is cleared automatically
-
-        # For write operations (INSERT/UPDATE/DELETE):
-        async with get_connection_with_project_context(read_only=False) as conn:
-            cursor = conn.cursor()
-            cursor.execute("INSERT INTO nodes ...")
             # RLS context active for entire transaction
-        # Transaction commits/rollbacks, context cleared
+        # Transaction commits, context cleared
     """
     global _connection_pool
 
@@ -615,49 +607,37 @@ async def get_connection_with_project_context(
 
                 raise ConnectionHealthError(f"Connection health check failed: {e}") from e
 
-            # Story 11.6.1: Configure pgvector iterative scans BEFORE setting RLS context
-            await configure_pgvector_iterative_scans(conn)
-
             # CRITICAL: Set RLS context with appropriate transaction scoping
-            # For read-only: SET LOCAL valid for single query with autocommit
-            # For write: SET LOCAL valid for entire transaction
+            # Both read-only and write modes use explicit transaction because
+            # SET LOCAL (used by set_project_context) requires transaction context
             try:
-                if read_only:
-                    # Read-only mode: autocommit, SET LOCAL valid for single query
-                    conn.autocommit = True
-                    cursor = conn.cursor()
+                # Story 11.6.1: Configure pgvector iterative scans before transaction
+                await configure_pgvector_iterative_scans(conn)
+
+                # Use explicit transaction for all operations
+                # psycopg2 uses connection as context manager for transactions
+                # (commits on success, rollbacks on exception)
+                cursor = conn.cursor()
+                try:
+                    # Call set_project_context() which sets all session variables
+                    # This is defined in migration 034_rls_helper_functions.sql
                     cursor.execute("SELECT set_project_context(%s)", (project_id,))
                     cursor.close()
 
                     _logger.debug(
                         f"RLS context set for project_id={project_id} "
-                        f"(read-only mode, autocommit, context active for single query)"
+                        f"(transaction started, context active)"
                     )
 
-                    # Yield connection with RLS context
+                    # Yield connection with active transaction and RLS context
                     yield conn
 
-                    # Autocommit happens automatically, no explicit transaction
-                else:
-                    # Write mode: explicit transaction, SET LOCAL valid for transaction
-                    with conn.transaction() as tx:
-                        cursor = conn.cursor()
-                        # Call set_project_context() which sets all session variables
-                        # This is defined in migration 034_rls_helper_functions.sql
-                        cursor.execute("SELECT set_project_context(%s)", (project_id,))
-                        cursor.close()
-
-                        _logger.debug(
-                            f"RLS context set for project_id={project_id} "
-                            f"(transaction started, context active)"
-                        )
-
-                        # Yield connection with active transaction and RLS context
-                        # The transaction remains open until the caller exits the context manager
-                        yield conn
-
-                        # Transaction commits/rolls back based on exception handling
-                        # tx.__exit__ handles this automatically
+                    # Commit on successful completion
+                    conn.commit()
+                except Exception:
+                    # Rollback on any exception
+                    conn.rollback()
+                    raise
 
             except psycopg2.Error as e:
                 _logger.error(f"Failed to set RLS context for project {project_id}: {e}")
@@ -716,9 +696,13 @@ def get_connection_with_project_context_sync(
     Use this for non-async code paths (middleware validation, batch jobs).
     For MCP tools running in async context, use get_connection_with_project_context() instead.
 
+    CRITICAL: Always uses explicit transaction because SET LOCAL (used by
+    set_project_context) requires transaction context. The read_only parameter
+    is kept for API compatibility but does not affect transaction behavior.
+
     Args:
-        read_only: If True, use autocommit for SELECT-only operations.
-                  If False, use explicit transaction for write operations (default: False).
+        read_only: Kept for API compatibility. No effect on transaction behavior
+                  as SET LOCAL requires explicit transaction for all operations.
         max_retries: Maximum number of retry attempts for transient errors (default: 3)
         retry_delay: Initial delay between retries in seconds, doubles each attempt (default: 0.5)
 
@@ -731,8 +715,8 @@ def get_connection_with_project_context_sync(
         RLSContextError: If project context cannot be set
 
     Example:
-        # In middleware validation (read-only):
-        with get_connection_with_project_context_sync(read_only=True) as conn:
+        # In middleware validation:
+        with get_connection_with_project_context_sync() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM nodes")
     """
@@ -789,41 +773,27 @@ def get_connection_with_project_context_sync(
 
                 raise ConnectionHealthError(f"Connection health check failed: {e}") from e
 
-            # Story 11.6.1: Configure pgvector iterative scans BEFORE setting RLS context
-            # Note: This is the sync version, so we call the sync function
-            configure_pgvector_iterative_scans_sync(conn)
-
             # CRITICAL: Set RLS context with appropriate transaction scoping
+            # Both read-only and write modes use explicit transaction because
+            # SET LOCAL (used by set_project_context) requires transaction context
             try:
-                if read_only:
-                    # Read-only mode: autocommit, SET LOCAL valid for single query
-                    conn.autocommit = True
+                # Story 11.6.1: Configure pgvector iterative scans before transaction
+                configure_pgvector_iterative_scans_sync(conn)
+
+                # Use explicit transaction for all operations
+                with conn:
                     cursor = conn.cursor()
+                    # Call set_project_context() which sets all session variables
                     cursor.execute("SELECT set_project_context(%s)", (project_id,))
                     cursor.close()
 
                     _logger.debug(
                         f"RLS context set for project_id={project_id} "
-                        f"(sync read-only mode, autocommit, context active for single query)"
+                        f"(transaction started, context active)"
                     )
 
-                    # Yield connection with RLS context
+                    # Yield connection with active transaction and RLS context
                     yield conn
-                else:
-                    # Write mode: explicit transaction, SET LOCAL valid for transaction
-                    with conn:
-                        cursor = conn.cursor()
-                        # Call set_project_context() which sets all session variables
-                        cursor.execute("SELECT set_project_context(%s)", (project_id,))
-                        cursor.close()
-
-                        _logger.debug(
-                            f"RLS context set for project_id={project_id} "
-                            f"(transaction started, context active)"
-                        )
-
-                        # Yield connection with active transaction and RLS context
-                        yield conn
 
             except psycopg2.Error as e:
                 _logger.error(f"Failed to set RLS context for project {project_id}: {e}")
