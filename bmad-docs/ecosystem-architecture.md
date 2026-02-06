@@ -358,6 +358,20 @@ NAMESPACES = {
 }
 ```
 
+### PROJECT_ID Propagation (Multi-Projekt)
+
+Jedes Projekt übergibt seine `PROJECT_ID` via `mcp-settings.json`:
+
+```json
+// i-o-system/.claude/mcp-settings.json
+{ "env": { "PROJECT_ID": "io" } }
+
+// agentic-business/.claude/mcp-settings.json
+{ "env": { "PROJECT_ID": "ab" } }
+```
+
+`start_mcp_server.sh` respektiert die Caller-Environment-Variablen und nutzt `.env.development`-Werte nur als Fallback. Damit landet jedes Projekt in seinem eigenen Namespace, obwohl alle denselben MCP Server nutzen.
+
 ---
 
 ## Feature-Matrix

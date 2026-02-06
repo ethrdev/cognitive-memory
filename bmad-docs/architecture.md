@@ -554,6 +554,21 @@ CREATE INDEX idx_edges_relation ON edges(relation);
 - Reicht für Personal Use (nur ethr)
 - Out of scope v3.1.0
 
+### Environment Variable Precedence
+
+**Regel:** Caller-Environment hat Vorrang vor `.env.development` (Twelve-Factor Principle).
+
+```
+Precedence (höchste zuerst):
+1. Caller Environment (z.B. Claude mcp-settings.json env:{})
+2. .env.development / .env.production (Fallback-Defaults)
+3. Hardcoded Defaults im Code
+```
+
+**Warum:** Mehrere Projekte (i-o-system, agentic-business, tethr) nutzen denselben cognitive-memory MCP Server mit unterschiedlichen `PROJECT_ID`-Werten für Namespace-Isolation. Jedes Projekt übergibt seine `PROJECT_ID` via `mcp-settings.json`. Das Startscript `start_mcp_server.sh` setzt `.env.development`-Werte nur als Fallback, wenn die Variable nicht bereits vom Caller gesetzt wurde.
+
+**Betrifft:** `PROJECT_ID`, `DATABASE_URL`, alle API Keys - jede Variable in `.env.development`.
+
 ### Authentication
 
 **Keine User-Authentication:**

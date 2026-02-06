@@ -1,13 +1,17 @@
 #!/bin/bash
 # MCP Server Startup Script
 # Loads environment from .env.development and starts the MCP server
+#
+# Precedence: Caller environment (e.g. Claude mcp-settings.json) > .env.development
+# This allows multi-project setups (io, ab, tethr) to pass PROJECT_ID via
+# MCP server config while .env.development provides fallback defaults.
 
 # Get the directory of this script
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-# Load environment variables from .env.development
+# Load environment variables from .env.development (fallback only)
 if [ -f "$SCRIPT_DIR/.env.development" ]; then
-    # Read and export variables
+    # Read and export variables - only if not already set by caller
     while IFS='=' read -r key value; do
         # Skip comments and empty lines
         [[ $key =~ ^#.*$ ]] && continue
@@ -17,8 +21,10 @@ if [ -f "$SCRIPT_DIR/.env.development" ]; then
         key=$(echo "$key" | xargs)
         value=$(echo "$value" | xargs)
 
-        # Export the variable
-        export "$key=$value"
+        # Only set if not already defined (caller env has precedence)
+        if [[ -z "${!key:-}" ]]; then
+            export "$key=$value"
+        fi
     done < "$SCRIPT_DIR/.env.development"
 fi
 
