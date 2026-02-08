@@ -11,10 +11,13 @@ project_registry, and sets RLS context for tenant isolation.
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from typing import Any
 
 import mcp.types as mt
+from mcp import McpError
+from mcp.types import ErrorData
 from fastmcp.server.dependencies import get_http_headers
 from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
 
@@ -45,7 +48,7 @@ class ProjectMetadata:
 
 class TenantMiddleware(Middleware):
     """
-    Extracts project context from HTTP headers or stdio _meta.
+    Extracts project context from HTTP headers, stdio _meta, or environment.
 
     For HTTP transport (production):
     - Extracts X-Project-ID header
@@ -53,6 +56,9 @@ class TenantMiddleware(Middleware):
 
     For stdio transport (development):
     - Extracts from _meta.project_id in request arguments
+
+    For Claude Code integration:
+    - Falls back to PROJECT_ID environment variable
 
     Validation (Story 11.4.2):
     - Validates project_id against project_registry table
@@ -96,22 +102,22 @@ class TenantMiddleware(Middleware):
             return await call_next(context)
 
         except ProjectNotFoundError as e:
-            # Map to HTTP 400 response
+            # Map to JSON-RPC error response
             logger.warning(f"Project validation failed: {e.message}")
-            raise mt.JsonRpcError(
-                code=mt.ErrorCode.InvalidParams,
+            raise McpError(ErrorData(
+                code=mt.INVALID_PARAMS,
                 message=e.message,
                 data={"error_code": "ERR_PROJECT_NOT_FOUND", "project_id": e.project_id}
-            ) from e
+            )) from e
 
         except ProjectContextRequiredError as e:
-            # Map to HTTP 400 response
+            # Map to JSON-RPC error response
             logger.warning(f"Project context missing: {e.message}")
-            raise mt.JsonRpcError(
-                code=mt.ErrorCode.InvalidParams,
+            raise McpError(ErrorData(
+                code=mt.INVALID_PARAMS,
                 message=e.message,
                 data={"error_code": "ERR_PROJECT_CONTEXT_REQUIRED"}
-            ) from e
+            )) from e
 
     async def _extract_project_id(
         self, context: MiddlewareContext[mt.CallToolRequestParams]
@@ -147,10 +153,16 @@ class TenantMiddleware(Middleware):
                     logger.debug(f"Extracted project_id from _meta: {project_id}")
                     return project_id
 
+        # Fallback to environment variable (Claude Code integration)
+        # When Claude Code starts MCP server with PROJECT_ID env var
+        if project_id := os.environ.get("PROJECT_ID"):
+            logger.debug(f"Extracted project_id from PROJECT_ID env var: {project_id}")
+            return project_id
+
         # No context found - strict error (Decision 1 from Story 11.4.1)
         raise ValueError(
-            "Missing project context. Provide X-Project-ID header (HTTP) "
-            "or _meta.project_id (stdio)."
+            "Missing project context. Provide X-Project-ID header (HTTP), "
+            "_meta.project_id (stdio), or PROJECT_ID environment variable."
         )
 
     async def _validate_project(self, project_id: str) -> ProjectMetadata:
