@@ -126,9 +126,9 @@ development_status:
   epic-9-2-retrospective: optional
 
   # Epic 9.3: Pre-Filtering in hybrid_search
-  epic-9-3: in-progress
+  epic-9-3: done
   9-3-1-hybrid-search-extended-parameters: done
-  9-3-2-pre-filtering-implementation: backlog
+  9-3-2-pre-filtering-implementation: done
   9-3-3-performance-validation: backlog
   epic-9-3-retrospective: optional
 

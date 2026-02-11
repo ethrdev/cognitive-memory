@@ -12,7 +12,6 @@ from dotenv import load_dotenv
 
 # Configure pytest-asyncio
 pytest_plugins = ("pytest_asyncio",)
-from psycopg2.extensions import connection
 
 
 # Load environment at module level
@@ -347,7 +346,7 @@ async def sample_l2_insights(conn):
     """
     from openai import OpenAI
     from datetime import datetime
-    from mcp_server.db.connection import register_vector
+    from pgvector.psycopg2 import register_vector
     import psycopg2.extras
 
     api_key = os.getenv("OPENAI_API_KEY")
@@ -437,7 +436,7 @@ async def sample_l2_insights_large(conn):
     """
     from openai import OpenAI
     from datetime import datetime, timedelta
-    from mcp_server.db.connection import register_vector
+    from pgvector.psycopg2 import register_vector
 
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key or api_key == "sk-your-openai-api-key-here":
@@ -511,7 +510,7 @@ async def sample_episodes(conn):
     """
     from openai import OpenAI
     from datetime import datetime
-    from mcp_server.db.connection import register_vector
+    from pgvector.psycopg2 import register_vector
 
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key or api_key == "sk-your-openai-api-key-here":
