@@ -2857,7 +2857,7 @@ def register_tools(server) -> list:
         ),
         Tool(
             name="list_episodes",
-            description="List episode memory entries with pagination. Supports time filtering and offset-based pagination for audit purposes.",
+            description="List episode memory entries with pagination. Supports filtering by tags, category prefix, date ranges, and offset-based pagination for audit purposes.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -2876,8 +2876,29 @@ def register_tools(server) -> list:
                     },
                     "since": {
                         "type": "string",
-                        "description": "ISO 8601 timestamp to filter episodes created after this time (optional)",
+                        "description": "ISO 8601 timestamp to filter episodes created after this time (optional, legacy alias for date_from)",
                         "format": "date-time",
+                    },
+                    "date_from": {
+                        "type": "string",
+                        "description": "ISO 8601 timestamp to filter episodes created on or after this time (optional)",
+                        "format": "date-time",
+                    },
+                    "date_to": {
+                        "type": "string",
+                        "description": "ISO 8601 timestamp to filter episodes created before or on this time (optional)",
+                        "format": "date-time",
+                    },
+                    "tags": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                        },
+                        "description": "Filter episodes by tags - episode must have ALL specified tags (AND logic, optional)",
+                    },
+                    "category": {
+                        "type": "string",
+                        "description": "Filter episodes by query prefix pattern (e.g., '[ethr]' matches '[ethr] Dark Romance scene') (optional)",
                     },
                 },
                 "required": [],

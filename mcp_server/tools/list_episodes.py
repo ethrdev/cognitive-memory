@@ -21,10 +21,13 @@ from mcp_server.utils.response import add_response_metadata
 
 async def handle_list_episodes(arguments: dict[str, Any]) -> dict[str, Any]:
     """
-    List episode memory entries with pagination.
+    List episode memory entries with pagination and extended filtering.
+
+    Story 9.2.1: list_episodes Extended Parameters
 
     Args:
-        arguments: Tool arguments containing optional limit, offset, since
+        arguments: Tool arguments containing optional limit, offset, since, date_from,
+                   date_to, tags, category
 
     Returns:
         Success response with episodes list and pagination info, plus metadata with project_id (FR29),
@@ -40,6 +43,10 @@ async def handle_list_episodes(arguments: dict[str, Any]) -> dict[str, Any]:
         limit = arguments.get("limit", 50)
         offset = arguments.get("offset", 0)
         since_str = arguments.get("since")
+        date_from_str = arguments.get("date_from")
+        date_to_str = arguments.get("date_to")
+        tags = arguments.get("tags")
+        category = arguments.get("category")
 
         # Parameter validation - limit
         if not isinstance(limit, int) or limit < 1 or limit > 100:
@@ -57,7 +64,7 @@ async def handle_list_episodes(arguments: dict[str, Any]) -> dict[str, Any]:
                 "tool": "list_episodes",
             }, project_id)
 
-        # Parse since timestamp (ISO 8601)
+        # Parse since timestamp (ISO 8601) - legacy alias
         since: datetime | None = None
         if since_str:
             try:
@@ -71,9 +78,69 @@ async def handle_list_episodes(arguments: dict[str, Any]) -> dict[str, Any]:
                     "tool": "list_episodes",
                 }, project_id)
 
+        # Parse date_from timestamp (ISO 8601)
+        date_from: datetime | None = None
+        if date_from_str:
+            try:
+                date_from = datetime.fromisoformat(date_from_str.replace("Z", "+00:00"))
+            except ValueError:
+                return add_response_metadata({
+                    "error": "Parameter validation failed",
+                    "details": f"Invalid ISO 8601 timestamp: {date_from_str}",
+                    "tool": "list_episodes",
+                }, project_id)
+
+        # Parse date_to timestamp (ISO 8601)
+        date_to: datetime | None = None
+        if date_to_str:
+            try:
+                date_to = datetime.fromisoformat(date_to_str.replace("Z", "+00:00"))
+            except ValueError:
+                return add_response_metadata({
+                    "error": "Parameter validation failed",
+                    "details": f"Invalid ISO 8601 timestamp: {date_to_str}",
+                    "tool": "list_episodes",
+                }, project_id)
+
+        # Validate tags parameter (must be array of strings if provided)
+        if tags is not None:
+            if not isinstance(tags, list):
+                return add_response_metadata({
+                    "error": "Parameter validation failed",
+                    "details": "tags must be an array of strings",
+                    "tool": "list_episodes",
+                }, project_id)
+            # Validate all items are strings
+            for tag in tags:
+                if not isinstance(tag, str):
+                    return add_response_metadata({
+                        "error": "Parameter validation failed",
+                        "details": "tags must be an array of strings",
+                        "tool": "list_episodes",
+                    }, project_id)
+            # Treat empty array as no filter (None) for consistent SQL NULL handling
+            if len(tags) == 0:
+                tags = None
+
+        # Validate category parameter (must be string if provided)
+        if category is not None and not isinstance(category, str):
+            return add_response_metadata({
+                "error": "Parameter validation failed",
+                "details": "category must be a string",
+                "tool": "list_episodes",
+            }, project_id)
+
         # Database lookup
         try:
-            result = await list_episodes(limit=limit, offset=offset, since=since)
+            result = await list_episodes(
+                limit=limit,
+                offset=offset,
+                since=since,  # Legacy parameter
+                date_from=date_from,  # New parameter
+                date_to=date_to,
+                tags=tags,
+                category=category,
+            )
 
             logger.debug(f"Listed {len(result['episodes'])} episodes")
 
