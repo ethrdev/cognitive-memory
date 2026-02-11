@@ -2,11 +2,11 @@
 MCP Server Tools Registration Module
 
 Provides tool registration and implementation for the Cognitive Memory System.
-Includes 27 tools: store_raw_dialogue, compress_to_l2_insight, hybrid_search,
+Includes 28 tools: store_raw_dialogue, compress_to_l2_insight, hybrid_search,
 update_working_memory, delete_working_memory, store_episode, store_dual_judge_scores,
 get_golden_test_results, ping, graph_add_node, graph_add_edge, graph_query_neighbors,
 graph_find_path, get_node_by_name, get_edge, count_by_type, list_episodes,
-get_insight_by_id, update_insight, delete_insight, submit_insight_feedback,
+list_insights, get_insight_by_id, update_insight, delete_insight, submit_insight_feedback,
 dissonance_check, resolve_dissonance, smf_pending_proposals, smf_review, smf_approve,
 smf_reject, smf_undo, smf_bulk_approve, suggest_lateral_edges, and reclassify_memory_sector.
 """
@@ -52,6 +52,7 @@ from mcp_server.tools.get_node_by_name import handle_get_node_by_name
 from mcp_server.tools.get_edge import handle_get_edge
 from mcp_server.tools.count_by_type import handle_count_by_type
 from mcp_server.tools.list_episodes import handle_list_episodes
+from mcp_server.tools.list_insights import handle_list_insights
 from mcp_server.tools.get_insight_by_id import handle_get_insight_by_id
 from mcp_server.tools.insights.update import handle_update_insight
 from mcp_server.tools.insights.delete import handle_delete_insight
@@ -2905,6 +2906,58 @@ def register_tools(server) -> list:
             },
         ),
         Tool(
+            name="list_insights",
+            description="List L2 insights with pagination. Supports filtering by tags, date ranges, io_category, is_identity, and memory_sector.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of insights to return (1-100, default: 50)",
+                        "minimum": 1,
+                        "maximum": 100,
+                        "default": 50,
+                    },
+                    "offset": {
+                        "type": "integer",
+                        "description": "Number of insights to skip (default: 0)",
+                        "minimum": 0,
+                        "default": 0,
+                    },
+                    "date_from": {
+                        "type": "string",
+                        "description": "ISO 8601 timestamp to filter insights created on or after this time (optional)",
+                        "format": "date-time",
+                    },
+                    "date_to": {
+                        "type": "string",
+                        "description": "ISO 8601 timestamp to filter insights created before or on this time (optional)",
+                        "format": "date-time",
+                    },
+                    "tags": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                        },
+                        "description": "Filter insights by tags - insight must have ALL specified tags (AND logic, optional)",
+                    },
+                    "io_category": {
+                        "type": "string",
+                        "description": "Filter insights by I/O category: 'self', 'ethr', 'shared', 'relationship' (optional)",
+                    },
+                    "is_identity": {
+                        "type": "boolean",
+                        "description": "Filter insights where is_identity flag is set to true (optional)",
+                    },
+                    "memory_sector": {
+                        "type": "string",
+                        "description": "Filter insights by memory sector: 'emotional', 'episodic', 'semantic', 'procedural', 'reflective' (optional)",
+                    },
+                },
+                "required": [],
+            },
+        ),
+        Tool(
             name="get_insight_by_id",
             description="Get a specific L2 insight by ID for spot verification. Returns content, source_ids, metadata, created_at. Does NOT return embedding (too large).",
             inputSchema={
@@ -3222,6 +3275,7 @@ def register_tools(server) -> list:
         "get_edge": handle_get_edge,
         "count_by_type": handle_count_by_type,
         "list_episodes": handle_list_episodes,
+        "list_insights": handle_list_insights,
         "get_insight_by_id": handle_get_insight_by_id,
         "update_insight": handle_update_insight,
         "delete_insight": handle_delete_insight,
@@ -3324,6 +3378,10 @@ def register_tools(server) -> list:
         @server.tool()
         async def list_episodes(arguments: dict[str, Any]) -> dict[str, Any]:
             return await handle_list_episodes(arguments)
+
+        @server.tool()
+        async def list_insights(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_list_insights(arguments)
 
         @server.tool()
         async def get_insight_by_id(arguments: dict[str, Any]) -> dict[str, Any]:

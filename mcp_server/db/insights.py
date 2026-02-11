@@ -5,11 +5,13 @@ Provides database functions for retrieving and updating L2 insights by ID.
 
 Story 6.5: get_insight_by_id MCP Tool
 Story 26.2: UPDATE Operation - update_insight, write_insight_history
+Story 9.2.2: list_insights MCP Tool with extended filtering
 """
 
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Any
 
 from mcp_server.db.connection import get_connection_with_project_context
@@ -471,5 +473,134 @@ async def execute_delete_with_history(
         raise
     except Exception as e:
         logger.error(f"Failed to execute delete with history: {e}")
+        raise
+
+
+async def list_insights(
+    limit: int = 50,
+    offset: int = 0,
+    tags: list[str] | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    io_category: str | None = None,
+    is_identity: bool | None = None,
+    memory_sector: str | None = None,
+) -> dict[str, Any]:
+    """
+    List L2 insights with pagination and extended filtering.
+
+    Story 9.2.2: list_insights New Endpoint
+
+    Supports filtering by tags (AND logic), date ranges, io_category,
+    is_identity, and memory_sector. Uses PostgreSQL array-contains
+    operator (@>) for efficient tag filtering via GIN index.
+
+    Args:
+        limit: Maximum number of insights to return (1-100, default: 50)
+        offset: Number of insights to skip (default: 0)
+        tags: Filter by tags - ALL provided tags must be present (AND logic)
+        date_from: Filter insights created on or after this datetime
+        date_to: Filter insights created before or on this datetime
+        io_category: Filter by io_category column (e.g., "self", "ethr", "shared", "relationship")
+        is_identity: Filter by is_identity boolean column
+        memory_sector: Filter by memory_sector column (not a direct column, from metadata)
+
+    Returns:
+        Dict with insights list, total_count, limit, offset
+
+    Raises:
+        Exception: If database operation fails
+    """
+    try:
+        async with get_connection_with_project_context() as conn:
+            cursor = conn.cursor()
+
+            # Build WHERE clause conditions
+            conditions = ["is_deleted = FALSE"]
+            params = []
+
+            # Tags filter: use array-contains operator (GIN indexed)
+            if tags:
+                params.append(tags)
+                conditions.append("tags @> %s::TEXT[]")
+
+            # Date range filters
+            if date_from:
+                params.append(date_from)
+                conditions.append("created_at >= %s")
+
+            if date_to:
+                params.append(date_to)
+                conditions.append("created_at <= %s")
+
+            # io_category filter
+            if io_category:
+                params.append(io_category)
+                conditions.append("io_category = %s")
+
+            # is_identity filter
+            if is_identity is not None:
+                params.append(is_identity)
+                conditions.append("is_identity = %s")
+
+            # memory_sector filter - stored in metadata JSONB
+            if memory_sector:
+                params.append(memory_sector)
+                conditions.append("metadata->>'memory_sector' = %s")
+
+            # Build WHERE clause
+            where_clause = " AND ".join(conditions)
+
+            # Count query for total_count (with all filters applied)
+            count_query = f"SELECT COUNT(*) FROM l2_insights WHERE {where_clause}"
+            cursor.execute(count_query, params)
+            total_count = cursor.fetchone()[0]
+
+            # Main query with pagination
+            # Return: id, content, io_category, is_identity,
+            #         memory_strength, tags, created_at, metadata (for memory_sector)
+            # Note: embedding excluded (too large), source_ids included
+            query = f"""
+                SELECT id, content, io_category, is_identity,
+                       tags, metadata, memory_strength, created_at
+                FROM l2_insights
+                WHERE {where_clause}
+                ORDER BY created_at DESC
+                LIMIT %s OFFSET %s
+            """
+
+            # Add limit and offset to params
+            cursor.execute(query, params + [limit, offset])
+
+            rows = cursor.fetchall()
+
+            # Convert rows to dict format
+            insights = []
+            for row in rows:
+                metadata = row["metadata"] or {}
+                insights.append({
+                    "id": row["id"],
+                    "content": row["content"],
+                    "io_category": row["io_category"],
+                    "is_identity": row["is_identity"],
+                    "memory_sector": metadata.get("memory_sector"),  # From metadata JSONB
+                    "tags": row["tags"] or [],
+                    "metadata": metadata,
+                    "memory_strength": row.get("memory_strength", 0.5),
+                    "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+                })
+
+            cursor.close()
+
+            logger.debug(f"Listed {len(insights)} insights (total: {total_count})")
+            return {
+                "insights": insights,
+                "total_count": total_count,
+                "limit": limit,
+                "offset": offset,
+            }
+
+    except Exception as e:
+        logger.error(f"Failed to list insights: {e}")
         raise
 

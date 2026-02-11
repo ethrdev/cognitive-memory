@@ -121,7 +121,7 @@ development_status:
   # Epic 9.2: Filter-Endpoints (list_episodes, list_insights)
   epic-9-2: in-progress
   9-2-1-list-epochs-extended-parameters: done
-  9-2-2-list-insights-new-endpoint: backlog
+  9-2-2-list-insights-new-endpoint: done
   9-2-3-pagination-validation: backlog
   epic-9-2-retrospective: optional
 
