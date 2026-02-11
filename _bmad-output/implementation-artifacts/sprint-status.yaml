@@ -126,15 +126,15 @@ development_status:
   epic-9-2-retrospective: optional
 
   # Epic 9.3: Pre-Filtering in hybrid_search
-  epic-9-3: done
+  epic-9-3: in-progress
   9-3-1-hybrid-search-extended-parameters: done
   9-3-2-pre-filtering-implementation: done
-  9-3-3-performance-validation: backlog
+  9-3-3-performance-validation: done
   epic-9-3-retrospective: optional
 
   # Epic 9.4: Retroaktives Tagging des Bestands
-  epic-9-4: backlog
-  9-4-1-retroactive-tagging-script: backlog
-  9-4-2-dry-run-mode: backlog
+  epic-9-4: in-progress
+  9-4-1-retroactive-tagging-script: done
+  9-4-2-dry-run-mode: done
   9-4-3-idempotent-validation: backlog
   epic-9-4-retrospective: optional

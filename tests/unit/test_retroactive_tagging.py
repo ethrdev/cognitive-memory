@@ -255,12 +255,46 @@ class TestDryRunMode:
             mock_conn, dry_run=True, verbose=False
         )
 
-        # Check that UPDATE was NOT called
-        update_calls = [
-            call for call in mock_cursor.execute.call_args_list
-            if "UPDATE" in str(call)
+        # Verify ONLY SELECT is called, no UPDATE statements
+        # In dry-run mode, execute should be called exactly once (for SELECT)
+        assert mock_cursor.execute.call_count == 1, "Dry-run should only execute SELECT query"
+
+        # Verify the SELECT query (not UPDATE) was called
+        select_call = mock_cursor.execute.call_args_list[0]
+        assert "SELECT" in str(select_call) and "UPDATE" not in str(select_call), \
+            "Dry-run should only SELECT, never UPDATE"
+
+        # Verify conn.commit() was NOT called
+        mock_conn.commit.assert_not_called()
+
+        # Check output contains SQL preview
+        captured = capsys.readouterr()
+        assert "WOULD TAG" in captured.out or "WOULD TAG" in captured.out
+
+    def test_dry_run_insights_does_not_commit_changes(self, capsys):
+        """Test dry-run mode for insights doesn't execute UPDATE."""
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_conn.cursor.return_value = mock_cursor
+
+        mock_cursor.fetchall.return_value = [
+            {"id": 1, "content": "cognitive-memory work", "tags": []}
         ]
-        assert len(update_calls) == 0
+
+        retroactive_tagging.tag_insights(
+            mock_conn, dry_run=True, verbose=False
+        )
+
+        # Verify ONLY SELECT is called, no UPDATE statements
+        assert mock_cursor.execute.call_count == 1, "Dry-run should only execute SELECT query for insights"
+
+        # Verify the SELECT query (not UPDATE) was called
+        select_call = mock_cursor.execute.call_args_list[0]
+        assert "SELECT" in str(select_call) and "UPDATE" not in str(select_call), \
+            "Dry-run for insights should only SELECT, never UPDATE"
+
+        # Verify conn.commit() was NOT called
+        mock_conn.commit.assert_not_called()
 
         # Check output contains SQL preview
         captured = capsys.readouterr()
@@ -366,6 +400,8 @@ class TestSummaryOutput:
         captured = capsys.readouterr()
         assert "DRY-RUN MODE" in captured.out
         assert "No changes were written" in captured.out
+        # Verify exact format from retroactive_tagging.py:400-403
+        assert "=" * 60 in captured.out
 
 
 class TestPerRuleStatistics:
@@ -466,10 +502,10 @@ class TestEdgeCases:
 
     def test_regex_metacharacters_in_text_handled_safely(self):
         """Test regex metacharacters in text don't cause errors."""
-        # Text containing regex special characters
-        malicious_text = ".*()[]{}|^$+?\\ test with brackets [self]"
+        # Text containing regex special characters - with [self] prefix at START
+        malicious_text = "[self] .*()[]{}|^$+?\\ test with brackets"
         tags = retroactive_tagging.apply_tag_rules(malicious_text, "episodes")
-        # Should still match [self] prefix safely
+        # Should still match [self] prefix safely (pattern r"^\[self\]" matches at start)
         assert "self" in tags
 
     def test_very_long_text_does_not_crash(self):
