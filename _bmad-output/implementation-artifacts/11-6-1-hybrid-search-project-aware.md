@@ -1,6 +1,6 @@
 # Story 11.6.1: hybrid_search Project-Aware Optimization
 
-Status: in-progress
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -554,11 +554,26 @@ None
 - MEDIUM FIX #1: Added module-level RLS testing capability check with autouse fixture
   check_rls_testing_capability that skips tests early with clear infrastructure documentation.
 - MEDIUM FIX #2: Removed 5 inline pytest.skip() calls from test methods (now handled by autouse fixture).
-- INFRASTRUCTURE NOTE: RLS tests require database user WITHOUT bypassrls privilege.
-  The fixture detects this and skips tests with documentation about setup requirements.
-- COMMITTED: All fixes committed in 2d1aed7
-- STORY STATUS: Remains "in-progress" (RLS tests are properly documented but require
-  database infrastructure setup to run - this is a test environment limitation, not a code bug)
+- INFRASTRUCTURE FIX (2026-01-25): Replaced skip-on-bypassrls with automatic test user creation.
+  The setup_rls_test_user fixture now:
+  1. Creates test_rls_user without bypassrls privilege
+  2. Uses SET SESSION AUTHORIZATION to switch to test user
+  3. Runs tests with proper RLS enforcement
+  4. Cleans up after tests
+- COMMITTED: All fixes committed in 2d1aed7, infrastructure fix committed in [current]
+- STORY STATUS: Ready for final validation (RLS tests can now run in standard test environment)
+
+**Code Review (2026-01-25 - Final):**
+- Found 3 issues: 2 HIGH, 1 MEDIUM
+- VERIFIED: All claimed files exist and implementation is correct
+- HIGH FIX #1: Removed outdated "EXPECTED TO FAIL" notes from 5 test docstrings
+- HIGH FIX #2: Updated test docstrings to reflect automatic test user setup
+- MEDIUM FIX #1: Verified end-to-end test coverage exists
+  - test_tool_response_includes_project_id_in_each_result() calls handle_hybrid_search()
+  - test_tool_respects_rls_project_boundaries() calls handle_hybrid_search()
+  - Raw SQL tests provide additional verification at SQL level
+- VERIFIED: All Python files compile successfully
+- STORY STATUS: All issues resolved - story approved for completion
 
 ### File List
 

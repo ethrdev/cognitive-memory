@@ -76,28 +76,52 @@ chmod 600 .env.development
 
 This project uses [Neon Cloud](https://neon.tech) for serverless PostgreSQL with pgvector.
 
+**Multi-Project Architecture:** All ai-experiments projects (agentic-business, cognitive-memory, semantic-memory, i-o-system) share a single Neon DB instance with **namespace isolation via PROJECT_ID**. This provides cost efficiency and unified data management while maintaining strict project boundaries.
+
 1. **Create a Neon account** at [console.neon.tech](https://console.neon.tech)
 
-2. **Create a new project** and note your connection string:
+2. **Use the shared Neon database** (already provisioned):
+   ```
+   postgresql://neondb_owner:PASSWORD@ep-little-glitter-ag9uxp2a-pooler.c-2.eu-central-1.aws.neon.tech/neondb?sslmode=require
+   ```
+
+3. **Set your PROJECT_ID** for namespace isolation:
+   - `cognitive` - for cognitive-memory project
+   - `agentic-business` - for agentic-business project
+   - `semantic` - for semantic-memory project
+   - `io` - for i-o-system project
+
+4. **Update `.env`** with your configuration:
+   ```bash
+   DATABASE_URL=postgresql://neondb_owner:PASSWORD@ep-little-glitter-ag9uxp2a-pooler.c-2.eu-central-1.aws.neon.tech/neondb?sslmode=require
+   PROJECT_ID=cognitive
+   ```
+
+<details>
+<summary>Setting up a new Neon database (if needed)</summary>
+
+1. **Create a new project** and note your connection string:
    ```
    postgresql://neondb-user:PASSWORD@ep-xxx.REGION.aws.neon.tech/neondb?sslmode=require
    ```
 
-3. **Enable pgvector extension** (in Neon SQL Editor):
+2. **Enable pgvector extension** (in Neon SQL Editor):
    ```sql
    CREATE EXTENSION IF NOT EXISTS vector;
    ```
 
-4. **Run migrations**:
+3. **Run migrations**:
    ```bash
    # Set your Neon connection string
    export DATABASE_URL="postgresql://neondb-user:PASSWORD@ep-xxx.neon.tech/neondb?sslmode=require"
+   export PROJECT_ID="cognitive"
 
    # Run all migrations
    for f in mcp_server/db/migrations/*.sql; do psql "$DATABASE_URL" -f "$f"; done
    ```
 
-5. **Update `.env.development`** with your Neon DATABASE_URL
+4. **Update `.env`** with your Neon DATABASE_URL and PROJECT_ID
+</details>
 
 <details>
 <summary>Alternative: Local PostgreSQL Setup</summary>
@@ -139,39 +163,50 @@ python -m mcp_server
 
 ### Claude Code Integration
 
-1. Copy the MCP configuration template:
+The MCP server integrates with Claude Code via `.mcp.json` configuration.
 
-```bash
-cp .mcp.json.template .mcp.json
-```
-
-2. Edit `.mcp.json` and replace `${PROJECT_ROOT}` with your actual path:
+**Option 1: Project-specific configuration** (agentic-business/.mcp.json):
 
 ```json
 {
   "mcpServers": {
     "cognitive-memory": {
-      "type": "stdio",
-      "command": "/your/path/to/cognitive-memory/start_mcp_server.sh"
+      "command": "/home/ethr/01-projects/ai-experiments/cognitive-memory/.venv/bin/python",
+      "args": ["-m", "mcp_server"],
+      "cwd": "/home/ethr/01-projects/ai-experiments/cognitive-memory",
+      "env": {
+        "DATABASE_URL": "postgresql://neondb_owner:PASSWORD@ep-little-glitter-ag9uxp2a-pooler.c-2.eu-central-1.aws.neon.tech/neondb?sslmode=require",
+        "PROJECT_ID": "cognitive",
+        "PYTHONPATH": "/home/ethr/01-projects/ai-experiments/cognitive-memory"
+      }
     }
   }
 }
 ```
 
-3. For **global availability** (all projects), add to `~/.config/claude-code/mcp-settings.json`:
+**Option 2: Global configuration** (`~/.config/claude-code/mcp-settings.json`):
 
 ```json
 {
   "mcpServers": {
     "cognitive-memory": {
-      "type": "stdio",
-      "command": "/path/to/cognitive-memory/start_mcp_server.sh"
+      "command": "/path/to/cognitive-memory/.venv/bin/python",
+      "args": ["-m", "mcp_server"],
+      "cwd": "/path/to/cognitive-memory",
+      "env": {
+        "DATABASE_URL": "postgresql://...@ep-little-glitter-ag9uxp2a-pooler...neon.tech/neondb?sslmode=require",
+        "PROJECT_ID": "cognitive",
+        "PYTHONPATH": "/path/to/cognitive-memory"
+      }
     }
   }
 }
 ```
 
-The start script automatically loads environment variables from `.env.development`.
+**Key Configuration:**
+- `PROJECT_ID` - Namespace isolation for multi-project environments
+- `PYTHONPATH` - Required for mcp_server module resolution
+- `DATABASE_URL` - Neon DB connection with SSL enforced
 
 ## Library API
 
@@ -277,9 +312,12 @@ CREATE TABLE nodes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     label VARCHAR(255) NOT NULL,           -- Entity type ('Person', 'Concept', 'Document')
     name VARCHAR(255) NOT NULL,            -- Unique entity name
+    type VARCHAR(100),                     -- Optional categorization
     properties JSONB DEFAULT '{}',        -- Flexible metadata
-    vector_id INTEGER,                     -- Optional FK to l2_insights.id
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    embedding VECTOR(1536),                -- Optional embedding for semantic search
+    project_id VARCHAR(100) DEFAULT 'cognitive',  -- Namespace isolation
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT uniq_node_name UNIQUE (name)
 );
 
 -- Edges table: Stores relationships between entities
@@ -290,7 +328,57 @@ CREATE TABLE edges (
     relation VARCHAR(255) NOT NULL,        -- Relationship type ('knows', 'contains', 'cites')
     weight FLOAT DEFAULT 1.0,             -- Relationship strength (0.0-1.0)
     properties JSONB DEFAULT '{}',        -- Flexible metadata
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    project_id VARCHAR(100) DEFAULT 'cognitive',  -- Namespace isolation
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT fk_edges_source_id FOREIGN KEY (source_id) REFERENCES nodes(id) ON DELETE CASCADE,
+    CONSTRAINT fk_edges_target_id FOREIGN KEY (target_id) REFERENCES nodes(id) ON DELETE CASCADE
+);
+
+-- L2 Insights table: Compressed semantic insights
+CREATE TABLE l2_insights (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    content TEXT NOT NULL,                 -- Compressed insight text
+    embedding VECTOR(1536),                -- Semantic embedding for search
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    source_ids INTEGER[],                  -- Related L0 memory IDs
+    metadata JSONB DEFAULT '{}',          -- Additional metadata
+    io_category VARCHAR(100),              -- I-O system category
+    memory_strength FLOAT DEFAULT 1.0,     -- Forgetting curve strength
+    is_identity BOOLEAN DEFAULT FALSE,    -- Whether this is identity info
+    source_file VARCHAR(255),              -- Origin file
+    is_deleted BOOLEAN DEFAULT FALSE,      -- Soft delete support
+    deleted_at TIMESTAMPTZ,                -- Deletion timestamp
+    deleted_by VARCHAR(100),               -- Deletion source
+    deleted_reason TEXT,                   -- Deletion reason
+    project_id VARCHAR(100) DEFAULT 'cognitive',  -- Namespace isolation
+    CONSTRAINT uniq_insight_content UNIQUE (content)
+);
+
+-- Episode memory: Verbal reflexions from evaluations
+CREATE TABLE episode_memory (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    query TEXT NOT NULL,                   -- Original query
+    response TEXT NOT NULL,                -- System response
+    ground_truth TEXT,                     -- Expected answer
+    haiku_reflection TEXT,                 -- Verbal reflexion
+    haiku_rating NUMERIC(1,5),             -- Haiku quality score
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    project_id VARCHAR(100) DEFAULT 'cognitive'  -- Namespace isolation
+);
+
+-- Chunks table: Text chunks with embeddings
+CREATE TABLE chunks (
+    id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    document_id INTEGER NOT NULL,
+    level INTEGER NOT NULL,                -- Chunk hierarchy level
+    content TEXT NOT NULL,                 -- Chunk content
+    embedding VECTOR(1536),                -- Semantic embedding
+    position INTEGER NOT NULL,             -- Position in document
+    section_title TEXT,                    -- Section heading
+    metadata JSONB DEFAULT '{}',          -- Additional metadata
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    project_id VARCHAR(100) DEFAULT 'cognitive'  -- Namespace isolation
 );
 ```
 
@@ -298,11 +386,12 @@ CREATE TABLE edges (
 
 - **UUID Primary Keys**: Distributed system compatibility and graph traversal performance
 - **Global Node Uniqueness**: Nodes are unique by `name` only - labels are mutable attributes (updated on conflict)
+- **Namespace Isolation**: PROJECT_ID column enables multi-project environments sharing one database
 - **Idempotent Operations**: UNIQUE constraints prevent duplicate entities and relationships
 - **Flexible Metadata**: JSONB properties with GIN indexes for complex queries
-- **Optional Vector Integration**: Link entities to L2 insights via `vector_id` foreign key
+- **Vector Embeddings**: pgvector integration for semantic search on nodes, insights, and chunks
 - **CASCADE Deletes**: Automatic cleanup of relationships when entities are removed
-- **Performance Optimized**: Comprehensive indexing for fast graph traversals
+- **Performance Optimized**: Comprehensive indexing for fast graph traversals and vector search
 
 ### Indexes and Performance
 
@@ -310,12 +399,18 @@ CREATE TABLE edges (
 |-------|---------|------|
 | `idx_nodes_unique` | Prevent duplicate entities (by name only) | B-tree UNIQUE |
 | `idx_nodes_label` | Filter by entity type | B-tree |
+| `idx_nodes_project_id` | Namespace isolation | B-tree |
 | `idx_edges_unique` | Prevent duplicate relationships | B-tree |
 | `idx_edges_source_id` | Outbound traversals | B-tree |
 | `idx_edges_target_id` | Inbound traversals | B-tree |
 | `idx_edges_relation` | Filter by relationship type | B-tree |
+| `idx_edges_project_id` | Namespace isolation | B-tree |
 | `idx_nodes_properties` | JSONB metadata queries | GIN |
 | `idx_edges_properties` | JSONB metadata queries | GIN |
+| `idx_nodes_embedding` | Vector similarity search on nodes | ivfflat |
+| `idx_l2_insights_embedding` | Vector similarity search on insights | ivfflat |
+| `idx_chunks_embedding` | Vector similarity search on chunks | ivfflat |
+| `idx_l2_insights_project_id` | Namespace isolation | B-tree |
 
 ### Usage Examples
 

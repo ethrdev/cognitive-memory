@@ -169,8 +169,7 @@ async def add_node(
                 ON CONFLICT (project_id, name) DO UPDATE SET
                     label = EXCLUDED.label,
                     properties = nodes.properties || EXCLUDED.properties,
-                    vector_id = COALESCE(EXCLUDED.vector_id, nodes.vector_id),
-                    updated_at = NOW()
+                    vector_id = COALESCE(EXCLUDED.vector_id, nodes.vector_id)
                 RETURNING id, label, name, project_id, created_at,
                     (xmax = 0) AS was_inserted;
                 """,

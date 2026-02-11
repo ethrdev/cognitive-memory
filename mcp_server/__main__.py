@@ -22,6 +22,7 @@ import signal
 import sys
 import threading
 import time
+from contextlib import asynccontextmanager
 from datetime import datetime
 
 from fastmcp import FastMCP
@@ -159,6 +160,28 @@ def notify_systemd_stopping() -> None:
     _watchdog_stop_event.set()
 
 
+@asynccontextmanager
+async def server_lifespan(mcp: FastMCP) -> AsyncIterator[None]:
+    """
+    Server lifespan context manager for database initialization and cleanup.
+
+    This is called by FastMCP when the server starts and stops.
+    """
+    logger = logging.getLogger(__name__)
+    try:
+        # Startup: Initialize database connection pool
+        await initialize_database()
+        yield
+    finally:
+        # Shutdown: Close all database connections
+        logger.info("Closing database connections")
+        try:
+            close_all_connections()
+            logger.info("Graceful shutdown completed")
+        except Exception as e:
+            logger.error(f"Error during shutdown: {e}")
+
+
 def create_server() -> FastMCP:
     """
     Create and configure the FastMCP server instance.
@@ -169,14 +192,12 @@ def create_server() -> FastMCP:
     Returns:
         Configured FastMCP server instance
     """
-    # Setup structured logging first
-    setup_logging()
     logger = logging.getLogger(__name__)
-
     logger.info("Creating Cognitive Memory MCP Server v1.0.0 (FastMCP 3.x)")
 
     # Create FastMCP instance (Story 11.4.1: Migrated from official SDK)
-    mcp = FastMCP("cognitive-memory")
+    # Pass lifespan function for database initialization and cleanup
+    mcp = FastMCP("cognitive-memory", lifespan=server_lifespan)
 
     # Register TenantMiddleware (Story 11.4.1: Extract project_id)
     mcp.add_middleware(TenantMiddleware())
@@ -225,7 +246,7 @@ async def initialize_database() -> None:
     logger.info("Health check background task started (15-minute intervals)")
 
 
-async def main() -> None:
+def main() -> None:
     """
     Main entry point for programmatic server execution.
 
@@ -237,16 +258,18 @@ async def main() -> None:
     logger = logging.getLogger(__name__)
 
     try:
-        mcp = create_server()
-        await initialize_database()
+        # Setup logging first
+        setup_logging()
 
-        # Run server with default (stdio) transport
-        # Note: FastMCP 3.0.0b1 uses CLI for transport selection
-        # For HTTP transport, use: fastmcp run --transport http mcp_server.__main__:mcp
+        # Create server (lifespan will handle database init/cleanup)
+        mcp = create_server()
+
+        # Run server with stdio transport
         logger.info("Starting server with stdio transport (use CLI for HTTP: fastmcp run --transport http)")
 
-        # FastMCP will handle the rest
-        # The server needs to be run externally or via fastmcp CLI
+        # Run the MCP server - this blocks and handles JSON-RPC communication
+        # The lifespan function will be called automatically by FastMCP
+        mcp.run(transport="stdio")
 
     except KeyboardInterrupt:
         logger.info("Received keyboard interrupt, shutting down")
@@ -259,14 +282,6 @@ async def main() -> None:
     finally:
         # : Notify systemd we're stopping gracefully
         notify_systemd_stopping()
-
-        # Graceful shutdown: close all database connections
-        logger.info("Closing database connections")
-        try:
-            close_all_connections()
-            logger.info("Graceful shutdown completed")
-        except Exception as e:
-            logger.error(f"Error during shutdown: {e}")
 
 
 def handle_sigterm(signum, frame):
@@ -302,4 +317,4 @@ if __name__ == "__main__":
 
     # For direct execution, initialize and run
     # For production, use: fastmcp run mcp_server.__main__:mcp --transport http
-    asyncio.run(main())
+    main()
