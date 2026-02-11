@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import psycopg2
 from psycopg2.extras import DictCursor
+import psycopg2.extensions
 import pytest
 from dotenv import load_dotenv
 
@@ -51,7 +52,7 @@ def database_url() -> str:
 
 
 @pytest.fixture(scope="function")
-def conn(database_url: str) -> connection:
+def conn(database_url: str) -> psycopg2.extensions.connection:
     """
     Create a PostgreSQL connection for testing.
 
@@ -74,7 +75,7 @@ def conn(database_url: str) -> connection:
 @pytest.fixture
 def mock_conn():
     """Mock database connection for unit tests that don't need real DB."""
-    mock = MagicMock(spec=connection)
+    mock = MagicMock(spec=psycopg2.extensions.connection)
     mock.cursor.return_value = MagicMock()
     mock.cursor.return_value.fetchone.return_value = (1,)
     mock.cursor.return_value.fetchall.return_value = []
