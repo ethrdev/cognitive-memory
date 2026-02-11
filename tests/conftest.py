@@ -325,3 +325,251 @@ def bypass_conn():
         connection.close()
     except psycopg2.Error as e:
         pytest.skip(f"Could not create bypass connection: {e}")
+
+
+# ============================================================================
+# Story 9.3.1: Hybrid Search Extended Filter Parameters - Test Fixtures
+# ============================================================================
+
+@pytest.fixture
+async def sample_l2_insights(conn):
+    """
+    Create sample L2 insights for integration testing.
+
+    Story 9.3.1: Test data with different tags and dates for filter testing.
+
+    Creates insights with:
+    - Various tags: python, javascript, database, testing, ai
+    - Different dates spread throughout 2024
+    - Different memory sectors
+
+    All test data uses negative IDs to avoid conflicts with real data.
+    """
+    from openai import OpenAI
+    from datetime import datetime
+    from mcp_server.db.connection import register_vector
+    import psycopg2.extras
+
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key or api_key == "sk-your-openai-api-key-here":
+        pytest.skip("OPENAI_API_KEY not configured for test data generation")
+
+    client = OpenAI(api_key=api_key)
+    cursor = conn.cursor()
+    register_vector(conn)
+
+    insights = [
+        {
+            "content": "Python programming tip: Use list comprehensions for cleaner code",
+            "tags": ["python", "programming"],
+            "memory_sector": "semantic",
+            "created_at": datetime(2024, 1, 15, 10, 30),
+        },
+        {
+            "content": "JavaScript tutorial for beginners covering async/await",
+            "tags": ["javascript", "programming"],
+            "memory_sector": "semantic",
+            "created_at": datetime(2024, 2, 20, 14, 0),
+        },
+        {
+            "content": "Database design principles and normalization techniques",
+            "tags": ["database", "design"],
+            "memory_sector": "semantic",
+            "created_at": datetime(2024, 3, 10, 9, 15),
+        },
+        {
+            "content": "Testing best practices with pytest and unittest",
+            "tags": ["python", "testing"],
+            "memory_sector": "procedural",
+            "created_at": datetime(2024, 4, 5, 16, 45),
+        },
+        {
+            "content": "AI prompt engineering techniques for better LLM responses",
+            "tags": ["ai", "prompting"],
+            "memory_sector": "semantic",
+            "created_at": datetime(2024, 5, 12, 11, 20),
+        },
+    ]
+
+    inserted = []
+    for idx, insight in enumerate(insights):
+        # Generate embedding
+        response = client.embeddings.create(
+            model="text-embedding-3-small",
+            input=insight["content"],
+            encoding_format="float",
+        )
+        embedding = response.data[0].embedding
+
+        # Insert with negative ID to distinguish from real data
+        cursor.execute(
+            """
+            INSERT INTO l2_insights (id, project_id, content, embedding, tags, metadata, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            RETURNING id, content, tags, created_at
+            """,
+            (
+                -(idx + 1),  # Negative ID for test data
+                "io",
+                insight["content"],
+                embedding,
+                insight["tags"],
+                {"memory_sector": insight["memory_sector"]},
+                insight["created_at"],
+            ),
+        )
+        result = cursor.fetchone()
+        inserted.append(result)
+
+    conn.commit()
+    return inserted
+
+
+@pytest.fixture
+async def sample_l2_insights_large(conn):
+    """
+    Create a larger set of L2 insights for performance testing.
+
+    Story 9.3.1: Performance tests need significant dataset to measure pre-filtering benefit.
+
+    Creates 50 insights with various tags and dates to enable performance
+    comparisons between filtered and unfiltered queries.
+    """
+    from openai import OpenAI
+    from datetime import datetime, timedelta
+    from mcp_server.db.connection import register_vector
+
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key or api_key == "sk-your-openai-api-key-here":
+        pytest.skip("OPENAI_API_KEY not configured for performance test data")
+
+    client = OpenAI(api_key=api_key)
+    cursor = conn.cursor()
+    register_vector(conn)
+
+    # Create 50 insights with various tags and dates
+    tags_pool = [
+        ["python"],
+        ["javascript"],
+        ["database"],
+        ["testing"],
+        ["ai"],
+        ["python", "testing"],
+        ["python", "performance"],
+        ["database", "design"],
+        ["ai", "prompting"],
+        ["programming"],
+    ]
+
+    base_date = datetime(2024, 1, 1)
+
+    for idx in range(50):
+        tags = tags_pool[idx % len(tags_pool)]
+        content = f"Test content {idx} related to {', '.join(tags)} for performance testing"
+
+        # Generate embedding
+        response = client.embeddings.create(
+            model="text-embedding-3-small",
+            input=content,
+            encoding_format="float",
+        )
+        embedding = response.data[0].embedding
+
+        # Spread dates throughout 2024 (every ~7 days)
+        days_offset = idx * 7
+        created_at = base_date + timedelta(days=days_offset)
+
+        cursor.execute(
+            """
+            INSERT INTO l2_insights (id, project_id, content, embedding, tags, metadata, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                -(idx + 1000),  # Negative IDs starting at -1000
+                "io",
+                content,
+                embedding,
+                tags,
+                {"memory_sector": "semantic"},
+                created_at,
+            ),
+        )
+
+    conn.commit()
+    return 50
+
+
+@pytest.fixture
+async def sample_episodes(conn):
+    """
+    Create sample episode memories for integration testing.
+
+    Story 9.3.1: Episode memories for date range filter testing.
+
+    Creates episodes with different dates to enable date range filtering tests.
+    All test data uses negative IDs.
+    """
+    from openai import OpenAI
+    from datetime import datetime
+    from mcp_server.db.connection import register_vector
+
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key or api_key == "sk-your-openai-api-key-here":
+        pytest.skip("OPENAI_API_KEY not configured for test data generation")
+
+    client = OpenAI(api_key=api_key)
+    cursor = conn.cursor()
+    register_vector(conn)
+
+    episodes = [
+        {
+            "query": "How do I use list comprehensions in Python?",
+            "reward": 0.8,
+            "reflection": "List comprehensions are a Pythonic way to create lists from iterables",
+            "created_at": datetime(2024, 1, 10, 8, 0),
+        },
+        {
+            "query": "What is a closure in JavaScript?",
+            "reward": 0.7,
+            "reflection": "Closures allow functions to access variables from their outer scope even after outer function returns",
+            "created_at": datetime(2024, 3, 15, 10, 30),
+        },
+        {
+            "query": "Explain database normalization",
+            "reward": 0.9,
+            "reflection": "Normalization reduces data redundancy and improves data integrity through organized table structure",
+            "created_at": datetime(2024, 6, 20, 14, 15),
+        },
+    ]
+
+    inserted = []
+    for idx, episode in enumerate(episodes):
+        # Generate embedding from query + reflection
+        response = client.embeddings.create(
+            model="text-embedding-3-small",
+            input=episode["query"] + " " + episode["reflection"],
+            encoding_format="float",
+        )
+        embedding = response.data[0].embedding
+
+        cursor.execute(
+            """
+            INSERT INTO episode_memory (id, project_id, query, reward, reflection, embedding, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            RETURNING id, query, created_at
+            """,
+            (
+                -(idx + 1),  # Negative ID for test data
+                "io",
+                episode["query"],
+                episode["reward"],
+                episode["reflection"],
+                embedding,
+                episode["created_at"],
+            ),
+        )
+        result = cursor.fetchone()
+        inserted.append(result)
+
+    conn.commit()
+    return inserted

@@ -25,6 +25,7 @@ from typing import Any
 
 import psycopg2
 import psycopg2.extras
+
 try:
     from mcp.server import Server
     from mcp.types import Tool
@@ -41,33 +42,43 @@ from mcp_server.db.connection import (
     get_connection_with_project_context,
 )
 from mcp_server.middleware.context import get_current_project
-from mcp_server.utils.response import add_response_metadata
-from mcp_server.tools.dual_judge import DualJudgeEvaluator
-from mcp_server.tools.get_golden_test_results import handle_get_golden_test_results
-from mcp_server.tools.graph_add_node import handle_graph_add_node
-from mcp_server.tools.graph_add_edge import handle_graph_add_edge
-from mcp_server.tools.graph_query_neighbors import handle_graph_query_neighbors
-from mcp_server.tools.graph_find_path import handle_graph_find_path
-from mcp_server.tools.get_node_by_name import handle_get_node_by_name
-from mcp_server.tools.get_edge import handle_get_edge
 from mcp_server.tools.count_by_type import handle_count_by_type
-from mcp_server.tools.list_episodes import handle_list_episodes
-from mcp_server.tools.list_insights import handle_list_insights
+from mcp_server.tools.dissonance_check import DISSONANCE_CHECK_TOOL
+from mcp_server.tools.dissonance_check import (
+    handle_dissonance_check as handle_dissonance_check_impl,
+)
+from mcp_server.tools.dual_judge import DualJudgeEvaluator
+from mcp_server.tools.get_edge import handle_get_edge
+from mcp_server.tools.get_golden_test_results import handle_get_golden_test_results
 from mcp_server.tools.get_insight_by_id import handle_get_insight_by_id
-from mcp_server.tools.insights.update import handle_update_insight
+from mcp_server.tools.get_node_by_name import handle_get_node_by_name
+from mcp_server.tools.graph_add_edge import handle_graph_add_edge
+from mcp_server.tools.graph_add_node import handle_graph_add_node
+from mcp_server.tools.graph_find_path import handle_graph_find_path
+from mcp_server.tools.graph_query_neighbors import handle_graph_query_neighbors
 from mcp_server.tools.insights.delete import handle_delete_insight
 from mcp_server.tools.insights.feedback import handle_submit_insight_feedback
 from mcp_server.tools.insights.history import handle_get_insight_history
-from mcp_server.tools.dissonance_check import handle_dissonance_check as handle_dissonance_check_impl, DISSONANCE_CHECK_TOOL
-from mcp_server.tools.resolve_dissonance import handle_resolve_dissonance, RESOLVE_DISSONANCE_TOOL
-from mcp_server.tools.smf_pending_proposals import handle_smf_pending_proposals
-from mcp_server.tools.smf_review import handle_smf_review
-from mcp_server.tools.smf_approve import handle_smf_approve
-from mcp_server.tools.smf_reject import handle_smf_reject
-from mcp_server.tools.smf_undo import handle_smf_undo
-from mcp_server.tools.smf_bulk_approve import handle_smf_bulk_approve
-from mcp_server.tools.suggest_lateral_edges import handle_suggest_lateral_edges
+from mcp_server.tools.insights.update import handle_update_insight
+from mcp_server.tools.list_episodes import handle_list_episodes
+from mcp_server.tools.list_insights import handle_list_insights
 from mcp_server.tools.reclassify_memory_sector import handle_reclassify_memory_sector
+from mcp_server.tools.resolve_dissonance import (
+    RESOLVE_DISSONANCE_TOOL,
+    handle_resolve_dissonance,
+)
+from mcp_server.tools.smf_approve import handle_smf_approve
+from mcp_server.tools.smf_bulk_approve import handle_smf_bulk_approve
+from mcp_server.tools.smf_pending_proposals import handle_smf_pending_proposals
+from mcp_server.tools.smf_reject import handle_smf_reject
+from mcp_server.tools.smf_review import handle_smf_review
+from mcp_server.tools.smf_undo import handle_smf_undo
+from mcp_server.tools.suggest_lateral_edges import handle_suggest_lateral_edges
+from mcp_server.utils.filter_validation import (
+    should_include_source_type,
+    validate_filter_params,
+)
+from mcp_server.utils.response import add_response_metadata
 
 
 def rrf_fusion(
@@ -220,12 +231,16 @@ def semantic_search(
     top_k: int,
     conn: Any,
     filter_params: dict | None = None,
-    sector_filter: list[str] | None = None  # Story 9-4
+    sector_filter: list[str] | None = None,  # Story 9-4
+    tags_filter: list[str] | None = None,  # Story 9.3.1
+    date_from: datetime | None = None,  # Story 9.3.1
+    date_to: datetime | None = None,  # Story 9.3.1
 ) -> list[dict]:
     """
     Semantic search using pgvector cosine distance.
 
     Story 9-4: Extended with sector_filter parameter.
+    Story 9.3.1: Extended with tags_filter, date_from, date_to for pre-filtering.
 
     Args:
         query_embedding: 1536-dim vector from OpenAI
@@ -233,6 +248,9 @@ def semantic_search(
         conn: PostgreSQL connection
         filter_params: Optional filter parameters
         sector_filter: Optional list of memory sectors to filter by (Story 9-4)
+        tags_filter: Optional list of tag names to filter by (Story 9.3.1)
+        date_from: Optional start date for filtering (Story 9.3.1)
+        date_to: Optional end date for filtering (Story 9.3.1)
 
     Returns:
         List of dicts with id, content, source_ids, distance, rank
@@ -241,6 +259,7 @@ def semantic_search(
     register_vector(conn)
 
     cursor = conn.cursor()
+    logger = logging.getLogger(__name__)
 
     # Story 9-4: Early return for empty sector_filter
     if sector_filter is not None and len(sector_filter) == 0:
@@ -257,6 +276,28 @@ def semantic_search(
         sector_clause = " AND metadata->>'memory_sector' = ANY(%s::text[])"
         sector_params = [sector_filter]
 
+    # Story 9.3.1: Build pre-filter clause for tags and date range
+    pre_filter_clauses = []
+    pre_filter_params = []
+
+    # Tags filter using GIN index on tags column
+    if tags_filter is not None:
+        pre_filter_clauses.append("tags @> %s::text[]")
+        pre_filter_params.append(tags_filter)
+
+    # Date range filtering using B-tree index on created_at
+    if date_from is not None:
+        pre_filter_clauses.append("created_at >= %s")
+        pre_filter_params.append(date_from)
+
+    if date_to is not None:
+        pre_filter_clauses.append("created_at <= %s")
+        pre_filter_params.append(date_to)
+
+    pre_filter_clause = ""
+    if pre_filter_clauses:
+        pre_filter_clause = " AND " + " AND ".join(pre_filter_clauses)
+
     # Cosine distance: <=> operator
     # Lower distance = higher similarity
     # Story 11.6.1: Include project_id in SELECT for result metadata tracking
@@ -267,17 +308,28 @@ def semantic_search(
         FROM l2_insights
         WHERE is_deleted = FALSE
           AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
-          {filter_clause}{sector_clause}
+          {filter_clause}{sector_clause}{pre_filter_clause}
         ORDER BY distance
         LIMIT %s;
         """
 
-    # Combine parameters: embedding, filter_values, sector_params, top_k
-    params = [query_embedding] + filter_values + sector_params + [top_k]
+    # Combine parameters: embedding, filter_values, sector_params, pre_filter_params, top_k
+    params = [query_embedding] + filter_values + sector_params + pre_filter_params + [top_k]
 
     cursor.execute(query, params)
-
     results = cursor.fetchall()
+
+    # Story 9.3.1: Log pre-filter statistics
+    if tags_filter or date_from or date_to:
+        logger.debug(
+            "Pre-filter applied to semantic_search",
+            extra={
+                "tags_filter": tags_filter,
+                "date_from": date_from.isoformat() if date_from else None,
+                "date_to": date_to.isoformat() if date_to else None,
+                "results_count": len(results),
+            }
+        )
 
     # Add rank position (1-indexed)
     # Story 11.6.1: Include project_id in result metadata
@@ -305,6 +357,9 @@ def keyword_search(
     conn: Any,
     filter_params: dict | None = None,
     sector_filter: list[str] | None = None,  # Story 9-4
+    tags_filter: list[str] | None = None,  # Story 9.3.1
+    date_from: datetime | None = None,  # Story 9.3.1
+    date_to: datetime | None = None,  # Story 9.3.1
     language: str = "simple"
 ) -> list[dict]:
     """
@@ -316,6 +371,7 @@ def keyword_search(
     like "Identitätsmaterial" or "Task-Completion-Modus".
 
     Story 9-4: Extended with sector_filter parameter.
+    Story 9.3.1: Extended with tags_filter, date_from, date_to for pre-filtering.
 
     Args:
         query_text: Query string (e.g., "consciousness autonomy")
@@ -323,6 +379,9 @@ def keyword_search(
         conn: PostgreSQL connection
         filter_params: Optional filter parameters
         sector_filter: Optional list of memory sectors to filter by (Story 9-4)
+        tags_filter: Optional list of tag names to filter by (Story 9.3.1)
+        date_from: Optional start date for filtering (Story 9.3.1)
+        date_to: Optional end date for filtering (Story 9.3.1)
         language: FTS language config ('simple', 'english', 'german', etc.)
                   Default: 'simple' for multi-language support
 
@@ -330,6 +389,7 @@ def keyword_search(
         List of dicts with id, content, source_ids, rank, rank_position
     """
     cursor = conn.cursor()
+    logger = logging.getLogger(__name__)
 
     # Story 9-4: Early return for empty sector_filter
     if sector_filter is not None and len(sector_filter) == 0:
@@ -346,6 +406,28 @@ def keyword_search(
         sector_clause = " AND metadata->>'memory_sector' = ANY(%s::text[])"
         sector_params = [sector_filter]
 
+    # Story 9.3.1: Build pre-filter clause for tags and date range
+    pre_filter_clauses = []
+    pre_filter_params = []
+
+    # Tags filter using GIN index on tags column
+    if tags_filter is not None:
+        pre_filter_clauses.append("tags @> %s::text[]")
+        pre_filter_params.append(tags_filter)
+
+    # Date range filtering using B-tree index on created_at
+    if date_from is not None:
+        pre_filter_clauses.append("created_at >= %s")
+        pre_filter_params.append(date_from)
+
+    if date_to is not None:
+        pre_filter_clauses.append("created_at <= %s")
+        pre_filter_params.append(date_to)
+
+    pre_filter_clause = ""
+    if pre_filter_clauses:
+        pre_filter_clause = " AND " + " AND ".join(pre_filter_clauses)
+
     # ts_rank: Relevance score (higher = better match)
     # plainto_tsquery: Converts plain text to tsquery (handles spaces, punctuation)
     # Using parameterized language config for multi-language support
@@ -361,17 +443,28 @@ def keyword_search(
         WHERE is_deleted = FALSE
           AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
           AND to_tsvector('{language}', content) @@ plainto_tsquery('{language}', %s)
-        {filter_clause}{sector_clause}
+        {filter_clause}{sector_clause}{pre_filter_clause}
         ORDER BY rank DESC
         LIMIT %s;
         """
 
-    # Combine parameters: query_text, query_text, filter_values, sector_params, top_k
-    params = [query_text, query_text] + filter_values + sector_params + [top_k]
+    # Combine parameters: query_text, query_text, filter_values, sector_params, pre_filter_params, top_k
+    params = [query_text, query_text] + filter_values + sector_params + pre_filter_params + [top_k]
 
     cursor.execute(query, params)
-
     results = cursor.fetchall()
+
+    # Story 9.3.1: Log pre-filter statistics
+    if tags_filter or date_from or date_to:
+        logger.debug(
+            "Pre-filter applied to keyword_search",
+            extra={
+                "tags_filter": tags_filter,
+                "date_from": date_from.isoformat() if date_from else None,
+                "date_to": date_to.isoformat() if date_to else None,
+                "results_count": len(results),
+            }
+        )
 
     # Add rank position (1-indexed)
     # Story 11.6.1: Include project_id in result metadata
@@ -399,7 +492,11 @@ def keyword_search(
 
 
 def episode_semantic_search(
-    query_embedding: list[float], top_k: int, conn: Any
+    query_embedding: list[float],
+    top_k: int,
+    conn: Any,
+    date_from: datetime | None = None,  # Story 9.3.1
+    date_to: datetime | None = None,  # Story 9.3.1
 ) -> list[dict]:
     """
     Semantic search in episode_memory using pgvector cosine distance.
@@ -408,10 +505,14 @@ def episode_semantic_search(
     Episodes contain valuable lessons (query + reward + reflection) that
     should be searchable.
 
+    Story 9.3.1: Extended with date_from, date_to for pre-filtering.
+
     Args:
         query_embedding: 1536-dim vector from OpenAI
         top_k: Number of results to return
         conn: PostgreSQL connection
+        date_from: Optional start date for filtering (Story 9.3.1)
+        date_to: Optional end date for filtering (Story 9.3.1)
 
     Returns:
         List of dicts with id, query, reflection, reward, distance, rank
@@ -420,22 +521,48 @@ def episode_semantic_search(
     register_vector(conn)
 
     cursor = conn.cursor()
+    logger = logging.getLogger(__name__)
+
+    # Story 9.3.1: Build date range filter clause
+    date_filter_clause = ""
+    date_params = []
+
+    if date_from is not None:
+        date_filter_clause += " AND created_at >= %s"
+        date_params.append(date_from)
+
+    if date_to is not None:
+        date_filter_clause += " AND created_at <= %s"
+        date_params.append(date_to)
 
     # Cosine distance: <=> operator
     # Lower distance = higher similarity
     # Story 11.6.1: Include project_id in SELECT for result metadata tracking
     # Fix: Explicit project_id filter as defense-in-depth (neondb_owner has BYPASSRLS)
-    query = """
+    query = f"""
         SELECT id, query, reflection, reward, created_at, project_id,
                embedding <=> %s::vector AS distance
         FROM episode_memory
         WHERE project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
+        {date_filter_clause}
         ORDER BY distance
         LIMIT %s;
         """
 
-    cursor.execute(query, [query_embedding, top_k])
+    params = [query_embedding] + date_params + [top_k]
+    cursor.execute(query, params)
     results = cursor.fetchall()
+
+    # Story 9.3.1: Log pre-filter statistics
+    if date_from or date_to:
+        logger.debug(
+            "Pre-filter applied to episode_semantic_search",
+            extra={
+                "date_from": date_from.isoformat() if date_from else None,
+                "date_to": date_to.isoformat() if date_to else None,
+                "results_count": len(results),
+            }
+        )
 
     # Format results for RRF fusion (needs 'id' and 'content' keys)
     # Story 11.6.1: Include project_id in result metadata
@@ -458,7 +585,12 @@ def episode_semantic_search(
 
 
 def episode_keyword_search(
-    query_text: str, top_k: int, conn: Any, language: str = "simple"
+    query_text: str,
+    top_k: int,
+    conn: Any,
+    date_from: datetime | None = None,  # Story 9.3.1
+    date_to: datetime | None = None,  # Story 9.3.1
+    language: str = "simple"
 ) -> list[dict]:
     """
     Keyword search in episode_memory using PostgreSQL Full-Text Search.
@@ -466,16 +598,33 @@ def episode_keyword_search(
     Bug Fix 2025-12-06: Added to include episode memories in hybrid search.
     Uses 'simple' language by default for multi-language support.
 
+    Story 9.3.1: Extended with date_from, date_to for pre-filtering.
+
     Args:
         query_text: Query string
         top_k: Number of results to return
         conn: PostgreSQL connection
+        date_from: Optional start date for filtering (Story 9.3.1)
+        date_to: Optional end date for filtering (Story 9.3.1)
         language: FTS language config (default: 'simple' for multi-language)
 
     Returns:
         List of dicts with id, query, reflection, reward, rank
     """
     cursor = conn.cursor()
+    logger = logging.getLogger(__name__)
+
+    # Story 9.3.1: Build date range filter clause
+    date_filter_clause = ""
+    date_params = []
+
+    if date_from is not None:
+        date_filter_clause += " AND created_at >= %s"
+        date_params.append(date_from)
+
+    if date_to is not None:
+        date_filter_clause += " AND created_at <= %s"
+        date_params.append(date_to)
 
     # Search in both query and reflection fields
     # Using 'simple' language for better multi-language support
@@ -491,12 +640,25 @@ def episode_keyword_search(
         WHERE to_tsvector('{language}', query || ' ' || reflection)
               @@ plainto_tsquery('{language}', %s)
           AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
+        {date_filter_clause}
         ORDER BY rank DESC
         LIMIT %s;
         """
 
-    cursor.execute(query, [query_text, query_text, top_k])
+    params = [query_text, query_text] + date_params + [top_k]
+    cursor.execute(query, params)
     results = cursor.fetchall()
+
+    # Story 9.3.1: Log pre-filter statistics
+    if date_from or date_to:
+        logger.debug(
+            "Pre-filter applied to episode_keyword_search",
+            extra={
+                "date_from": date_from.isoformat() if date_from else None,
+                "date_to": date_to.isoformat() if date_to else None,
+                "results_count": len(results),
+            }
+        )
 
     # Format results for RRF fusion
     # Story 11.6.1: Include project_id in result metadata
@@ -1315,12 +1477,14 @@ async def handle_hybrid_search(arguments: dict[str, Any]) -> dict[str, Any]:
 
     Story 4.6: Extended with graph search integration and query routing.
     Story 11.6.1: Project-aware filtering with RLS and pgvector iterative scans.
+    Story 9.3.1: Extended with tags_filter, date_from, date_to, source_type_filter for pre-filtering.
 
     Args:
-        arguments: Tool arguments containing query_text, optional query_embedding, top_k, weights
+        arguments: Tool arguments containing query_text, optional query_embedding, top_k, weights,
+                   and new filter parameters (tags_filter, date_from, date_to, source_type_filter)
 
     Returns:
-        Search results with fused scores, query type, and applied weights
+        Search results with fused scores, query type, applied weights, and applied filters
     """
     logger = logging.getLogger(__name__)
 
@@ -1333,6 +1497,22 @@ async def handle_hybrid_search(arguments: dict[str, Any]) -> dict[str, Any]:
         filter_params = arguments.get("filter")
         # Story 9-4: Extract sector_filter parameter
         sector_filter = arguments.get("sector_filter")
+
+        # Story 9.3.1: Extract new filter parameters
+        tags_filter = arguments.get("tags_filter")
+        date_from = arguments.get("date_from")
+        date_to = arguments.get("date_to")
+        source_type_filter = arguments.get("source_type_filter")
+
+        # Story 9.3.1: Validate new filter parameters
+        filter_validation = validate_filter_params(
+            tags_filter=tags_filter,
+            date_from=date_from,
+            date_to=date_to,
+            source_type_filter=source_type_filter,
+        )
+        if "error" in filter_validation:
+            return filter_validation
 
         # Story 9-4: Validate sector_filter parameter
         if sector_filter is not None:
@@ -1365,6 +1545,13 @@ async def handle_hybrid_search(arguments: dict[str, Any]) -> dict[str, Any]:
                     "final_results_count": 0,
                     "query_type": "standard",
                     "sector_filter": sector_filter,
+                    # Story 9.3.1: Include new filter parameters in response
+                    "applied_filters": {
+                        "tags_filter": tags_filter,
+                        "date_from": date_from.isoformat() if date_from else None,
+                        "date_to": date_to.isoformat() if date_to else None,
+                        "source_type_filter": source_type_filter,
+                    },
                     "status": "success",
                 }
 
@@ -1451,22 +1638,42 @@ async def handle_hybrid_search(arguments: dict[str, Any]) -> dict[str, Any]:
         # 1. RLS context is set from project_context contextvar
         # 2. pgvector iterative scans are configured
         # 3. Queries automatically respect project boundaries
+        # Story 9.3.1: Check source_type_filter before running searches
+        run_semantic = should_include_source_type("l2_insight", source_type_filter)
+        run_keyword = should_include_source_type("l2_insight", source_type_filter)
+        run_episode_semantic = should_include_source_type("episode_memory", source_type_filter)
+        run_episode_keyword = should_include_source_type("episode_memory", source_type_filter)
+        run_graph = should_include_source_type("graph", source_type_filter)
+
         async with get_connection_with_project_context(read_only=True) as conn:
-            # Run L2 Insights searches (Story 9-4: Pass sector_filter)
+            # Run L2 Insights searches (Story 9-4: Pass sector_filter; Story 9.3.1: Pass new filters)
             # RLS filters results by project_id automatically
-            semantic_results = semantic_search(query_embedding, top_k, conn, filter_params, sector_filter)
-            keyword_results = keyword_search(query_text, top_k, conn, filter_params, sector_filter)
+            semantic_results = semantic_search(
+                query_embedding, top_k, conn, filter_params, sector_filter,
+                tags_filter, date_from, date_to
+            ) if run_semantic else []
+            keyword_results = keyword_search(
+                query_text, top_k, conn, filter_params, sector_filter,
+                tags_filter, date_from, date_to
+            ) if run_keyword else []
 
             # Bug Fix 2025-12-06: Run Episode Memory searches
             # Episodes contain valuable lessons that should be searchable
             # Story 9-4: Episodes not filtered by sector (future enhancement)
+            # Story 9.3.1: Episodes filtered by date range only
             # RLS filters results by project_id automatically
-            episode_semantic_results = episode_semantic_search(query_embedding, top_k, conn)
-            episode_keyword_results = episode_keyword_search(query_text, top_k, conn)
+            episode_semantic_results = episode_semantic_search(
+                query_embedding, top_k, conn, date_from, date_to
+            ) if run_episode_semantic else []
+            episode_keyword_results = episode_keyword_search(
+                query_text, top_k, conn, date_from, date_to
+            ) if run_episode_keyword else []
 
             # Story 4.6: Run graph search (Story 9-4: Pass sector_filter)
             # RLS filters results by project_id automatically
-            graph_results = await graph_search(query_text, top_k, conn, sector_filter)
+            graph_results = await graph_search(
+                query_text, top_k, conn, sector_filter
+            ) if run_graph else []
 
         # Bug Fix 2025-12-06: Merge episode results with L2 results for RRF fusion
         # Episodes use prefixed IDs ("episode_49") to distinguish from l2_insights IDs
@@ -1530,6 +1737,13 @@ async def handle_hybrid_search(arguments: dict[str, Any]) -> dict[str, Any]:
             "weights": applied_weights,                 # Backwards-compatible alias
             # Story 9-4: Include sector_filter in response
             "sector_filter": sector_filter,
+            # Story 9.3.1: Include new filter parameters in response metadata
+            "applied_filters": {
+                "tags_filter": tags_filter,
+                "date_from": date_from.isoformat() if date_from else None,
+                "date_to": date_to.isoformat() if date_to else None,
+                "source_type_filter": source_type_filter,
+            },
             # Story 11.6.1: Add requesting project_id to response metadata
             "project_id": requesting_project,
             "status": "success",
@@ -2476,7 +2690,7 @@ def register_tools(server) -> list:
         ),
         Tool(
             name="hybrid_search",
-            description="Perform hybrid semantic + keyword + graph search with RRF fusion. Supports sector filtering by memory type. Embedding is generated automatically from query_text if not provided.",
+            description="Perform hybrid semantic + keyword + graph search with RRF fusion. Supports sector filtering, tag filtering, date range filtering, and source type filtering. Embedding is generated automatically from query_text if not provided.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -2527,6 +2741,29 @@ def register_tools(server) -> list:
                             "enum": ["emotional", "episodic", "semantic", "procedural", "reflective"],
                         },
                         "description": "Optional: Filter results by memory sector(s). If null or omitted, returns all sectors. Empty array returns no results.",
+                    },
+                    "tags_filter": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional: Filter results by tag names. Pre-filtering applied before vector search for performance (Story 9.3.1).",
+                    },
+                    "date_from": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "Optional: Filter results to entries on or after this date (ISO 8601 format). Pre-filtering applied before vector search (Story 9.3.1).",
+                    },
+                    "date_to": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "Optional: Filter results to entries on or before this date (ISO 8601 format). Pre-filtering applied before vector search (Story 9.3.1).",
+                    },
+                    "source_type_filter": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "enum": ["l2_insight", "episode_memory", "graph"],
+                        },
+                        "description": "Optional: Filter results by source type(s). Allowed values: 'l2_insight', 'episode_memory', 'graph'. If null or omitted, returns all source types (Story 9.3.1).",
                     },
                 },
                 "required": ["query_text"],
