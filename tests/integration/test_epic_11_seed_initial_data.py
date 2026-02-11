@@ -128,7 +128,7 @@ class TestSeedInitialData:
         expected = {
             'io': ('I/O System', 'super'),
             'echo': ('Echo', 'super'),
-            'ea': ('Echo Assistant', 'super'),
+            'ea': ('ethr-assistant', 'super'),
             'ab': ('Application Builder', 'shared'),
             'aa': ('Application Assistant', 'shared'),
             'bap': ('bmad-audit-polish', 'shared'),
@@ -315,7 +315,7 @@ class TestSeedInitialData:
         for project_id, name, access_level in [
             ('io', 'I/O System', 'super'),
             ('echo', 'Echo', 'super'),
-            ('ea', 'Echo Assistant', 'super'),
+            ('ea', 'ethr-assistant', 'super'),
             ('ab', 'Application Builder', 'shared'),
             ('aa', 'Application Assistant', 'shared'),
             ('bap', 'bmad-audit-polish', 'shared'),

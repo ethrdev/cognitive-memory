@@ -23,7 +23,7 @@ VALUES ('echo', 'Echo', 'super')
 ON CONFLICT (project_id) DO NOTHING;
 
 INSERT INTO project_registry (project_id, name, access_level)
-VALUES ('ea', 'Echo Assistant', 'super')
+VALUES ('ea', 'ethr-assistant', 'super')
 ON CONFLICT (project_id) DO NOTHING;
 
 -- SHARED Projects (can read semantic-memory)
