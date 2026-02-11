@@ -5,6 +5,7 @@ MCP tool for listing L2 insights with pagination and extended filtering.
 Supports filtering by tags, date ranges, io_category, is_identity, and memory_sector.
 
 Story 9.2.2: list_insights New Endpoint
+Story 9.2.3: pagination-validation - Uses shared pagination validation utility
 """
 
 from __future__ import annotations
@@ -15,6 +16,11 @@ from typing import Any
 
 from mcp_server.db.insights import list_insights
 from mcp_server.middleware.context import get_current_project
+from mcp_server.utils.pagination import (
+    LimitValidationError,
+    OffsetValidationError,
+    validate_pagination_params,
+)
 from mcp_server.utils.response import add_response_metadata
 
 
@@ -49,19 +55,15 @@ async def handle_list_insights(arguments: dict[str, Any]) -> dict[str, Any]:
         is_identity = arguments.get("is_identity")
         memory_sector = arguments.get("memory_sector")
 
-        # Parameter validation - limit
-        if not isinstance(limit, int) or limit < 1 or limit > 100:
+        # Story 9.2.3: Use shared pagination validation utility
+        try:
+            validated = validate_pagination_params(limit=limit, offset=offset)
+            limit = validated["limit"]
+            offset = validated["offset"]
+        except (LimitValidationError, OffsetValidationError) as e:
             return add_response_metadata({
                 "error": "Parameter validation failed",
-                "details": "limit must be between 1 and 100",
-                "tool": "list_insights",
-            }, project_id)
-
-        # Parameter validation - offset
-        if not isinstance(offset, int) or offset < 0:
-            return add_response_metadata({
-                "error": "Parameter validation failed",
-                "details": "offset must be >= 0",
+                "details": str(e),
                 "tool": "list_insights",
             }, project_id)
 

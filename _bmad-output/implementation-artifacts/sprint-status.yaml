@@ -122,7 +122,7 @@ development_status:
   epic-9-2: in-progress
   9-2-1-list-epochs-extended-parameters: done
   9-2-2-list-insights-new-endpoint: done
-  9-2-3-pagination-validation: backlog
+  9-2-3-pagination-validation: done
   epic-9-2-retrospective: optional
 
   # Epic 9.3: Pre-Filtering in hybrid_search

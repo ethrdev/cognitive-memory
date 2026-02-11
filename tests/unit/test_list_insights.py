@@ -551,7 +551,8 @@ async def test_limit_minimum_validation(with_project_context):
     result = await handle_list_insights({"limit": 0})
 
     assert "error" in result
-    assert "limit must be between 1 and 100" in result["details"]
+    # Story 9.2.3: New pagination utility provides more specific error message
+    assert "limit" in result["details"].lower()
 
 
 @pytest.mark.asyncio
@@ -569,7 +570,8 @@ async def test_limit_type_validation(with_project_context):
     result = await handle_list_insights({"limit": "fifty"})
 
     assert "error" in result
-    assert "limit must be between 1 and 100" in result["details"]
+    # Story 9.2.3: New pagination utility provides more specific error message
+    assert "limit" in result["details"].lower()
 
 
 @pytest.mark.asyncio
@@ -587,7 +589,8 @@ async def test_offset_type_validation(with_project_context):
     result = await handle_list_insights({"offset": "ten"})
 
     assert "error" in result
-    assert "offset must be >= 0" in result["details"]
+    # Story 9.2.3: New pagination utility provides more specific error message
+    assert "offset" in result["details"].lower()
 
 
 # =============================================================================
