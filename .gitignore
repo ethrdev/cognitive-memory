@@ -2,70 +2,44 @@
 .env.development
 .env.production
 .env
-
 # Lock Files - Token-Fresser, enthalten tausende irrelevante Zeilen
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
 poetry.lock
-Pipfile.lock
 requirements.lock
 *.lock
-
 # PostgreSQL credentials
 *.db
 *.sqlite
-
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
 # Virtual environments
 venv/
-env/
+.env/
 ENV/
 .venv/
-.env/
-
 # Testing
 .pytest_cache/
-.coverage
+coverage
 htmlcov/
 .tox/
 .nox/
-.coverage.*
-.cache
+coverage.*
 nosetests.xml
 coverage.xml
 *.cover
 .hypothesis/
-
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
+# Temporary files
+*.tmp
+*.temp
+*.backup
+*.bak
+*.old
+*.orig
 # OS
 .DS_Store
 .DS_Store?
@@ -74,15 +48,13 @@ coverage.xml
 .Trashes
 ehthumbs.db
 Thumbs.db
-
 # Logs
 *.log
 logs/
 *.log.*
 log/
 *.out
-
-# Daten-Dateien - Große Datensätze (falls vorhanden)
+# Data-Dateien - Große Datenmengen (falls vorhanden)
 *.csv
 *.tsv
 *.xlsx
@@ -94,66 +66,23 @@ datasets/
 *.data.json
 *.dataset.json
 *.large.json
-
 # Security scanning reports
 bandit-report.json
-
 # Memory backups (sensitive data)
 memory/
 backups/
 i-o/
-i-o-consciousness-projekt/
+i-o-consciousness-project/
 ethr/
-
 # Temporary files
 *.tmp
 *.temp
-*.backup
-*.bak
-*.old
-*.orig
-
 # BMAD framework (local tooling)
 bmad/
 .bmad/
+# Note: bmad-docs/ is tracked - contains project documentation (PRD, architecture, retrospectives)
+# BMAD Output (local tooling artifacts)
 _bmad/
 _bmad-output/
-
-# Note: bmad-docs/ is tracked - contains project documentation (PRD, architecture, retrospectives)
-
-# IDE-specific configurations (keep local only)
-.claude/
-.cursor/
-.gemini/
-.opencode/
-
-# MCP configuration (user-specific, use .mcp.json.template)
-.mcp.json
-.mcp-alt.json
-
-# Debug and development scripts (keep local only)
-debug_*.py
-start-mcp-server.sh
-test_neon_connection.py
-config.yaml.backup.*
-
-# Internal/development documentation (keep local only)
-docs/README.md
-docs/HOW-TO-ACTIVATE-IO.md
-docs/7-day-stability-*.md
-docs/fallback-strategy.md
-docs/staged-dual-judge.md
-docs/systemd-deployment.md
-docs/production-checklist.md
-docs/mcp-configuration.md
-docs/POSTGRESQL_SETUP.md
-docs/PORTFOLIO-USE-CASES.md
-docs/GOLDEN_TEST_SET.md
-docs/query-expansion-*.md
-docs/cot-*.md
-docs/reflexion-*.md
-docs/budget-monitoring*.md
-docs/integration/
-tests/manual/
-BUGFIX_INSTRUCTIONS*.md
-BUGFIX_INSTRUCTIONS*.md
+# Exception for sprint tracking (needs to be committed)
+!_bmad-output/implementation-artifacts/sprint-status.yaml
