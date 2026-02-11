@@ -101,8 +101,41 @@ development_status:
   epic-11-7-retro-file: epic-11-7-retro-2026-01-24.md
 
   # Epic 11.8: Gradual Rollout Execution
-  epic-11-8: in-progress
+  epic-11-8: done
   11-8-1-migration-scripts-tooling: done
   11-8-2-shadow-phase-execution-monitoring: done
-  11-8-3-enforcing-phase-activation-validation: in-progress
+  11-8-3-enforcing-phase-activation-validation: done
   epic-11-8-retrospective: optional
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Epic 9: Structured Retrieval - Tags & Filter System
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  # Epic 9.1: Tags-Infrastruktur (Schema + Parameter)
+  epic-9-1: in-progress
+  9-1-1-tags-schema-migration: done
+  9-1-2-store-episode-tags-parameter: backlog
+  9-1-3-compress-to-l2-insight-tags-parameter: backlog
+  9-1-4-tag-taxonomy-definition: backlog
+  epic-9-1-retrospective: optional
+
+  # Epic 9.2: Filter-Endpoints (list_episodes, list_insights)
+  epic-9-2: backlog
+  9-2-1-list-epochs-extended-parameters: backlog
+  9-2-2-list-insights-new-endpoint: backlog
+  9-2-3-pagination-validation: backlog
+  epic-9-2-retrospective: optional
+
+  # Epic 9.3: Pre-Filtering in hybrid_search
+  epic-9-3: backlog
+  9-3-1-hybrid-search-extended-parameters: backlog
+  9-3-2-pre-filtering-implementation: backlog
+  9-3-3-performance-validation: backlog
+  epic-9-3-retrospective: optional
+
+  # Epic 9.4: Retroaktives Tagging des Bestands
+  epic-9-4: backlog
+  9-4-1-retroactive-tagging-script: backlog
+  9-4-2-dry-run-mode: backlog
+  9-4-3-idempotent-validation: backlog
+  epic-9-4-retrospective: optional

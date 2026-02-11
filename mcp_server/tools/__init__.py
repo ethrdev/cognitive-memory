@@ -1090,9 +1090,31 @@ async def handle_compress_to_l2_insight(arguments: dict[str, Any]) -> dict[str, 
         content = arguments.get("content")
         source_ids = arguments.get("source_ids")
         memory_strength = arguments.get("memory_strength", 0.5)
+        tags = arguments.get("tags")  # Story 9.1.1: Optional tags parameter
         # Fix: Explicit None should also use default (not just missing key)
         if memory_strength is None:
             memory_strength = 0.5
+
+        # Story 9.1.1: Tag validation (string-only enforcement)
+        if tags is not None:
+            if not isinstance(tags, list):
+                return add_response_metadata({
+                    "error": "Invalid tags parameter",
+                    "details": "tags must be an array of strings or omitted",
+                    "tool": "compress_to_l2_insight",
+                }, project_id)
+            # Validate each tag is a string
+            for i, tag in enumerate(tags):
+                if not isinstance(tag, str):
+                    return add_response_metadata({
+                        "error": "Invalid tag content",
+                        "details": f"tags[{i}] must be a string, got {type(tag).__name__}",
+                        "tool": "compress_to_l2_insight",
+                    }, project_id)
+
+        # Convert None to empty array for PostgreSQL (Story 9.1.1)
+        if tags is None:
+            tags = []
 
         # Parameter validation
         if not content or not isinstance(content, str):
@@ -1178,13 +1200,14 @@ async def handle_compress_to_l2_insight(arguments: dict[str, Any]) -> dict[str, 
                 cursor = conn.cursor()
 
                 # Story 11.5.2: Insert insight with project_id for namespace isolation
+                # Story 9.1.1: Add tags column for structured retrieval
                 cursor.execute(
                     """
-                    INSERT INTO l2_insights (project_id, content, embedding, source_ids, metadata, memory_strength)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    INSERT INTO l2_insights (project_id, content, embedding, source_ids, metadata, memory_strength, tags)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     RETURNING id, project_id, created_at;
                     """,
-                    (project_id, content, embedding, source_ids, json.dumps(metadata), memory_strength),
+                    (project_id, content, embedding, source_ids, json.dumps(metadata), memory_strength, tags),
                 )
 
                 result = cursor.fetchone()
@@ -1933,12 +1956,14 @@ async def handle_delete_working_memory(arguments: dict[str, Any]) -> dict[str, A
 
 
 async def add_episode(
-    query: str, reward: float, reflection: str, conn: Any, project_id: str | None = None
+    query: str, reward: float, reflection: str, conn: Any, project_id: str | None = None,
+    tags: list[str] | None = None
 ) -> dict[str, Any]:
     """
     Store episode in database with embedding.
 
     Story 11.5.3: Memory Write Operations - Added project_id parameter for namespace isolation
+    Story 9.1.1: Tags Schema Migration - Added tags parameter for structured retrieval
 
     Args:
         query: User query that triggered the episode
@@ -1946,6 +1971,7 @@ async def add_episode(
         reflection: Verbalized lesson learned
         conn: Database connection
         project_id: Project ID for namespace isolation (uses current_project context if None)
+        tags: Optional list of string tags for structured retrieval
 
     Returns:
         Dictionary with episode ID, embedding status, and episode data
@@ -1975,17 +2001,22 @@ async def add_episode(
     # Register vector type for pgvector
     register_vector(conn)
 
+    # Story 9.1.1: Convert None to empty array for PostgreSQL
+    if tags is None:
+        tags = []
+
     cursor = conn.cursor()
 
-    # Insert episode with embedding and project_id
+    # Insert episode with embedding, project_id, and tags
     # Story 11.5.3: Explicitly include project_id in INSERT for namespace isolation
+    # Story 9.1.1: Add tags column for structured retrieval
     cursor.execute(
         """
-        INSERT INTO episode_memory (query, reward, reflection, embedding, created_at, project_id)
-        VALUES (%s, %s, %s, %s, NOW(), %s)
+        INSERT INTO episode_memory (query, reward, reflection, embedding, created_at, project_id, tags)
+        VALUES (%s, %s, %s, %s, NOW(), %s, %s)
         RETURNING id, created_at;
         """,
-        (query, reward, reflection, embedding, project_id),
+        (query, reward, reflection, embedding, project_id, tags),
     )
 
     result = cursor.fetchone()
@@ -2023,6 +2054,7 @@ async def handle_store_episode(arguments: dict[str, Any]) -> dict[str, Any]:
         query = arguments["query"]
         reward = arguments["reward"]
         reflection = arguments["reflection"]
+        tags = arguments.get("tags")  # Story 9.1.1: Optional tags parameter
     except KeyError as e:
         return add_response_metadata({
             "error": f"Missing required parameter: {e}",
@@ -2056,6 +2088,25 @@ async def handle_store_episode(arguments: dict[str, Any]) -> dict[str, Any]:
             "embedding_status": "failed",
         }, project_id)
 
+    # Story 9.1.1: Tag validation (string-only enforcement)
+    if tags is not None:
+        if not isinstance(tags, list):
+            return add_response_metadata({
+                "error": "Invalid tags parameter",
+                "details": "tags must be an array of strings or omitted",
+                "tool": "store_episode",
+                "embedding_status": "failed",
+            }, project_id)
+        # Validate each tag is a string
+        for i, tag in enumerate(tags):
+            if not isinstance(tag, str):
+                return add_response_metadata({
+                    "error": "Invalid tag content",
+                    "details": f"tags[{i}] must be a string, got {type(tag).__name__}",
+                    "tool": "store_episode",
+                    "embedding_status": "failed",
+                }, project_id)
+
     # Validate reward range BEFORE API call (save costs on invalid input)
     if reward < -1.0 or reward > 1.0:
         return add_response_metadata({
@@ -2068,8 +2119,9 @@ async def handle_store_episode(arguments: dict[str, Any]) -> dict[str, Any]:
     # Store episode in database
     try:
         # Story 11.5.3: Use get_connection_with_project_context for RLS context
+        # Story 9.1.1: Pass tags parameter to add_episode
         async with get_connection_with_project_context() as conn:
-            result = await add_episode(query, reward, reflection, conn, project_id)
+            result = await add_episode(query, reward, reflection, conn, project_id, tags)
             logger.info(f"Successfully stored episode with ID: {result['id']}")
             return add_response_metadata(result, project_id)
 
