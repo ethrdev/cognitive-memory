@@ -3556,7 +3556,13 @@ def register_tools(server) -> list:
             }
             return await handle_compress_to_l2_insight(arguments)
 
-        @server.tool()
+        @server.tool(
+            description="Perform hybrid semantic + keyword + graph search with RRF fusion. "
+                        "Supports pre-filtering by tags, date range, and source type for optimized performance. "
+                        "Filter parameters (tags_filter, date_from, date_to, source_type_filter) "
+                        "reduce search space BEFORE expensive vector operations using database indexes. "
+                        "All filters are optional and backward compatible."
+        )
         async def hybrid_search(arguments: dict[str, Any]) -> dict[str, Any]:
             return await handle_hybrid_search(arguments)
 
