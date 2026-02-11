@@ -114,9 +114,8 @@ development_status:
   # Epic 9.1: Tags-Infrastruktur (Schema + Parameter)
   epic-9-1: in-progress
   9-1-1-tags-schema-migration: done
-  9-1-2-store-episode-tags-parameter: backlog
-  9-1-3-compress-to-l2-insight-tags-parameter: backlog
-  9-1-4-tag-taxonomy-definition: backlog
+  9-1-2-compress-to-l2-insight-tags-parameter: done
+  9-1-3-tag-taxonomy-definition: backlog
   epic-9-1-retrospective: optional
 
   # Epic 9.2: Filter-Endpoints (list_episodes, list_insights)

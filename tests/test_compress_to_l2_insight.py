@@ -4,26 +4,75 @@ Unit tests for compress_to_l2_insight tool.
 Tests OpenAI embeddings integration, semantic fidelity check, and database storage.
 """
 
+import asyncio
 import json
 import os
+import sys
 from unittest.mock import Mock, patch
 
 import pytest
 
-from mcp_server.db.connection import get_connection
+# Add the mcp_server directory to the path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from mcp_server.db.connection import (
+    close_all_connections,
+    get_connection,
+    initialize_pool_sync,
+)
 from mcp_server.tools import calculate_fidelity, handle_compress_to_l2_insight
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_test_database():
+    """Initialize database connection pool for tests."""
+    # Load environment variables
+    from dotenv import load_dotenv
+
+    load_dotenv(".env.development")
+
+    # Initialize connection pool (sync version for pytest fixture)
+    initialize_pool_sync()
+
+    # Create test-project in project_registry for RLS
+    async def _create_test_project():
+        async with get_connection() as conn:
+            cursor = conn.cursor()
+            # Check if project exists, insert if not
+            cursor.execute(
+                "SELECT id FROM project_registry WHERE project_id = %s",
+                ("test-project",)
+            )
+            if not cursor.fetchone():
+                cursor.execute(
+                    "INSERT INTO project_registry (project_id, name, access_level) VALUES (%s, %s, %s)",
+                    ("test-project", "Test Project", "isolated")
+                )
+                conn.commit()
+
+    try:
+        asyncio.run(_create_test_project())
+    except Exception as e:
+        print(f"Warning: Could not create test-project: {e}")
+
+    yield
+
+    # Clean up
+    close_all_connections()
 
 
 @pytest.fixture(scope="function", autouse=True)
 def cleanup_test_data():
     """Clean up test data after each test."""
     yield
-    try:
-        with get_connection() as conn:
+    async def _cleanup():
+        async with get_connection() as conn:
             cursor = conn.cursor()
             # Delete test insights created during tests
             cursor.execute("DELETE FROM l2_insights WHERE content LIKE 'test_%'")
             conn.commit()
+    try:
+        asyncio.run(_cleanup())
     except Exception:
         pass  # Ignore cleanup errors
 
@@ -291,7 +340,7 @@ class TestHandleCompressToL2Insight:
                     assert "error" not in result, f"Unexpected error: {result}"
 
                     # Verify data was stored in database
-                    with get_connection() as conn:
+                    async with get_connection() as conn:
                         cursor = conn.cursor()
                         cursor.execute(
                             "SELECT content, embedding, source_ids, metadata FROM l2_insights WHERE id = %s",
@@ -327,7 +376,7 @@ class TestHandleCompressToL2Insight:
                     assert "error" not in result, f"Unexpected error: {result}"
 
                     # Verify embedding was stored correctly
-                    with get_connection() as conn:
+                    async with get_connection() as conn:
                         cursor = conn.cursor()
                         cursor.execute(
                             "SELECT embedding FROM l2_insights WHERE id = %s",
@@ -367,7 +416,7 @@ class TestHandleCompressToL2Insight:
                     ), "Fidelity should be below threshold"
 
                     # Check metadata contains warning
-                    with get_connection() as conn:
+                    async with get_connection() as conn:
                         cursor = conn.cursor()
                         cursor.execute(
                             "SELECT metadata FROM l2_insights WHERE id = %s",
@@ -408,7 +457,7 @@ class TestHandleCompressToL2Insight:
                     ), "Fidelity should be above threshold"
 
                     # Check metadata does not contain warning
-                    with get_connection() as conn:
+                    async with get_connection() as conn:
                         cursor = conn.cursor()
                         cursor.execute(
                             "SELECT metadata FROM l2_insights WHERE id = %s",
@@ -423,3 +472,92 @@ class TestHandleCompressToL2Insight:
                     assert (
                         "warning_message" not in metadata
                     ), "Metadata should not contain warning message"
+
+    async def test_tags_parameter_success(self, mock_openai_client, valid_args):
+        """Test that valid tags array is accepted and stored in database."""
+        valid_args["tags"] = ["relationship", "ethr", "test"]
+
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
+            with patch("mcp_server.tools.OpenAI", return_value=mock_openai_client):
+                with patch(
+                    "mcp_server.tools.get_embedding_with_retry",
+                    return_value=[0.1] * 1536,
+                ):
+                    result = await handle_compress_to_l2_insight(valid_args)
+
+                    assert "error" not in result, f"Tags should be valid, got error: {result}"
+                    assert "id" in result, "Response should contain insight ID"
+
+                    # Verify tags were stored in database
+                    async with get_connection() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute(
+                            "SELECT tags FROM l2_insights WHERE id = %s",
+                            (result["id"],),
+                        )
+                        row = cursor.fetchone()
+
+                    assert row is not None, "Data should be stored in database"
+                    stored_tags = list(row[0]) if row[0] else []
+                    assert stored_tags == ["relationship", "ethr", "test"], \
+                        f"Tags should match input, got {stored_tags}"
+
+    async def test_tags_parameter_invalid_type(self, mock_openai_client):
+        """Test that non-string values in tags array are rejected."""
+        args = {
+            "content": "test_tags_validation",
+            "source_ids": [1, 2],
+            "tags": ["valid", 123, "also-valid"],  # 123 is not a string
+        }
+
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
+            with patch("mcp_server.tools.OpenAI", return_value=mock_openai_client):
+                result = await handle_compress_to_l2_insight(args)
+
+                assert "error" in result, "Should return error for non-string tag"
+                assert "tags" in result["details"].lower(), \
+                    "Error should mention tags parameter"
+                assert result["tool"] == "compress_to_l2_insight", "Tool name should be in response"
+
+    async def test_tags_parameter_backward_compatibility(self, mock_openai_client, valid_args):
+        """Test backward compatibility: omitting tags defaults to empty array."""
+        # Do NOT include tags parameter - should default to []
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
+            with patch("mcp_server.tools.OpenAI", return_value=mock_openai_client):
+                with patch(
+                    "mcp_server.tools.get_embedding_with_retry",
+                    return_value=[0.1] * 1536,
+                ):
+                    result = await handle_compress_to_l2_insight(valid_args)
+
+                    assert "error" not in result, f"Should succeed without tags: {result}"
+                    assert "id" in result, "Response should contain insight ID"
+
+                    # Verify empty tags array in database
+                    async with get_connection() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute(
+                            "SELECT tags FROM l2_insights WHERE id = %s",
+                            (result["id"],),
+                        )
+                        row = cursor.fetchone()
+
+                    assert row is not None, "Data should be stored in database"
+                    stored_tags = list(row[0]) if row[0] else []
+                    assert stored_tags == [], \
+                        f"Tags should default to empty array, got {stored_tags}"
+
+    async def test_tags_empty_array_accepted(self, mock_openai_client, valid_args):
+        """Test that explicitly passing empty tags array is valid."""
+        valid_args["tags"] = []
+
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
+            with patch("mcp_server.tools.OpenAI", return_value=mock_openai_client):
+                with patch(
+                    "mcp_server.tools.get_embedding_with_retry",
+                    return_value=[0.1] * 1536,
+                ):
+                    result = await handle_compress_to_l2_insight(valid_args)
+
+                    assert "error" not in result, f"Empty tags array should be valid: {result}"
+                    assert "id" in result, "Response should contain insight ID"

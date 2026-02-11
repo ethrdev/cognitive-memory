@@ -1069,16 +1069,21 @@ async def handle_store_raw_dialogue(arguments: dict[str, Any]) -> dict[str, Any]
 
 async def handle_compress_to_l2_insight(arguments: dict[str, Any]) -> dict[str, Any]:
     """
-    Compress dialogue data to L2 insight with OpenAI embedding.
+    Compress dialogue data to L2 insight with OpenAI embedding and optional tags.
 
     Story 11.4.3: Tool Handler Refactoring - Added project context usage and metadata
     Story 11.5.2: L2 Insight Write Operations - Added project_id to INSERT for namespace isolation
+    Story 9.1.2: Tags Parameter - Added optional tags parameter for structured retrieval
 
     Args:
-        arguments: Tool arguments containing content and source_ids
+        arguments: Tool arguments containing:
+            - content (str, required): Compressed insight content to store with embedding
+            - source_ids (list[int], required): Array of L0 raw memory IDs compressed into this insight
+            - memory_strength (float, optional): I/O's memory strength (0.0=weak, 1.0=strong, 0.5=neutral)
+            - tags (list[str], optional): User-defined tags for structured retrieval (e.g., ['relationship', 'ethr'])
 
     Returns:
-        Dict with insight ID, embedding status, fidelity score, and project_id
+        Dict with insight ID, embedding status, fidelity score, tags, and project_id
     """
     logger = logging.getLogger(__name__)
 
@@ -2439,7 +2444,7 @@ def register_tools(server) -> list:
         ),
         Tool(
             name="compress_to_l2_insight",
-            description="Compress dialogue data to L2 insight with OpenAI embedding and semantic fidelity check",
+            description="Compress dialogue data to L2 insight with OpenAI embedding and semantic fidelity check. Supports optional tags for structured retrieval.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -2458,6 +2463,11 @@ def register_tools(server) -> list:
                         "maximum": 1.0,
                         "default": 0.5,
                         "description": "I/O's memory strength (0.0=weak, 1.0=strong, 0.5=neutral default)",
+                    },
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional tags for structured retrieval (e.g., ['relationship', 'ethr'])",
                     },
                 },
                 "required": ["content", "source_ids"],
@@ -3215,8 +3225,23 @@ def register_tools(server) -> list:
         async def store_raw_dialogue(arguments: dict[str, Any]) -> dict[str, Any]:
             return await handle_store_raw_dialogue(arguments)
 
-        @server.tool()
-        async def compress_to_l2_insight(arguments: dict[str, Any]) -> dict[str, Any]:
+        @server.tool(
+            description="Compress dialogue data to L2 insight with OpenAI embedding and optional tags. "
+                        "Supports structured retrieval with user-defined tags."
+        )
+        async def compress_to_l2_insight(
+            content: str,
+            source_ids: list[int],
+            memory_strength: float | None = 0.5,
+            tags: list[str] | None = None,
+        ) -> dict[str, Any]:
+            """Compress dialogue to L2 insight with embedding and tags."""
+            arguments = {
+                "content": content,
+                "source_ids": source_ids,
+                "memory_strength": memory_strength,
+                "tags": tags,
+            }
             return await handle_compress_to_l2_insight(arguments)
 
         @server.tool()
