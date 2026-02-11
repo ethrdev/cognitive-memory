@@ -2,13 +2,14 @@
 MCP Server Tools Registration Module
 
 Provides tool registration and implementation for the Cognitive Memory System.
-Includes 28 tools: store_raw_dialogue, compress_to_l2_insight, hybrid_search,
+Includes 29 tools: store_raw_dialogue, compress_to_l2_insight, hybrid_search,
 update_working_memory, delete_working_memory, store_episode, store_dual_judge_scores,
-get_golden_test_results, ping, graph_add_node, graph_add_edge, graph_query_neighbors,
-graph_find_path, get_node_by_name, get_edge, count_by_type, list_episodes,
-list_insights, get_insight_by_id, update_insight, delete_insight, submit_insight_feedback,
-dissonance_check, resolve_dissonance, smf_pending_proposals, smf_review, smf_approve,
-smf_reject, smf_undo, smf_bulk_approve, suggest_lateral_edges, and reclassify_memory_sector.
+get_golden_test_results, ping, graph_add_node, graph_update_node, graph_add_edge,
+graph_query_neighbors, graph_find_path, get_node_by_name, get_edge, count_by_type,
+list_episodes, list_insights, get_insight_by_id, update_insight, delete_insight,
+submit_insight_feedback, dissonance_check, resolve_dissonance, smf_pending_proposals,
+smf_review, smf_approve, smf_reject, smf_undo, smf_bulk_approve, suggest_lateral_edges,
+and reclassify_memory_sector.
 """
 
 from __future__ import annotations
@@ -54,6 +55,7 @@ from mcp_server.tools.get_insight_by_id import handle_get_insight_by_id
 from mcp_server.tools.get_node_by_name import handle_get_node_by_name
 from mcp_server.tools.graph_add_edge import handle_graph_add_edge
 from mcp_server.tools.graph_add_node import handle_graph_add_node
+from mcp_server.tools.graph_update_node import handle_graph_update_node
 from mcp_server.tools.graph_find_path import handle_graph_find_path
 from mcp_server.tools.graph_query_neighbors import handle_graph_query_neighbors
 from mcp_server.tools.insights.delete import handle_delete_insight
@@ -497,6 +499,8 @@ def episode_semantic_search(
     conn: Any,
     date_from: datetime | None = None,  # Story 9.3.1
     date_to: datetime | None = None,  # Story 9.3.1
+    tags_filter: list[str] | None = None,
+    sector_filter: list[str] | None = None,
 ) -> list[dict]:
     """
     Semantic search in episode_memory using pgvector cosine distance.
@@ -506,6 +510,7 @@ def episode_semantic_search(
     should be searchable.
 
     Story 9.3.1: Extended with date_from, date_to for pre-filtering.
+    Hybrid-search-fix: Extended with tags_filter, sector_filter.
 
     Args:
         query_embedding: 1536-dim vector from OpenAI
@@ -513,6 +518,8 @@ def episode_semantic_search(
         conn: PostgreSQL connection
         date_from: Optional start date for filtering (Story 9.3.1)
         date_to: Optional end date for filtering (Story 9.3.1)
+        tags_filter: Optional list of tags to filter by (GIN index)
+        sector_filter: Optional list of memory sectors to filter by
 
     Returns:
         List of dicts with id, query, reflection, reward, distance, rank
@@ -525,7 +532,7 @@ def episode_semantic_search(
 
     # Story 9.3.1: Build date range filter clause
     date_filter_clause = ""
-    date_params = []
+    date_params: list[Any] = []
 
     if date_from is not None:
         date_filter_clause += " AND created_at >= %s"
@@ -534,6 +541,28 @@ def episode_semantic_search(
     if date_to is not None:
         date_filter_clause += " AND created_at <= %s"
         date_params.append(date_to)
+
+    # Tags filter using GIN index on tags column (Migration 041)
+    # tags_filter=[] means "match nothing" (consistent with sector_filter=[])
+    tags_filter_clause = ""
+    tags_params: list[Any] = []
+    if tags_filter is not None:
+        if len(tags_filter) == 0:
+            tags_filter_clause = " AND FALSE"
+        else:
+            tags_filter_clause = " AND tags @> %s::text[]"
+            tags_params = [tags_filter]
+
+    # Sector filter: NULL-safe — unclassified episodes (metadata.memory_sector=NULL)
+    # pass the filter, since most existing episodes lack sector classification
+    sector_filter_clause = ""
+    sector_params: list[Any] = []
+    if sector_filter is not None:
+        if len(sector_filter) == 0:
+            sector_filter_clause = " AND FALSE"
+        else:
+            sector_filter_clause = " AND (metadata->>'memory_sector' = ANY(%s::text[]) OR metadata->>'memory_sector' IS NULL)"
+            sector_params = [sector_filter]
 
     # Cosine distance: <=> operator
     # Lower distance = higher similarity
@@ -545,21 +574,25 @@ def episode_semantic_search(
         FROM episode_memory
         WHERE project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
         {date_filter_clause}
+        {tags_filter_clause}
+        {sector_filter_clause}
         ORDER BY distance
         LIMIT %s;
         """
 
-    params = [query_embedding] + date_params + [top_k]
+    params = [query_embedding] + date_params + tags_params + sector_params + [top_k]
     cursor.execute(query, params)
     results = cursor.fetchall()
 
-    # Story 9.3.1: Log pre-filter statistics
-    if date_from or date_to:
+    # Log pre-filter statistics
+    if date_from or date_to or tags_filter or sector_filter:
         logger.debug(
             "Pre-filter applied to episode_semantic_search",
             extra={
                 "date_from": date_from.isoformat() if date_from else None,
                 "date_to": date_to.isoformat() if date_to else None,
+                "tags_filter": tags_filter,
+                "sector_filter": sector_filter,
                 "results_count": len(results),
             }
         )
@@ -590,7 +623,9 @@ def episode_keyword_search(
     conn: Any,
     date_from: datetime | None = None,  # Story 9.3.1
     date_to: datetime | None = None,  # Story 9.3.1
-    language: str = "simple"
+    tags_filter: list[str] | None = None,
+    sector_filter: list[str] | None = None,
+    language: str = "simple",
 ) -> list[dict]:
     """
     Keyword search in episode_memory using PostgreSQL Full-Text Search.
@@ -599,6 +634,7 @@ def episode_keyword_search(
     Uses 'simple' language by default for multi-language support.
 
     Story 9.3.1: Extended with date_from, date_to for pre-filtering.
+    Hybrid-search-fix: Extended with tags_filter, sector_filter.
 
     Args:
         query_text: Query string
@@ -606,6 +642,8 @@ def episode_keyword_search(
         conn: PostgreSQL connection
         date_from: Optional start date for filtering (Story 9.3.1)
         date_to: Optional end date for filtering (Story 9.3.1)
+        tags_filter: Optional list of tags to filter by (GIN index)
+        sector_filter: Optional list of memory sectors to filter by
         language: FTS language config (default: 'simple' for multi-language)
 
     Returns:
@@ -616,7 +654,7 @@ def episode_keyword_search(
 
     # Story 9.3.1: Build date range filter clause
     date_filter_clause = ""
-    date_params = []
+    date_params: list[Any] = []
 
     if date_from is not None:
         date_filter_clause += " AND created_at >= %s"
@@ -625,6 +663,28 @@ def episode_keyword_search(
     if date_to is not None:
         date_filter_clause += " AND created_at <= %s"
         date_params.append(date_to)
+
+    # Tags filter using GIN index on tags column (Migration 041)
+    # tags_filter=[] means "match nothing" (consistent with sector_filter=[])
+    tags_filter_clause = ""
+    tags_params: list[Any] = []
+    if tags_filter is not None:
+        if len(tags_filter) == 0:
+            tags_filter_clause = " AND FALSE"
+        else:
+            tags_filter_clause = " AND tags @> %s::text[]"
+            tags_params = [tags_filter]
+
+    # Sector filter: NULL-safe — unclassified episodes (metadata.memory_sector=NULL)
+    # pass the filter, since most existing episodes lack sector classification
+    sector_filter_clause = ""
+    sector_params: list[Any] = []
+    if sector_filter is not None:
+        if len(sector_filter) == 0:
+            sector_filter_clause = " AND FALSE"
+        else:
+            sector_filter_clause = " AND (metadata->>'memory_sector' = ANY(%s::text[]) OR metadata->>'memory_sector' IS NULL)"
+            sector_params = [sector_filter]
 
     # Search in both query and reflection fields
     # Using 'simple' language for better multi-language support
@@ -641,21 +701,25 @@ def episode_keyword_search(
               @@ plainto_tsquery('{language}', %s)
           AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
         {date_filter_clause}
+        {tags_filter_clause}
+        {sector_filter_clause}
         ORDER BY rank DESC
         LIMIT %s;
         """
 
-    params = [query_text, query_text] + date_params + [top_k]
+    params = [query_text, query_text] + date_params + tags_params + sector_params + [top_k]
     cursor.execute(query, params)
     results = cursor.fetchall()
 
-    # Story 9.3.1: Log pre-filter statistics
-    if date_from or date_to:
+    # Log pre-filter statistics
+    if date_from or date_to or tags_filter or sector_filter:
         logger.debug(
             "Pre-filter applied to episode_keyword_search",
             extra={
                 "date_from": date_from.isoformat() if date_from else None,
                 "date_to": date_to.isoformat() if date_to else None,
+                "tags_filter": tags_filter,
+                "sector_filter": sector_filter,
                 "results_count": len(results),
             }
         )
@@ -1500,9 +1564,37 @@ async def handle_hybrid_search(arguments: dict[str, Any]) -> dict[str, Any]:
 
         # Story 9.3.1: Extract new filter parameters
         tags_filter = arguments.get("tags_filter")
-        date_from = arguments.get("date_from")
-        date_to = arguments.get("date_to")
+        date_from_raw = arguments.get("date_from")
+        date_to_raw = arguments.get("date_to")
         source_type_filter = arguments.get("source_type_filter")
+
+        # Parse ISO-format strings to datetime objects (hybrid-search-fix Fix 1)
+        date_from = None
+        date_to = None
+        if date_from_raw is not None:
+            if isinstance(date_from_raw, str):
+                try:
+                    date_from = datetime.fromisoformat(date_from_raw)
+                except ValueError:
+                    return {
+                        "error": "Parameter validation failed",
+                        "details": f"Invalid date_from format: '{date_from_raw}'. Expected ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)",
+                        "tool": "hybrid_search",
+                    }
+            else:
+                date_from = date_from_raw
+        if date_to_raw is not None:
+            if isinstance(date_to_raw, str):
+                try:
+                    date_to = datetime.fromisoformat(date_to_raw)
+                except ValueError:
+                    return {
+                        "error": "Parameter validation failed",
+                        "details": f"Invalid date_to format: '{date_to_raw}'. Expected ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)",
+                        "tool": "hybrid_search",
+                    }
+            else:
+                date_to = date_to_raw
 
         # Story 9.3.1: Validate new filter parameters
         filter_validation = validate_filter_params(
@@ -1659,14 +1751,15 @@ async def handle_hybrid_search(arguments: dict[str, Any]) -> dict[str, Any]:
 
             # Bug Fix 2025-12-06: Run Episode Memory searches
             # Episodes contain valuable lessons that should be searchable
-            # Story 9-4: Episodes not filtered by sector (future enhancement)
-            # Story 9.3.1: Episodes filtered by date range only
+            # Episodes filtered by all available filters (date, tags, sector)
             # RLS filters results by project_id automatically
             episode_semantic_results = episode_semantic_search(
-                query_embedding, top_k, conn, date_from, date_to
+                query_embedding, top_k, conn, date_from, date_to,
+                tags_filter, sector_filter
             ) if run_episode_semantic else []
             episode_keyword_results = episode_keyword_search(
-                query_text, top_k, conn, date_from, date_to
+                query_text, top_k, conn, date_from, date_to,
+                tags_filter, sector_filter
             ) if run_episode_keyword else []
 
             # Story 4.6: Run graph search (Story 9-4: Pass sector_filter)
@@ -2910,6 +3003,33 @@ def register_tools(server) -> list:
             },
         ),
         Tool(
+            name="graph_update_node",
+            description="Update an existing graph node's properties and/or vector_id. Lookup by name. Properties are merged (not replaced). Use this to retroactively link nodes to L2 insights via vector_id. At least one of 'properties' or 'vector_id' must be provided.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Name of the node to update (exact match)",
+                    },
+                    "properties": {
+                        "type": "object",
+                        "description": "Properties to merge into existing properties (additive, not replacing)",
+                    },
+                    "vector_id": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Foreign key to l2_insights.id — links this node to an L2 insight for graph search",
+                    },
+                },
+                "required": ["name"],
+                "anyOf": [
+                    {"required": ["properties"]},
+                    {"required": ["vector_id"]},
+                ],
+            },
+        ),
+        Tool(
             name="graph_add_edge",
             description="Create or update a relationship edge between graph nodes with auto-upsert of nodes. Supports standardized relations and optional weight scoring.",
             inputSchema={
@@ -3505,6 +3625,7 @@ def register_tools(server) -> list:
         "get_golden_test_results": handle_get_golden_test_results,
         "ping": handle_ping,
         "graph_add_node": handle_graph_add_node,
+        "graph_update_node": handle_graph_update_node,
         "graph_add_edge": handle_graph_add_edge,
         "graph_query_neighbors": handle_graph_query_neighbors,
         "graph_find_path": handle_graph_find_path,
@@ -3593,6 +3714,10 @@ def register_tools(server) -> list:
         @server.tool()
         async def graph_add_node(arguments: dict[str, Any]) -> dict[str, Any]:
             return await handle_graph_add_node(arguments)
+
+        @server.tool()
+        async def graph_update_node(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_graph_update_node(arguments)
 
         @server.tool()
         async def graph_add_edge(arguments: dict[str, Any]) -> dict[str, Any]:

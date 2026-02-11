@@ -367,44 +367,69 @@ async def get_node_by_name(name: str) -> dict[str, Any] | None:
         raise
 
 
-async def update_node_properties(node_id: str, new_properties: dict[str, Any]) -> dict[str, Any]:
+async def update_node_properties(
+    node_id: str,
+    new_properties: dict[str, Any] | None = None,
+    vector_id: int | None = None,
+) -> dict[str, Any]:
     """
-    Update a node's properties by merging with existing properties.
+    Update a node's properties and/or vector_id.
 
     Uses PostgreSQL's jsonb_concat (||) to merge properties without overwriting
-    other existing values.
+    other existing values. Optionally sets vector_id (FK to l2_insights.id).
 
     Args:
         node_id: UUID string of the node to update
-        new_properties: Dict with properties to add/update
+        new_properties: Optional dict with properties to add/update (merged, not replaced)
+        vector_id: Optional FK to l2_insights.id for graph search linking
 
     Returns:
         Dict with updated node data
 
     Story 7.6: Hyperedge via Properties (Konvention)
+    Hybrid-search-fix: Extended with vector_id support
     """
     logger = logging.getLogger(__name__)
+
+    if new_properties is None and vector_id is None:
+        raise ValueError("At least one of new_properties or vector_id must be provided")
 
     try:
         async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
 
-            # Merge new properties with existing using jsonb concatenation
+            # Build dynamic SET clause
+            set_clauses = []
+            params: list[Any] = []
+
+            if new_properties is not None:
+                set_clauses.append("properties = properties || %s::jsonb")
+                params.append(json.dumps(new_properties))
+
+            if vector_id is not None:
+                set_clauses.append("vector_id = %s")
+                params.append(vector_id)
+
+            params.append(node_id)  # WHERE clause
+
             cursor.execute(
-                """
+                f"""
                 UPDATE nodes
-                SET properties = properties || %s::jsonb
+                SET {', '.join(set_clauses)}
                 WHERE id = %s::uuid
                 RETURNING id, label, name, properties, vector_id, created_at;
                 """,
-                (json.dumps(new_properties), node_id),
+                params,
             )
 
             result = cursor.fetchone()
             conn.commit()
 
             if result:
-                logger.debug(f"Updated node properties: id={node_id}")
+                logger.debug(
+                    "Updated node",
+                    extra={"node_id": node_id, "vector_id": vector_id},
+                )
                 return {
                     "id": str(result["id"]),
                     "label": result["label"],
@@ -417,7 +442,10 @@ async def update_node_properties(node_id: str, new_properties: dict[str, Any]) -
             raise RuntimeError(f"Node not found: {node_id}")
 
     except Exception as e:
-        logger.error(f"Failed to update node properties: node_id={node_id}, error={e}")
+        logger.error(
+            "Failed to update node",
+            extra={"node_id": node_id, "error": str(e)},
+        )
         raise
 
 
