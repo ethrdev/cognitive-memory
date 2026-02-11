@@ -136,5 +136,5 @@ development_status:
   epic-9-4: in-progress
   9-4-1-retroactive-tagging-script: done
   9-4-2-dry-run-mode: done
-  9-4-3-idempotent-validation: backlog
+  9-4-3-idempotent-validation: done
   epic-9-4-retrospective: optional

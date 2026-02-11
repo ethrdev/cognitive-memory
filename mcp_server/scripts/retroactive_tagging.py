@@ -3,17 +3,61 @@
 Retroactive Tagging Script
 
 Story 9.4.1: Retroactive Tagging of Existing Data
+Story 9.4.3: Idempotent Validation
 
-Applies regex-based tag rules to existing episodes and insights
-that have empty tags arrays.
+Applies regex-based tag rules to existing episodes and insights.
 
 Usage:
     python mcp_server/scripts/retroactive_tagging.py [--dry-run] [--verbose]
+
+Options:
+    --dry-run    Show what would be tagged without writing to database
+    --verbose, -v Print detailed per-entry logging
 
 Exit Codes:
     0 = Success
     1 = Configuration error
     2 = Database error
+
+Idempotency Guarantees:
+    The script uses union-based idempotency to ensure safe re-execution:
+    - Existing tags are preserved (never removed)
+    - New matching tags are added without duplication
+    - Only entries with changed tags are updated (no unnecessary writes)
+    - Safe to run multiple times after tag rule updates
+
+Dry-Run Mode:
+    When --dry-run is enabled, the script will:
+    - Preview which entries would be tagged
+    - Show the exact SQL statements that would be executed
+    - NOT write any changes to the database
+    - Display "DRY-RUN MODE: No changes were written" notice
+
+Example Dry-Run Output:
+    ============================================================
+    EPISODES TO BE TAGGED (Dry-Run)
+    ============================================================
+
+      [WOULD TAG] Episode 123: '[self] What did I learn yesterday...'
+        Tags: ['self']
+        SQL: UPDATE episode_memory SET tags = ARRAY['self']::text[] WHERE id = 123;
+
+    ============================================================
+    DRY-RUN MODE: No changes were written to database.
+    ============================================================
+
+Re-execution Examples:
+    # First run: tags episode with ['self']
+    python retroactive_tagging.py
+
+    # After adding new tag rules, run again safely
+    # - Existing ['self'] tag is preserved
+    # - New matching tags (e.g., 'cognitive-memory') are added
+    # - No duplicate 'self' tags created
+    python retroactive_tagging.py
+
+    # Dry-run to preview changes before applying
+    python retroactive_tagging.py --dry-run --verbose
 """
 
 import argparse
@@ -30,16 +74,20 @@ from typing import Any
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-# Load environment variables
-from dotenv import load_dotenv
+# Load environment variables (optional for tests)
+try:
+    from dotenv import load_dotenv
 
-# Determine environment file
-env_file = Path(__file__).parent.parent.parent / ".env.development"
-if env_file.exists():
-    load_dotenv(env_file)
-else:
-    # Fallback to production .env
-    load_dotenv()
+    # Determine environment file
+    env_file = Path(__file__).parent.parent.parent / ".env.development"
+    if env_file.exists():
+        load_dotenv(env_file)
+    else:
+        # Fallback to production .env
+        load_dotenv()
+except ImportError:
+    # dotenv not available - skip environment loading (e.g., in tests)
+    pass
 
 from mcp_server.db.connection import (
     initialize_pool_sync,
@@ -85,7 +133,7 @@ TAG_RULES = [
     },
     # Project/Topic Rules (apply to both episodes and insights)
     {
-        "pattern": r"Dark Romance|Szene|Kira|Jan",
+        "pattern": r"Dark Romance|Szene|Kira|\bJan\b",
         "tags": ["dark-romance"],
         "target": "both",
         "description": "Dark Romance project content"
@@ -153,6 +201,11 @@ def tag_episodes(conn, dry_run: bool, verbose: bool) -> dict[str, int]:
     """
     Tag episodes based on query field patterns.
 
+    Uses union-based idempotency:
+    - Preserves existing tags
+    - Adds only new tags from rule matches
+    - Skips update if tags would not change
+
     Args:
         conn: Database connection
         dry_run: If True, don't write to database
@@ -170,11 +223,12 @@ def tag_episodes(conn, dry_run: bool, verbose: bool) -> dict[str, int]:
 
     cursor = conn.cursor()
 
-    # Query episodes with empty or NULL tags
+    # Query ALL episodes for union-based idempotency
+    # This allows re-tagging when rules are updated - existing tags are preserved
+    # Union logic adds only NEW tags without duplicates
     query = """
         SELECT id, query, tags
         FROM episode_memory
-        WHERE tags = '{}' OR tags IS NULL
         ORDER BY id
     """
 
@@ -182,6 +236,9 @@ def tag_episodes(conn, dry_run: bool, verbose: bool) -> dict[str, int]:
     episodes = cursor.fetchall()
 
     stats["total"] = len(episodes)
+
+    if stats["total"] == 0:
+        logger.info("No episodes found to process (all already tagged or database empty)")
 
     if dry_run:
         print("\n" + "=" * 60)
@@ -191,21 +248,24 @@ def tag_episodes(conn, dry_run: bool, verbose: bool) -> dict[str, int]:
     for episode in episodes:
         episode_id = episode["id"]
         query_text = episode["query"]
-        existing_tags = episode["tags"] or []
-
-        # Skip if already has tags (idempotency check)
-        if existing_tags:
-            stats["skipped"] += 1
-            if verbose:
-                print(f"  [SKIP] Episode {episode_id}: Already has tags {existing_tags}")
-            continue
+        existing_tags = set(episode["tags"] or [])
 
         # Apply tag rules
-        matched_tags = apply_tag_rules(query_text, "episodes")
+        matched_tags = set(apply_tag_rules(query_text, "episodes"))
 
         if not matched_tags:
             if verbose:
                 print(f"  [NO MATCH] Episode {episode_id}: '{query_text[:50]}...'")
+            continue
+
+        # Union-based idempotency: combine existing and new tags without duplicates
+        new_tags = sorted(list(existing_tags | matched_tags))
+
+        # Only update if tags would actually change
+        if new_tags == sorted(list(existing_tags)):
+            stats["skipped"] += 1
+            if verbose:
+                print(f"  [SKIP] Episode {episode_id}: Tags unchanged {new_tags}")
             continue
 
         # Track which rules matched
@@ -217,8 +277,8 @@ def tag_episodes(conn, dry_run: bool, verbose: bool) -> dict[str, int]:
 
         if dry_run:
             print(f"\n  [WOULD TAG] Episode {episode_id}: '{query_text[:60]}...'")
-            print(f"    Tags: {matched_tags}")
-            print(f"    SQL: UPDATE episode_memory SET tags = ARRAY{matched_tags}::text[] WHERE id = {episode_id};")
+            print(f"    Tags: {new_tags}")
+            print(f"    SQL: UPDATE episode_memory SET tags = ARRAY{new_tags}::text[] WHERE id = {episode_id};")
         else:
             # Update tags in database
             update_query = """
@@ -226,12 +286,12 @@ def tag_episodes(conn, dry_run: bool, verbose: bool) -> dict[str, int]:
                 SET tags = %s
                 WHERE id = %s
             """
-            cursor.execute(update_query, (matched_tags, episode_id))
+            cursor.execute(update_query, (new_tags, episode_id))
             conn.commit()
 
             if verbose:
                 print(f"  [TAGGED] Episode {episode_id}: '{query_text[:60]}...'")
-                print(f"    Tags: {matched_tags}")
+                print(f"    Tags: {new_tags}")
 
             stats["tagged"] += 1
 
@@ -242,6 +302,11 @@ def tag_episodes(conn, dry_run: bool, verbose: bool) -> dict[str, int]:
 def tag_insights(conn, dry_run: bool, verbose: bool) -> dict[str, int]:
     """
     Tag insights based on content field patterns.
+
+    Uses union-based idempotency:
+    - Preserves existing tags
+    - Adds only new tags from rule matches
+    - Skips update if tags would not change
 
     Args:
         conn: Database connection
@@ -260,11 +325,12 @@ def tag_insights(conn, dry_run: bool, verbose: bool) -> dict[str, int]:
 
     cursor = conn.cursor()
 
-    # Query insights with empty or NULL tags
+    # Query ALL insights for union-based idempotency
+    # This allows re-tagging when rules are updated - existing tags are preserved
+    # Union logic adds only NEW tags without duplicates
     query = """
         SELECT id, content, tags
         FROM l2_insights
-        WHERE tags = '{}' OR tags IS NULL
         ORDER BY id
     """
 
@@ -272,6 +338,9 @@ def tag_insights(conn, dry_run: bool, verbose: bool) -> dict[str, int]:
     insights = cursor.fetchall()
 
     stats["total"] = len(insights)
+
+    if stats["total"] == 0:
+        logger.info("No insights found to process (all already tagged or database empty)")
 
     if dry_run:
         print("\n" + "=" * 60)
@@ -281,21 +350,24 @@ def tag_insights(conn, dry_run: bool, verbose: bool) -> dict[str, int]:
     for insight in insights:
         insight_id = insight["id"]
         content_text = insight["content"]
-        existing_tags = insight["tags"] or []
-
-        # Skip if already has tags (idempotency check)
-        if existing_tags:
-            stats["skipped"] += 1
-            if verbose:
-                print(f"  [SKIP] Insight {insight_id}: Already has tags {existing_tags}")
-            continue
+        existing_tags = set(insight["tags"] or [])
 
         # Apply tag rules
-        matched_tags = apply_tag_rules(content_text, "insights")
+        matched_tags = set(apply_tag_rules(content_text, "insights"))
 
         if not matched_tags:
             if verbose:
                 print(f"  [NO MATCH] Insight {insight_id}: '{content_text[:50]}...'")
+            continue
+
+        # Union-based idempotency: combine existing and new tags without duplicates
+        new_tags = sorted(list(existing_tags | matched_tags))
+
+        # Only update if tags would actually change
+        if new_tags == sorted(list(existing_tags)):
+            stats["skipped"] += 1
+            if verbose:
+                print(f"  [SKIP] Insight {insight_id}: Tags unchanged {new_tags}")
             continue
 
         # Track which rules matched
@@ -307,8 +379,8 @@ def tag_insights(conn, dry_run: bool, verbose: bool) -> dict[str, int]:
 
         if dry_run:
             print(f"\n  [WOULD TAG] Insight {insight_id}: '{content_text[:60]}...'")
-            print(f"    Tags: {matched_tags}")
-            print(f"    SQL: UPDATE l2_insights SET tags = ARRAY{matched_tags}::text[] WHERE id = {insight_id};")
+            print(f"    Tags: {new_tags}")
+            print(f"    SQL: UPDATE l2_insights SET tags = ARRAY{new_tags}::text[] WHERE id = {insight_id};")
         else:
             # Update tags in database
             update_query = """
@@ -316,12 +388,12 @@ def tag_insights(conn, dry_run: bool, verbose: bool) -> dict[str, int]:
                 SET tags = %s
                 WHERE id = %s
             """
-            cursor.execute(update_query, (matched_tags, insight_id))
+            cursor.execute(update_query, (new_tags, insight_id))
             conn.commit()
 
             if verbose:
                 print(f"  [TAGGED] Insight {insight_id}: '{content_text[:60]}...'")
-                print(f"    Tags: {matched_tags}")
+                print(f"    Tags: {new_tags}")
 
             stats["tagged"] += 1
 
