@@ -131,6 +131,9 @@ development_status:
   epic-7-retrospective: completed
 
   # Epic 8: Memory Sector Foundation (OpenMemory Integration)
+  # Post-Audit 2026-02-12: Expanded RELATION_SECTOR_MAP (4→24 relations),
+  # pg_trgm trigram fallback, 4 graph bug fixes, golden set updated.
+  # See: bmad-docs/audit-2026-02-12.md, bmad-docs/hybrid-search-fix-plan.md
   epic-8: done
   8-1-schema-migration-data-classification: done
   8-2-sector-classification-logic: done

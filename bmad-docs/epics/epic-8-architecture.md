@@ -14,6 +14,12 @@ date: '2026-01-07'
 
 # Architecture Decision Document - Epic 8: OpenMemory Integration
 
+> **Post-Audit Note (2026-02-12):** The classification rules shown in this planning
+> document (4 relations: LEARNED, CAN_DO, REFLECTS, REALIZED) were expanded to cover
+> all 24 actual graph relations via `RELATION_SECTOR_MAP` dict. Key change: EXPERIENCED
+> edges → reflective (not episodic). pg_trgm trigram fallback added for German compound
+> words. See `bmad-docs/audit-2026-02-12.md` for details.
+
 _This document builds collaboratively through step-by-step discovery. Sections are appended as we work through each architectural decision together._
 
 ## Project Context Analysis
