@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [1.2.0] - 2026-02-11
+
+### Added
+- [Release Notes v1.2.0](docs/releases/1.2.0.md) - Complete Release Documentation for Multi-Project Namespace Isolation
+- Security Test Suite (`tests/security/test_security_coverage.py`) with 7 tests covering SQL injection, RLS policies, XSS protection, input validation, authentication checks, secret management, and dependency security
+
+### Changed
+- CHANGELOG.md: Added reference to v1.2.0 release notes
+- pyproject.toml: Added `security` marker for pytest security tests
+- Implementation Readiness Report updated to 90% readiness score with security test completion
+
+---
+All notable changes to **Cognitive Memory** are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
+---
+
 ## [1.1.1] - 2026-02-11
 
 ### Added

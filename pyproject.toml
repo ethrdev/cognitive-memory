@@ -145,6 +145,7 @@ markers = [
     "integration: marks tests as integration tests requiring real database",
     "unit: marks tests as unit tests (no database required)",
     "performance: marks tests as performance tests",
+    "security: marks tests as security validation tests",
 ]
 asyncio_mode = "auto"
 
