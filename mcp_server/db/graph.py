@@ -1343,8 +1343,8 @@ async def find_path(
             cursor.execute("SET LOCAL statement_timeout = '1000ms'")
 
             # Get node IDs for start and end nodes
-            start_node = get_node_by_name(start_node_name)
-            end_node = get_node_by_name(end_node_name)
+            start_node = await get_node_by_name(start_node_name)
+            end_node = await get_node_by_name(end_node_name)
 
             if not start_node or not end_node:
                 return {"path_found": False, "path_length": 0, "paths": []}
@@ -1356,15 +1356,17 @@ async def find_path(
             cursor.execute(
                 """
                 WITH RECURSIVE paths AS (
-                    -- Base case: Direct neighbors (depth=1)
+                    -- Base case: All neighbors of start node (depth=1)
                     SELECT
-                        ARRAY[e.source_id, e.target_id] AS node_path,
+                        ARRAY[%s::uuid, CASE
+                            WHEN e.source_id = %s::uuid THEN e.target_id
+                            ELSE e.source_id
+                        END] AS node_path,
                         ARRAY[e.id] AS edge_path,
                         1 AS path_length,
                         e.weight AS total_weight
                     FROM edges e
-                    WHERE (e.source_id = %s::uuid AND e.target_id = %s::uuid)
-                       OR (e.source_id = %s::uuid AND e.target_id = %s::uuid)
+                    WHERE e.source_id = %s::uuid OR e.target_id = %s::uuid
 
                     UNION ALL
 
@@ -1398,7 +1400,7 @@ async def find_path(
                 ORDER BY path_length ASC, total_weight DESC
                 LIMIT 10;
                 """,
-                (start_node_id, end_node_id, end_node_id, start_node_id, max_depth, end_node_id),
+                (start_node_id, start_node_id, start_node_id, start_node_id, max_depth, end_node_id),
             )
 
             results = cursor.fetchall()
@@ -1483,7 +1485,7 @@ async def find_path(
             for path in paths:
                 edge_scores = []
                 for edge in path["edges"]:
-                    edge_detail = get_edge_by_id(edge["edge_id"])
+                    edge_detail = await get_edge_by_id(edge["edge_id"])
                     if edge_detail:
                         score = calculate_relevance_score(edge_detail)
                         edge["relevance_score"] = score
@@ -1506,7 +1508,7 @@ async def find_path(
                 for path in paths:
                     path_ief_scores = []
                     for edge in path["edges"]:
-                        edge_detail = get_edge_by_id(edge["edge_id"])
+                        edge_detail = await get_edge_by_id(edge["edge_id"])
                         if edge_detail:
                             ief_result = calculate_ief_score(
                                 edge_data=edge_detail,

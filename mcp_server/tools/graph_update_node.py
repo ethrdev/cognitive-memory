@@ -89,7 +89,7 @@ async def handle_graph_update_node(arguments: dict[str, Any]) -> dict[str, Any]:
 
             logger.info(
                 "Updated node",
-                extra={"name": name, "vector_id": vector_id},
+                extra={"node_name": name, "vector_id": vector_id},
             )
 
             return add_response_metadata({
@@ -104,7 +104,7 @@ async def handle_graph_update_node(arguments: dict[str, Any]) -> dict[str, Any]:
         except Exception as db_error:
             logger.error(
                 "Database error in graph_update_node",
-                extra={"error": str(db_error), "name": name},
+                extra={"error": str(db_error), "node_name": name},
             )
             return add_response_metadata({
                 "error": "Database operation failed",

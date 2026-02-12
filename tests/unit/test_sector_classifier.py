@@ -223,7 +223,7 @@ class TestSectorClassificationLogging:
         assert len(caplog.records) == 1
         assert caplog.records[0].levelno == logging.DEBUG
         assert caplog.records[0].sector == "procedural"
-        assert caplog.records[0].rule_matched == "procedural_relation"
+        assert caplog.records[0].rule_matched == "relation_LEARNED"
 
     def test_classify_reflective_logs_at_debug_level(self, caplog):
         """Verify reflective classification logs decision at DEBUG level with rule_matched."""
@@ -234,7 +234,7 @@ class TestSectorClassificationLogging:
         assert len(caplog.records) == 1
         assert caplog.records[0].levelno == logging.DEBUG
         assert caplog.records[0].sector == "reflective"
-        assert caplog.records[0].rule_matched == "reflective_relation"
+        assert caplog.records[0].rule_matched == "relation_REFLECTS_ON"
 
     def test_classify_semantic_default_logs_at_debug_level(self, caplog):
         """Verify semantic default classification logs decision at DEBUG level with rule_matched."""

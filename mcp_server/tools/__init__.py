@@ -180,9 +180,12 @@ def rrf_fusion(
         if isinstance(result.get("id"), int) and result.get("source_type") != "episode_memory":
             # Get memory_strength from result if available, default to 0.5
             memory_strength = result.get("memory_strength", 0.5)
-            # Calculate final score: rrf_score * memory_strength
+            # Calculate final score: rrf_score * (0.5 + memory_strength)
+            # Fix N1 (2026-02-11): memory_strength as additive offset, not pure multiplier.
+            # At ms=0.5 (default): factor 1.0 (neutral). ms=0.9: 1.4. ms=0.1: 0.6. ms=0.0: 0.5.
+            # No insight becomes invisible through scoring alone — deletion is explicit.
             result["rrf_score"] = result["score"]  # Store original RRF score
-            result["score"] = result["score"] * memory_strength  # Apply multiplier
+            result["score"] = result["score"] * (0.5 + memory_strength)  # Apply offset multiplier
 
             # Story 26.4: Apply IEF feedback adjustment (lazy evaluation)
             insight_id = result.get("id")
@@ -365,7 +368,7 @@ def keyword_search(
     language: str = "simple"
 ) -> list[dict]:
     """
-    Keyword search using PostgreSQL Full-Text Search.
+    Keyword search using PostgreSQL Full-Text Search with trigram fallback.
 
     Bug Fix 2025-12-06: Changed default language from 'english' to 'simple'
     for better multi-language support. 'simple' doesn't apply stemming but
@@ -374,6 +377,8 @@ def keyword_search(
 
     Story 9-4: Extended with sector_filter parameter.
     Story 9.3.1: Extended with tags_filter, date_from, date_to for pre-filtering.
+    Story B3 (Epic 8): Added pg_trgm fallback when FTS returns 0 results.
+    Catches German compound words that FTS 'simple' tokenizer cannot split.
 
     Args:
         query_text: Query string (e.g., "consciousness autonomy")
@@ -455,6 +460,39 @@ def keyword_search(
 
     cursor.execute(query, params)
     results = cursor.fetchall()
+
+    # Story B3: Trigram fallback for German compound words (Epic 8)
+    # FTS 'simple' tokenizer cannot split compounds like "Kontexttrennung".
+    # When FTS returns 0 results, pg_trgm similarity() catches partial matches.
+    # Requires: pg_trgm extension (B1) + GIN index idx_l2_trgm (Migration 043).
+    if len(results) == 0:
+        trigram_query = f"""
+            SELECT id, content, source_ids, metadata, io_category, is_identity,
+                   source_file, memory_strength, project_id,
+                   similarity(content, %s) AS rank
+            FROM l2_insights
+            WHERE is_deleted = FALSE
+              AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
+              AND similarity(content, %s) > 0.15
+            {filter_clause}{sector_clause}{pre_filter_clause}
+            ORDER BY rank DESC
+            LIMIT %s;
+            """
+        trigram_params = (
+            [query_text, query_text]
+            + filter_values + sector_params + pre_filter_params
+            + [top_k]
+        )
+        cursor.execute(trigram_query, trigram_params)
+        results = cursor.fetchall()
+        if results:
+            logger.debug(
+                "Trigram fallback activated for keyword_search",
+                extra={
+                    "query_text": query_text,
+                    "results_count": len(results),
+                }
+            )
 
     # Story 9.3.1: Log pre-filter statistics
     if tags_filter or date_from or date_to:
@@ -628,13 +666,14 @@ def episode_keyword_search(
     language: str = "simple",
 ) -> list[dict]:
     """
-    Keyword search in episode_memory using PostgreSQL Full-Text Search.
+    Keyword search in episode_memory using PostgreSQL Full-Text Search with trigram fallback.
 
     Bug Fix 2025-12-06: Added to include episode memories in hybrid search.
     Uses 'simple' language by default for multi-language support.
 
     Story 9.3.1: Extended with date_from, date_to for pre-filtering.
     Hybrid-search-fix: Extended with tags_filter, sector_filter.
+    Story B3 (Epic 8): Added pg_trgm fallback when FTS returns 0 results.
 
     Args:
         query_text: Query string
@@ -710,6 +749,38 @@ def episode_keyword_search(
     params = [query_text, query_text] + date_params + tags_params + sector_params + [top_k]
     cursor.execute(query, params)
     results = cursor.fetchall()
+
+    # Story B3: Trigram fallback for German compound words (Epic 8)
+    # Same logic as keyword_search: when FTS returns 0, try pg_trgm similarity.
+    # Requires: pg_trgm extension (B1) + GIN index idx_episode_trgm (Migration 043).
+    if len(results) == 0:
+        trigram_query = f"""
+            SELECT id, query, reflection, reward, created_at, project_id,
+                   similarity(query || ' ' || reflection, %s) AS rank
+            FROM episode_memory
+            WHERE similarity(query || ' ' || reflection, %s) > 0.15
+              AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
+            {date_filter_clause}
+            {tags_filter_clause}
+            {sector_filter_clause}
+            ORDER BY rank DESC
+            LIMIT %s;
+            """
+        trigram_params = (
+            [query_text, query_text]
+            + date_params + tags_params + sector_params
+            + [top_k]
+        )
+        cursor.execute(trigram_query, trigram_params)
+        results = cursor.fetchall()
+        if results:
+            logger.debug(
+                "Trigram fallback activated for episode_keyword_search",
+                extra={
+                    "query_text": query_text,
+                    "results_count": len(results),
+                }
+            )
 
     # Log pre-filter statistics
     if date_from or date_to or tags_filter or sector_filter:
@@ -863,7 +934,13 @@ def get_adjusted_weights(is_relational: bool, base_weights: dict | None = None) 
                 "keyword": base_weights.get("keyword", 0.2),
                 "graph": base_weights.get("graph", 0.2),
             }
-        return {"semantic": 0.6, "keyword": 0.2, "graph": 0.2}
+        # Fix N2 (2026-02-11): Graph channel dead (0 nodes with vector_id).
+        # 20% weight on empty channel penalizes all results. Set to 0.0.
+        # Ratio 3:1 (semantic:keyword) preserved from original 0.6:0.2.
+        # TODO: Revert to {"semantic": 0.6, "keyword": 0.2, "graph": 0.2}
+        #       when >20 nodes have vector_id set. Monitor with:
+        #       SELECT COUNT(*) FROM nodes WHERE vector_id IS NOT NULL;
+        return {"semantic": 0.75, "keyword": 0.25, "graph": 0.0}
 
 
 async def graph_search(
