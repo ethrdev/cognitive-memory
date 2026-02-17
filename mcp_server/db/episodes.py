@@ -61,12 +61,14 @@ async def list_episodes(
             cursor = conn.cursor()
 
             # Data Query - get_connection() returns RealDictCursor
+            # Defense-in-depth: explicit project_id filter (Story 11.7)
             cursor.execute(
                 """
                 SELECT id, query, reward, created_at, tags
                 FROM episode_memory
                 WHERE
-                    (%s::timestamptz IS NULL OR created_at >= %s)
+                    project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
+                    AND (%s::timestamptz IS NULL OR created_at >= %s)
                     AND (%s::timestamptz IS NULL OR created_at <= %s)
                     AND (%s::TEXT[] IS NULL OR tags @> %s::TEXT[])
                     AND (%s IS NULL OR query LIKE %s || '%%')
@@ -95,11 +97,13 @@ async def list_episodes(
             ]
 
             # Count Query - total count independent of pagination (same WHERE clauses)
+            # Defense-in-depth: explicit project_id filter (Story 11.7)
             cursor.execute(
                 """
                 SELECT COUNT(*) as count FROM episode_memory
                 WHERE
-                    (%s::timestamptz IS NULL OR created_at >= %s)
+                    project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
+                    AND (%s::timestamptz IS NULL OR created_at >= %s)
                     AND (%s::timestamptz IS NULL OR created_at <= %s)
                     AND (%s::TEXT[] IS NULL OR tags @> %s::TEXT[])
                     AND (%s IS NULL OR query LIKE %s || '%%')

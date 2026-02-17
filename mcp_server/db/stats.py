@@ -40,19 +40,26 @@ async def get_all_counts() -> dict[str, int]:
             cursor = conn.cursor()
 
             # Efficient UNION ALL query - single roundtrip for all counts
+            # Defense-in-depth: explicit project_id filter (Story 11.7)
             cursor.execute(
                 """
                 SELECT 'graph_nodes' AS type, COUNT(*) AS count FROM nodes
+                    WHERE project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
                 UNION ALL
                 SELECT 'graph_edges' AS type, COUNT(*) AS count FROM edges
+                    WHERE project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
                 UNION ALL
                 SELECT 'l2_insights' AS type, COUNT(*) AS count FROM l2_insights
+                    WHERE project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
                 UNION ALL
                 SELECT 'episodes' AS type, COUNT(*) AS count FROM episode_memory
+                    WHERE project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
                 UNION ALL
                 SELECT 'working_memory' AS type, COUNT(*) AS count FROM working_memory
+                    WHERE project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
                 UNION ALL
-                SELECT 'raw_dialogues' AS type, COUNT(*) AS count FROM l0_raw;
+                SELECT 'raw_dialogues' AS type, COUNT(*) AS count FROM l0_raw
+                    WHERE project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[]);
                 """
             )
 

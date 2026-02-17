@@ -41,11 +41,13 @@ async def get_insight_by_id(insight_id: int) -> dict[str, Any] | None:
             # Simple SELECT by ID - no embedding (too large)
             # Filter out soft-deleted insights (is_deleted = FALSE)
             # Consistent with execute_update_with_history behavior
+            # Defense-in-depth: explicit project_id filter (Story 11.7)
             cursor.execute(
                 """
                 SELECT id, content, source_ids, metadata, created_at, memory_strength
                 FROM l2_insights
                 WHERE id = %s AND is_deleted = FALSE
+                    AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
                 """,
                 (insight_id,),
             )
@@ -102,11 +104,13 @@ async def update_insight_in_db(
             cursor = conn.cursor()
 
             # Check if insight exists and is not deleted (AC-6, AC-7)
+            # Defense-in-depth: explicit project_id filter (Story 11.7)
             cursor.execute(
                 """
                 SELECT id, content, memory_strength
                 FROM l2_insights
                 WHERE id = %s AND is_deleted = FALSE
+                    AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
                 """,
                 (insight_id,),
             )
@@ -277,11 +281,13 @@ async def execute_update_with_history(
 
             try:
                 # Get current state (for history) - Story 11.5.2: also get project_id
+                # Defense-in-depth: explicit project_id filter (Story 11.7)
                 cursor.execute(
                     """
                     SELECT content, memory_strength, project_id
                     FROM l2_insights
                     WHERE id = %s AND is_deleted = FALSE
+                        AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
                     """,
                     (insight_id,),
                 )
@@ -398,11 +404,13 @@ async def execute_delete_with_history(
 
             try:
                 # Step 1: Get current state (for history) - Story 11.5.2: also get project_id
+                # Defense-in-depth: explicit project_id filter (Story 11.7)
                 cursor.execute(
                     """
                     SELECT content, memory_strength, is_deleted, project_id
                     FROM l2_insights
                     WHERE id = %s
+                        AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
                     """,
                     (insight_id,),
                 )
@@ -516,7 +524,11 @@ async def list_insights(
             cursor = conn.cursor()
 
             # Build WHERE clause conditions
-            conditions = ["is_deleted = FALSE"]
+            # Defense-in-depth: explicit project_id filter (Story 11.7)
+            conditions = [
+                "is_deleted = FALSE",
+                "project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])",
+            ]
             params = []
 
             # Tags filter: use array-contains operator (GIN indexed)

@@ -463,17 +463,22 @@ def keyword_search(
 
     # Story B3: Trigram fallback for German compound words (Epic 8)
     # FTS 'simple' tokenizer cannot split compounds like "Kontexttrennung".
-    # When FTS returns 0 results, pg_trgm similarity() catches partial matches.
+    # When FTS returns 0 results, pg_trgm word_similarity() catches partial matches.
     # Requires: pg_trgm extension (B1) + GIN index idx_l2_trgm (Migration 043).
+    # Fix 2026-02-12: similarity() → word_similarity(). similarity() compares
+    # entire document trigrams vs query trigrams (Jaccard). With 300-word docs and
+    # 3-word queries, score is always ~0.007 — never reaches threshold.
+    # word_similarity(query, doc) finds best-matching SUBSTRING of doc. Designed
+    # for short queries against long documents. Threshold 0.3 (pg_trgm default).
     if len(results) == 0:
         trigram_query = f"""
             SELECT id, content, source_ids, metadata, io_category, is_identity,
                    source_file, memory_strength, project_id,
-                   similarity(content, %s) AS rank
+                   word_similarity(%s, content) AS rank
             FROM l2_insights
             WHERE is_deleted = FALSE
               AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
-              AND similarity(content, %s) > 0.15
+              AND word_similarity(%s, content) > 0.3
             {filter_clause}{sector_clause}{pre_filter_clause}
             ORDER BY rank DESC
             LIMIT %s;
@@ -751,14 +756,15 @@ def episode_keyword_search(
     results = cursor.fetchall()
 
     # Story B3: Trigram fallback for German compound words (Epic 8)
-    # Same logic as keyword_search: when FTS returns 0, try pg_trgm similarity.
+    # Same logic as keyword_search: when FTS returns 0, try pg_trgm word_similarity.
     # Requires: pg_trgm extension (B1) + GIN index idx_episode_trgm (Migration 043).
+    # Fix 2026-02-12: similarity() → word_similarity(). See keyword_search comment.
     if len(results) == 0:
         trigram_query = f"""
             SELECT id, query, reflection, reward, created_at, project_id,
-                   similarity(query || ' ' || reflection, %s) AS rank
+                   word_similarity(%s, query || ' ' || reflection) AS rank
             FROM episode_memory
-            WHERE similarity(query || ' ' || reflection, %s) > 0.15
+            WHERE word_similarity(%s, query || ' ' || reflection) > 0.3
               AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
             {date_filter_clause}
             {tags_filter_clause}
@@ -934,13 +940,10 @@ def get_adjusted_weights(is_relational: bool, base_weights: dict | None = None) 
                 "keyword": base_weights.get("keyword", 0.2),
                 "graph": base_weights.get("graph", 0.2),
             }
-        # Fix N2 (2026-02-11): Graph channel dead (0 nodes with vector_id).
-        # 20% weight on empty channel penalizes all results. Set to 0.0.
-        # Ratio 3:1 (semantic:keyword) preserved from original 0.6:0.2.
-        # TODO: Revert to {"semantic": 0.6, "keyword": 0.2, "graph": 0.2}
-        #       when >20 nodes have vector_id set. Monitor with:
-        #       SELECT COUNT(*) FROM nodes WHERE vector_id IS NOT NULL;
-        return {"semantic": 0.75, "keyword": 0.25, "graph": 0.0}
+        # Fix N2 (2026-02-11): Graph channel was dead (0 nodes with vector_id).
+        # Reactivated 2026-02-12: >30 nodes now have vector_id.
+        # Using 0.15 for soft start (not full 0.2) to observe impact.
+        return {"semantic": 0.65, "keyword": 0.2, "graph": 0.15}
 
 
 async def graph_search(
@@ -1030,13 +1033,15 @@ async def graph_search(
 
             # Fetch L2 Insight from database
             # Story 11.6.1: Include project_id in SELECT for result metadata tracking
+            # Defense-in-depth: explicit project_id filter (Story 11.7)
             try:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
                     SELECT id, content, source_ids, metadata, io_category, is_identity, source_file, project_id
                     FROM l2_insights
-                    WHERE id = %s;
+                    WHERE id = %s
+                        AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[]);
                     """,
                     (vector_id,)
                 )
@@ -1664,6 +1669,10 @@ async def handle_hybrid_search(arguments: dict[str, Any]) -> dict[str, Any]:
             if isinstance(date_to_raw, str):
                 try:
                     date_to = datetime.fromisoformat(date_to_raw)
+                    # Fix: When date-only string provided (no time component),
+                    # set to end of day so the entire day is included
+                    if "T" not in date_to_raw and date_to.hour == 0 and date_to.minute == 0 and date_to.second == 0:
+                        date_to = date_to.replace(hour=23, minute=59, second=59, microsecond=999999)
                 except ValueError:
                     return {
                         "error": "Parameter validation failed",
@@ -2379,10 +2388,13 @@ async def add_episode(
 
     client = OpenAI(api_key=api_key)
 
-    # Get embedding for query (not reflection - query is used for similarity search)
-    logger.info(f"Computing embedding for query: {query[:100]}...")
+    # Get embedding for query + reflection combined for full semantic search coverage
+    # Fix: Previously only query was embedded — reflection (the actual lesson) was unsearchable
+    # Note: episode_keyword_search already concatenates query||reflection (line ~740)
+    combined_text = f"{query} {reflection}" if reflection else query
+    logger.info(f"Computing embedding for combined query+reflection: {combined_text[:100]}...")
     try:
-        embedding = await get_embedding_with_retry(client, query)
+        embedding = await get_embedding_with_retry(client, combined_text)
     except RuntimeError as e:
         logger.error(f"Failed to generate embedding after all retries: {e}")
         # Critical: embedding is required for retrieval, so we fail the entire operation
@@ -3199,6 +3211,11 @@ def register_tools(server) -> list:
                         "minItems": 1536,
                         "maxItems": 1536,
                         "description": "Optional 1536-dimensional query embedding for semantic similarity calculation in IEF.",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Optional maximum number of neighbor results to return. Applied after sorting by relevance. Useful to cap token usage for high-connectivity nodes.",
                     },
                 },
                 "required": ["node_name"],

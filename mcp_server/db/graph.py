@@ -251,11 +251,13 @@ async def get_node_by_id(node_id: str) -> dict[str, Any] | None:
         async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
 
+            # Defense-in-depth: explicit project_id filter (Story 11.7)
             cursor.execute(
                 """
                 SELECT id, label, name, properties, vector_id, created_at
                 FROM nodes
-                WHERE id = %s;
+                WHERE id = %s
+                    AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[]);
                 """,
                 (node_id,),
             )
@@ -294,11 +296,13 @@ async def get_nodes_by_label(label: str) -> list[dict[str, Any]]:
         async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
 
+            # Defense-in-depth: explicit project_id filter (Story 11.7)
             cursor.execute(
                 """
                 SELECT id, label, name, properties, vector_id, created_at
                 FROM nodes
                 WHERE label = %s
+                    AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
                 ORDER BY created_at DESC;
                 """,
                 (label,),
@@ -338,11 +342,13 @@ async def get_node_by_name(name: str) -> dict[str, Any] | None:
         async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
 
+            # Defense-in-depth: explicit project_id filter (Story 11.7)
             cursor.execute(
                 """
                 SELECT id, label, name, properties, vector_id, created_at, project_id
                 FROM nodes
                 WHERE name = %s
+                    AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
                 LIMIT 1;
                 """,
                 (name,),
@@ -365,6 +371,62 @@ async def get_node_by_name(name: str) -> dict[str, Any] | None:
     except Exception as e:
         logger.error(f"Failed to get node by name: name={name}, error={e}")
         raise
+
+
+async def fuzzy_search_node_by_name(name: str, limit: int = 5, threshold: float = 0.3) -> list[dict[str, Any]]:
+    """
+    Fuzzy search for nodes by name using pg_trgm word_similarity.
+    Used as fallback when exact get_node_by_name returns None.
+
+    Fix 2026-02-12: Added to help callers find nodes without knowing exact names.
+    Returns suggestions, not a definitive match — caller decides.
+
+    Args:
+        name: Approximate name to search for
+        limit: Max number of suggestions
+        threshold: word_similarity threshold (default 0.3)
+
+    Returns:
+        List of node dicts with similarity score, sorted by similarity DESC
+    """
+    logger = logging.getLogger(__name__)
+
+    try:
+        async with get_connection_with_project_context() as conn:
+            cursor = conn.cursor()
+
+            # Defense-in-depth: explicit project_id filter (Story 11.7)
+            cursor.execute(
+                """
+                SELECT id, label, name, properties, vector_id, created_at, project_id,
+                       word_similarity(%s, name) AS similarity
+                FROM nodes
+                WHERE word_similarity(%s, name) > %s
+                    AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
+                ORDER BY similarity DESC
+                LIMIT %s;
+                """,
+                (name, name, threshold, limit),
+            )
+
+            results = cursor.fetchall()
+            return [
+                {
+                    "id": str(row["id"]),
+                    "label": row["label"],
+                    "name": row["name"],
+                    "properties": row["properties"],
+                    "vector_id": row["vector_id"],
+                    "created_at": row["created_at"].isoformat(),
+                    "project_id": row["project_id"],
+                    "similarity": float(row["similarity"]),
+                }
+                for row in results
+            ]
+
+    except Exception as e:
+        logger.error(f"Failed fuzzy search for node: name={name}, error={e}")
+        return []
 
 
 async def update_node_properties(
@@ -683,11 +745,13 @@ async def get_edge_by_id(edge_id: str) -> dict[str, Any] | None:
     try:
         async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
+            # Defense-in-depth: explicit project_id filter (Story 11.7)
             cursor.execute(
                 """
                 SELECT id, properties, last_accessed, access_count
                 FROM edges
-                WHERE id = %s::uuid;
+                WHERE id = %s::uuid
+                    AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[]);
                 """,
                 (edge_id,)
             )
@@ -731,6 +795,7 @@ async def get_edge_by_names(
             cursor = conn.cursor()
 
             # SQL with JOINs to resolve node names to IDs
+            # Defense-in-depth: explicit project_id filter (Story 11.7)
             cursor.execute(
                 """
                 SELECT e.id, e.source_id, e.target_id, e.relation, e.weight,
@@ -739,6 +804,7 @@ async def get_edge_by_names(
                 JOIN nodes ns ON e.source_id = ns.id
                 JOIN nodes nt ON e.target_id = nt.id
                 WHERE ns.name = %s AND nt.name = %s AND e.relation = %s
+                    AND e.project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
                 LIMIT 1;
                 """,
                 (source_name, target_name, relation),
@@ -1039,6 +1105,8 @@ async def query_neighbors(
             #
             # Story 7.6: Properties filter is applied to all 4 query blocks
             # (outgoing base, outgoing recursive, incoming base, incoming recursive)
+            # Story 11.7: Defense-in-depth project_id filter on edges table
+            project_filter_sql = " AND e.project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])"
             sql_query = f"""
                 WITH RECURSIVE
                 -- ═══════════════════════════════════════════════════════════════
@@ -1066,6 +1134,7 @@ async def query_neighbors(
                     JOIN nodes n ON e.target_id = n.id
                     WHERE e.source_id = %s::uuid
                         AND (%s IS NULL OR e.relation = %s)
+                        {project_filter_sql}
                         {props_where_sql}
                         {sector_where_sql}
 
@@ -1094,6 +1163,7 @@ async def query_neighbors(
                     WHERE ob.distance < %s
                         AND NOT (n.id = ANY(ob.path))  -- Cycle detection
                         AND (%s IS NULL OR e.relation = %s)
+                        {project_filter_sql}
                         {props_where_sql}
                         {sector_where_sql}
                 ),
@@ -1122,6 +1192,7 @@ async def query_neighbors(
                     JOIN nodes n ON e.source_id = n.id
                     WHERE e.target_id = %s::uuid
                         AND (%s IS NULL OR e.relation = %s)
+                        {project_filter_sql}
                         {props_where_sql}
                         {sector_where_sql}
 
@@ -1150,6 +1221,7 @@ async def query_neighbors(
                     WHERE ib.distance < %s
                         AND NOT (n.id = ANY(ib.path))  -- Cycle detection
                         AND (%s IS NULL OR e.relation = %s)
+                        {project_filter_sql}
                         {props_where_sql}
                         {sector_where_sql}
                 ),
@@ -1353,6 +1425,7 @@ async def find_path(
             end_node_id = end_node["id"]
 
             # Use recursive CTE for BFS pathfinding with bidirectional traversal
+            # Defense-in-depth: explicit project_id filter on edges (Story 11.7)
             cursor.execute(
                 """
                 WITH RECURSIVE paths AS (
@@ -1366,7 +1439,8 @@ async def find_path(
                         1 AS path_length,
                         e.weight AS total_weight
                     FROM edges e
-                    WHERE e.source_id = %s::uuid OR e.target_id = %s::uuid
+                    WHERE (e.source_id = %s::uuid OR e.target_id = %s::uuid)
+                        AND e.project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
 
                     UNION ALL
 
@@ -1386,6 +1460,7 @@ async def find_path(
                         OR e.target_id = p.node_path[array_length(p.node_path, 1)]
                     )
                     WHERE p.path_length < %s
+                        AND e.project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
                         AND NOT (
                             CASE
                                 WHEN e.source_id = p.node_path[array_length(p.node_path, 1)]
