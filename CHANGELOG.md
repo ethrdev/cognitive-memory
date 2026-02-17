@@ -6,6 +6,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [1.3.0] - 2026-02-17
+
+### Security / Multi-Project Isolation (Story 11.7)
+
+Critical fix for cross-project data contamination. All read-path database functions now include explicit `project_id` filters via `get_allowed_projects()` as defense-in-depth, independent of RLS enforcement mode.
+
+### Fixed
+- **Cross-project data leakage**: 13+ read-path functions relied solely on RLS (which was in `pending`/`shadow` mode for some projects). Added explicit `WHERE project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])` to all read queries.
+- **I/O seeing AB data**: I/O had `super` access level (sees all projects). Changed to `isolated` via Migration 046.
+- **AB seeing I/O data**: AB's RLS mode was `pending` (no enforcement). Explicit filters now prevent cross-project reads regardless of RLS mode.
+- **`count_by_type` returned global counts**: All 6 UNION ALL sub-queries now scoped to current project.
+- **Graph traversal crossed project boundaries**: `query_neighbors()` CTE (4 blocks) and `find_path()` recursive queries now filter edges by project_id.
+
+### Added
+- Explicit `get_allowed_projects()` defense-in-depth filters in:
+  - `insights.py`: `get_insight_by_id`, `list_insights`, `update_insight_in_db`, `execute_update_with_history`, `execute_delete_with_history`
+  - `episodes.py`: `list_episodes` (data + count queries)
+  - `stats.py`: `get_all_counts` (6 sub-queries)
+  - `graph.py`: `get_node_by_id`, `get_node_by_name`, `get_nodes_by_label`, `fuzzy_search_node_by_name`, `get_edge_by_id`, `get_edge_by_names`, `query_neighbors` (4 CTE blocks), `find_path` (base + recursive)
+  - `tools/__init__.py`: `graph_search` L2 insight fetch
+- Migration 045: Activate shadow mode for RLS audit logging
+- Migration 046: Change I/O from `super` to `isolated` access level
+- `tests/test_project_isolation.py`: 13 unit tests verifying filter presence in SQL queries
+
+---
+
+## [1.2.2] - 2026-02-12
+
+### Fixed
+- **Trigram keyword search broken**: `similarity()` replaced with `word_similarity()` in both L2 keyword search and episode keyword search. `similarity()` computes Jaccard similarity over ALL trigrams — structurally incapable of matching short queries against long documents (score ~0.007 vs threshold 0.15). `word_similarity()` finds best-matching substring. Threshold adjusted from 0.15 to 0.3 (pg_trgm default). (`mcp_server/tools/__init__.py`)
+- **`graph_query_neighbors` `limit` parameter ignored**: `query_neighbors()` returns a list, but the limit code checked `if "neighbors" in result` (dict key check on a list — always False). Fixed to `isinstance(result, list)` with direct list slicing. (`mcp_server/tools/graph_query_neighbors.py`)
+- **`get_node_by_name` exact-match only**: Added `fuzzy_search_node_by_name()` fallback using `word_similarity()` when exact match fails. Returns up to 5 suggestions with similarity scores. (`mcp_server/db/graph.py`, `mcp_server/tools/get_node_by_name.py`)
+
+### Added
+- `limit` parameter for `graph_query_neighbors` MCP tool schema — caps response size for high-connectivity nodes
+- `fuzzy_search_node_by_name()` database function in `mcp_server/db/graph.py`
+- Fuzzy suggestions in `get_node_by_name` not_found response
+
+---
+
 ## [1.2.0] - 2026-02-11
 
 ### Added
@@ -16,11 +56,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - CHANGELOG.md: Added reference to v1.2.0 release notes
 - pyproject.toml: Added `security` marker for pytest security tests
 - Implementation Readiness Report updated to 90% readiness score with security test completion
-
----
-All notable changes to **Cognitive Memory** are documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
