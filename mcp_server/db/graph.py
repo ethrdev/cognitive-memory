@@ -167,7 +167,10 @@ async def add_node(
                 INSERT INTO nodes (project_id, label, name, properties, vector_id)
                 VALUES (%s, %s, %s, %s::jsonb, %s)
                 ON CONFLICT (project_id, name) DO UPDATE SET
-                    label = EXCLUDED.label,
+                    label = CASE
+                        WHEN EXCLUDED.label = 'Entity' THEN nodes.label
+                        ELSE EXCLUDED.label
+                    END,
                     properties = nodes.properties || EXCLUDED.properties,
                     vector_id = COALESCE(EXCLUDED.vector_id, nodes.vector_id)
                 RETURNING id, label, name, project_id, created_at,
