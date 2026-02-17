@@ -1854,6 +1854,14 @@ async def handle_hybrid_search(arguments: dict[str, Any]) -> dict[str, Any]:
                 query_text, top_k, conn, sector_filter
             ) if run_graph else []
 
+            # Defense-in-depth: Query allowed_projects for Python-level isolation guard
+            # This captures the EXACT same value used by SQL WHERE clauses
+            _guard_cursor = conn.cursor()
+            _guard_cursor.execute("SELECT get_allowed_projects() AS allowed")
+            _guard_row = _guard_cursor.fetchone()
+            _allowed_projects_guard = _guard_row["allowed"] if _guard_row and _guard_row["allowed"] else []
+            _guard_cursor.close()
+
         # Bug Fix 2025-12-06: Merge episode results with L2 results for RRF fusion
         # Episodes use prefixed IDs ("episode_49") to distinguish from l2_insights IDs
         all_semantic_results = semantic_results + episode_semantic_results
@@ -1870,6 +1878,29 @@ async def handle_hybrid_search(arguments: dict[str, Any]) -> dict[str, Any]:
 
         # Select top-k results
         final_results = fused_results[:top_k]
+
+        # Defense-in-depth: Python-level isolation guard (6th layer)
+        # Catches any isolation breach that bypasses SQL WHERE clauses + RLS policies.
+        # Uses the exact allowed_projects value queried from the same transaction.
+        _breach_count = 0
+        for result in final_results[:]:  # Iterate over copy for safe removal
+            result_pid = result.get("project_id")
+            if result_pid and _allowed_projects_guard and result_pid not in _allowed_projects_guard:
+                _breach_count += 1
+                logger.critical(
+                    "ISOLATION BREACH DETECTED in hybrid_search: "
+                    "result id=%s project_id=%s not in allowed_projects=%s "
+                    "(requesting_project=%s). Result removed.",
+                    result.get("id", "unknown"), result_pid,
+                    _allowed_projects_guard, get_current_project()
+                )
+                final_results.remove(result)
+        if _breach_count > 0:
+            logger.critical(
+                "ISOLATION GUARD: Removed %d cross-project results. "
+                "This indicates a SQL-layer filtering gap — investigate immediately.",
+                _breach_count
+            )
 
         # Story 11.6.1: Move result's project_id to metadata
         # AC #Response Metadata: "each result includes project_id in metadata"
