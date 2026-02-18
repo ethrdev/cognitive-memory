@@ -58,6 +58,7 @@ from mcp_server.tools.graph_add_node import handle_graph_add_node
 from mcp_server.tools.graph_update_node import handle_graph_update_node
 from mcp_server.tools.graph_find_path import handle_graph_find_path
 from mcp_server.tools.graph_query_neighbors import handle_graph_query_neighbors
+from mcp_server.tools.list_nodes_by_label import handle_list_nodes_by_label
 from mcp_server.tools.insights.delete import handle_delete_insight
 from mcp_server.tools.insights.feedback import handle_submit_insight_feedback
 from mcp_server.tools.insights.history import handle_get_insight_history
@@ -3305,6 +3306,26 @@ def register_tools(server) -> list:
             },
         ),
         Tool(
+            name="list_nodes_by_label",
+            description="List all graph nodes with a specific label. Returns nodes sorted by created_at descending. Useful for bulk retrieval of typed nodes (e.g., all MarketSignal nodes) without requiring individual name lookups.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "label": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Node label to filter by (e.g., 'MarketSignal', 'Entity', 'Opportunity')",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Optional maximum number of nodes to return",
+                    },
+                },
+                "required": ["label"],
+            },
+        ),
+        Tool(
             name="get_edge",
             description="Retrieve a graph edge by source name, target name, and relation for write-then-verify operations. Returns edge data if found, or graceful null response if not found (no exception).",
             inputSchema={
@@ -3755,6 +3776,7 @@ def register_tools(server) -> list:
         "graph_query_neighbors": handle_graph_query_neighbors,
         "graph_find_path": handle_graph_find_path,
         "get_node_by_name": handle_get_node_by_name,
+        "list_nodes_by_label": handle_list_nodes_by_label,
         "get_edge": handle_get_edge,
         "count_by_type": handle_count_by_type,
         "list_episodes": handle_list_episodes,
@@ -3859,6 +3881,10 @@ def register_tools(server) -> list:
         @server.tool()
         async def get_node_by_name(arguments: dict[str, Any]) -> dict[str, Any]:
             return await handle_get_node_by_name(arguments)
+
+        @server.tool()
+        async def list_nodes_by_label(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_list_nodes_by_label(arguments)
 
         @server.tool()
         async def get_edge(arguments: dict[str, Any]) -> dict[str, Any]:
