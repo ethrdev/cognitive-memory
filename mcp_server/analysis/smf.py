@@ -445,15 +445,19 @@ def get_proposal(proposal_id: int) -> Optional[dict[str, Any]]:
     """
     Lädt einen SMF Proposal aus der Datenbank.
 
-    Note: Row-Level Security (RLS) policies automatically filter proposals by project.
-    Only proposals from the current project context are accessible.
+    Defense-in-depth: Explicit project_id filter because get_connection_sync()
+    does not set RLS context. See GitHub Issue #14.
     """
+    from mcp_server.middleware.context import get_current_project
+
+    project_id = get_current_project()
+
     with get_connection_sync() as conn:
         cursor = conn.cursor()
 
         cursor.execute("""
-            SELECT * FROM smf_proposals WHERE id = %s
-        """, (proposal_id,))
+            SELECT * FROM smf_proposals WHERE id = %s AND project_id = %s
+        """, (proposal_id, project_id))
 
         result = cursor.fetchone()
         columns = [desc[0] for desc in cursor.description] if result else []
@@ -473,9 +477,12 @@ def get_pending_proposals(include_expired: bool = False) -> List[dict[str, Any]]
         include_expired: If False (default), excludes proposals older than
                         APPROVAL_TIMEOUT_HOURS
 
-    Note: Row-Level Security (RLS) policies automatically filter proposals by project.
-    Only proposals from the current project context are returned.
+    Defense-in-depth: Explicit project_id filter because get_connection_sync()
+    does not set RLS context. See GitHub Issue #14.
     """
+    from mcp_server.middleware.context import get_current_project
+
+    project_id = get_current_project()
     proposals = []
 
     with get_connection_sync() as conn:
@@ -487,8 +494,9 @@ def get_pending_proposals(include_expired: bool = False) -> List[dict[str, Any]]
                        approval_level, created_at
                 FROM smf_proposals
                 WHERE status = 'PENDING'
+                  AND project_id = %s
                 ORDER BY created_at DESC
-            """)
+            """, (project_id,))
         else:
             # Exclude expired proposals (Story 7.9, AC Zeile 620)
             timeout_threshold = datetime.now(timezone.utc) - timedelta(hours=APPROVAL_TIMEOUT_HOURS)
@@ -497,9 +505,10 @@ def get_pending_proposals(include_expired: bool = False) -> List[dict[str, Any]]
                        approval_level, created_at
                 FROM smf_proposals
                 WHERE status = 'PENDING'
+                  AND project_id = %s
                   AND created_at > %s
                 ORDER BY created_at DESC
-            """, (timeout_threshold,))
+            """, (project_id, timeout_threshold))
 
         results = cursor.fetchall()
         columns = [desc[0] for desc in cursor.description]
