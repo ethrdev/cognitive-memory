@@ -86,3 +86,14 @@ _bmad/
 _bmad-output/
 # Exception for sprint tracking (needs to be committed)
 !_bmad-output/implementation-artifacts/sprint-status.yaml
+# Editor / IDE / AI agent configs (user-local)
+.claude/
+.gemini/
+.opencode/
+# Local MCP server config (may contain user-specific paths/secrets)
+.mcp.json
+.mcp-alt.json
+# Local connection test scripts may contain hardcoded credentials — never commit
+test_neon_connection.py
+# Coverage artifacts
+.coverage
