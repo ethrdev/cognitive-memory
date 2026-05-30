@@ -29,13 +29,39 @@ from typing import Any
 from urllib.parse import ParseResult, parse_qs, urlparse
 
 from fastmcp import FastMCP
+from fastmcp.server.dependencies import get_http_headers
 from openai import OpenAI
 from pgvector.psycopg2 import register_vector  # type: ignore
 from psycopg2.extensions import connection as Psycopg2Connection
 from psycopg2.extras import DictCursor
 
-from mcp_server.db.connection import get_connection, get_pool_status
+from mcp_server.db.connection import (
+    get_connection,
+    get_connection_with_project_context,
+    get_pool_status,
+)
+from mcp_server.exceptions import ProjectNotFoundError
+from mcp_server.middleware.context import get_project_id, set_project_id
+from mcp_server.middleware.tenant import validate_project_id
 from mcp_server.tools import get_embedding_with_retry
+
+_resource_logger = logging.getLogger(__name__)
+
+# NOTE on architectural debt: FastMCP 3.x does not provide an `on_read_resource`
+# middleware hook (only `on_call_tool`), so resource handlers must resolve their
+# own project_id from headers / contextvar / env-var via
+# `_resolve_project_id_for_resource()` below. If a future FastMCP version adds
+# a resource middleware hook, the resolver can be removed and TenantMiddleware
+# can cover both tools and resources uniformly. Until then, the resolver is the
+# documented Tenant entry point for resource reads.
+#
+# RLS NOTE: cognitive-memory's DB user (`neondb_owner`) has BYPASSRLS, so the
+# RLS policies on the domain tables are not enforced for the app's queries
+# even when `get_connection_with_project_context()` sets the session vars.
+# Each resource handler therefore filters explicitly with `WHERE project_id`
+# in addition to opening the tenant-aware connection (defense in depth). When
+# the DB user moves to a non-BYPASSRLS role, the explicit WHEREs become
+# redundant but remain harmless.
 
 
 # TypedDict definitions for DictCursor rows
@@ -123,6 +149,73 @@ def get_single_param(params: dict[str, list[str]], name: str, default: str = "")
     return values[0] if values else default
 
 
+async def _resolve_project_id_for_resource() -> str:
+    """
+    Resolve and activate the project_id for a resource read.
+
+    Resources do not flow through ``TenantMiddleware`` (FastMCP 3.x has no
+    ``on_read_resource`` hook), so they must resolve their own project context
+    before opening a tenant-aware DB connection.
+
+    Resolution order (mirrors ``TenantMiddleware._extract_project_id``, minus
+    ``_meta`` because resources have no MiddlewareContext):
+
+        1. HTTP ``X-Project-ID`` header (production / HTTP transport)
+        2. ``project_context`` contextvar (already set, e.g. by tests/scripts)
+        3. ``PROJECT_ID`` environment variable (Claude Code stdio integration)
+        4. Otherwise: ``ProjectContextRequiredError`` via ``RuntimeError``
+
+    The resolved id is validated against ``project_registry`` and pushed into
+    the ``project_context`` contextvar so that
+    ``get_connection_with_project_context()`` picks it up and RLS filters apply.
+
+    Returns:
+        The validated, active project_id.
+
+    Raises:
+        RuntimeError: If no project context can be resolved.
+        ProjectNotFoundError: If the resolved id is not in project_registry.
+    """
+    # 1. HTTP header (production)
+    project_id: str | None = None
+    try:
+        headers = get_http_headers()
+        if header_pid := headers.get("x-project-id"):
+            project_id = header_pid
+            _resource_logger.debug(f"Resource resolver: project_id from HTTP header: {project_id}")
+    except RuntimeError:
+        # No HTTP request context — fall through
+        pass
+
+    # 2. Existing contextvar (tests, scripts that pre-set context)
+    if project_id is None:
+        if existing := get_project_id():
+            project_id = existing
+            _resource_logger.debug(f"Resource resolver: project_id from contextvar: {project_id}")
+
+    # 3. Environment variable (Claude Code stdio)
+    if project_id is None:
+        if env_pid := os.environ.get("PROJECT_ID"):
+            project_id = env_pid
+            _resource_logger.debug(f"Resource resolver: project_id from PROJECT_ID env: {project_id}")
+
+    # 4. No context — strict error
+    if project_id is None:
+        raise RuntimeError(
+            "Missing project context for resource read. Provide X-Project-ID header "
+            "(HTTP), set project_context via set_project_id() (tests/scripts), or "
+            "PROJECT_ID environment variable (Claude Code stdio)."
+        )
+
+    # Validate against registry (raises ProjectNotFoundError on miss)
+    metadata = await validate_project_id(project_id)
+
+    # Activate context so get_connection_with_project_context() can pick it up
+    set_project_id(metadata.project_id)
+
+    return metadata.project_id
+
+
 async def handle_l2_insights(uri: str) -> list[dict[str, Any]] | dict[str, Any]:
     """
     Handle L2 insights resource read with semantic search.
@@ -167,23 +260,27 @@ async def handle_l2_insights(uri: str) -> list[dict[str, Any]] | dict[str, Any]:
     client = OpenAI(api_key=api_key)
 
     try:
-        async with get_connection() as conn:
+        project_id = await _resolve_project_id_for_resource()
+        async with get_connection_with_project_context() as conn:
             # Register pgvector type
             register_vector(conn)
 
             # Generate embedding for query
             embedding = await get_embedding_with_retry(client, query.strip())
 
-            # Execute semantic search
+            # Execute semantic search. Explicit project_id WHERE for defense
+            # in depth — the app DB user has BYPASSRLS so RLS alone isn't
+            # sufficient; the resolver + WHERE clause is the working fix.
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT id, content, embedding <=> %s AS distance, source_ids
+                SELECT id, content, embedding <=> %s::vector AS distance, source_ids
                 FROM l2_insights
+                WHERE project_id = %s
                 ORDER BY distance
                 LIMIT %s
             """,
-                (embedding, top_k),
+                (embedding, project_id, top_k),
             )
 
             results = []
@@ -202,6 +299,13 @@ async def handle_l2_insights(uri: str) -> list[dict[str, Any]] | dict[str, Any]:
             )
             return results
 
+    except (RuntimeError, ProjectNotFoundError) as e:
+        logger.warning(f"Resource project context error for {uri}: {e}")
+        return {
+            "error": "Missing or invalid project context",
+            "details": str(e),
+            "resource": uri,
+        }
     except Exception as e:
         logger.error(f"Failed to read L2 insights resource {uri}: {e}")
         return {
@@ -242,16 +346,18 @@ async def handle_working_memory(uri: str) -> list[dict[str, Any]] | dict[str, An
         }
 
     try:
-        async with get_connection() as conn:
+        project_id = await _resolve_project_id_for_resource()
+        async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
                 SELECT id, content, importance, last_accessed, created_at
                 FROM working_memory
+                WHERE project_id = %s
                 ORDER BY last_accessed DESC
                 LIMIT %s
             """,
-                (limit,),
+                (project_id, limit),
             )
 
             results = []
@@ -271,6 +377,13 @@ async def handle_working_memory(uri: str) -> list[dict[str, Any]] | dict[str, An
             )
             return results
 
+    except (RuntimeError, ProjectNotFoundError) as e:
+        logger.warning(f"Resource project context error for {uri}: {e}")
+        return {
+            "error": "Missing or invalid project context",
+            "details": str(e),
+            "resource": uri,
+        }
     except Exception as e:
         logger.error(f"Failed to read working memory resource {uri}: {e}")
         return {
@@ -321,24 +434,27 @@ async def handle_episode_memory(uri: str) -> list[dict[str, Any]] | dict[str, An
     client = OpenAI(api_key=api_key)
 
     try:
-        async with get_connection() as conn:
+        project_id = await _resolve_project_id_for_resource()
+        async with get_connection_with_project_context() as conn:
             # Register pgvector type
             register_vector(conn)
 
             # Generate embedding for query
             embedding = await get_embedding_with_retry(client, query.strip())
 
-            # Execute semantic search with similarity filtering and Top-3 limit
+            # Execute semantic search with similarity filter, project_id filter,
+            # and Top-3 limit. Explicit project_id WHERE for defense in depth.
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT id, query, reward, reflection, embedding <=> %s AS distance
+                SELECT id, query, reward, reflection, embedding <=> %s::vector AS distance
                 FROM episode_memory
-                WHERE (embedding <=> %s) <= %s  -- cosine distance <= 1-similarity
+                WHERE project_id = %s
+                  AND (embedding <=> %s::vector) <= %s  -- cosine distance <= 1-similarity
                 ORDER BY distance
                 LIMIT 3
             """,
-                (embedding, embedding, 1.0 - min_similarity),
+                (embedding, project_id, embedding, 1.0 - min_similarity),
             )
 
             results = []
@@ -358,6 +474,13 @@ async def handle_episode_memory(uri: str) -> list[dict[str, Any]] | dict[str, An
             )
             return results
 
+    except (RuntimeError, ProjectNotFoundError) as e:
+        logger.warning(f"Resource project context error for {uri}: {e}")
+        return {
+            "error": "Missing or invalid project context",
+            "details": str(e),
+            "resource": uri,
+        }
     except Exception as e:
         logger.error(f"Failed to read episode memory resource {uri}: {e}")
         return {
@@ -416,26 +539,24 @@ async def handle_l0_raw(uri: str) -> list[dict[str, Any]] | dict[str, Any]:
             }
 
     try:
-        async with get_connection() as conn:
-            # Build query with optional filters
+        project_id = await _resolve_project_id_for_resource()
+        async with get_connection_with_project_context() as conn:
+            # Build query — always filter by project_id (defense in depth)
             query = """
                 SELECT id, session_id, timestamp, speaker, content, metadata
                 FROM l0_raw
+                WHERE project_id = %s
             """
-            query_params = []
-            conditions = []
+            query_params: list[Any] = [project_id]
 
             if session_id:
-                conditions.append("session_id = %s")
+                query += " AND session_id = %s"
                 query_params.append(session_id)
 
             if date_range:
                 start_date, end_date = date_range.split(":")
-                conditions.append("timestamp BETWEEN %s AND %s")
+                query += " AND timestamp BETWEEN %s AND %s"
                 query_params.extend([start_date, end_date])
-
-            if conditions:
-                query += " WHERE " + " AND ".join(conditions)
 
             query += " ORDER BY timestamp DESC LIMIT %s"
             query_params.append(limit)
@@ -459,6 +580,13 @@ async def handle_l0_raw(uri: str) -> list[dict[str, Any]] | dict[str, Any]:
             logger.info(f"Retrieved {len(results)} L0 raw entries (limit: {limit})")
             return results
 
+    except (RuntimeError, ProjectNotFoundError) as e:
+        logger.warning(f"Resource project context error for {uri}: {e}")
+        return {
+            "error": "Missing or invalid project context",
+            "details": str(e),
+            "resource": uri,
+        }
     except Exception as e:
         logger.error(f"Failed to read L0 raw resource {uri}: {e}")
         return {
@@ -512,16 +640,18 @@ async def handle_stale_memory(uri: str) -> list[dict[str, Any]] | dict[str, Any]
         }
 
     try:
-        async with get_connection() as conn:
-            # Build query with optional importance filter
+        project_id = await _resolve_project_id_for_resource()
+        async with get_connection_with_project_context() as conn:
+            # Always filter by project_id; optional importance filter chains on
             query = """
                 SELECT id, original_content, archived_at, importance, reason
                 FROM stale_memory
+                WHERE project_id = %s
             """
-            query_params = []
+            query_params: list[Any] = [project_id]
 
             if importance_min is not None:
-                query += " WHERE importance >= %s"
+                query += " AND importance >= %s"
                 query_params.append(importance_min)
 
             query += " ORDER BY archived_at DESC LIMIT %s"
@@ -552,6 +682,13 @@ async def handle_stale_memory(uri: str) -> list[dict[str, Any]] | dict[str, Any]
             )
             return results
 
+    except (RuntimeError, ProjectNotFoundError) as e:
+        logger.warning(f"Resource project context error for {uri}: {e}")
+        return {
+            "error": "Missing or invalid project context",
+            "details": str(e),
+            "resource": uri,
+        }
     except Exception as e:
         logger.error(f"Failed to read stale memory resource {uri}: {e}")
         return {
@@ -605,19 +742,21 @@ def register_resources(server: FastMCP) -> list[str]:
         client = OpenAI(api_key=api_key)
 
         try:
-            async with get_connection() as conn:
+            project_id = await _resolve_project_id_for_resource()
+            async with get_connection_with_project_context() as conn:
                 register_vector(conn)
                 embedding = await get_embedding_with_retry(client, query.strip())
 
                 cursor = conn.cursor()
                 cursor.execute(
                     """
-                    SELECT id, content, embedding <=> %s AS distance, source_ids
+                    SELECT id, content, embedding <=> %s::vector AS distance, source_ids
                     FROM l2_insights
+                    WHERE project_id = %s
                     ORDER BY distance
                     LIMIT %s
                     """,
-                    (embedding, top_k),
+                    (embedding, project_id, top_k),
                 )
 
                 results = []
@@ -632,6 +771,13 @@ def register_resources(server: FastMCP) -> list[str]:
                 logger.info(f"Retrieved {len(results)} L2 insights for query: {query[:50]}...")
                 return json.dumps(results, default=str, ensure_ascii=False)
 
+        except (RuntimeError, ProjectNotFoundError) as e:
+            logger.warning(f"L2 insights resource project context error: {e}")
+            return json.dumps({
+                "error": "Missing or invalid project context",
+                "details": str(e),
+                "resource": "memory://l2-insights",
+            })
         except Exception as e:
             logger.error(f"Failed to read L2 insights: {e}")
             return json.dumps({
@@ -654,16 +800,18 @@ def register_resources(server: FastMCP) -> list[str]:
         limit = max(1, min(1000, limit))
 
         try:
-            async with get_connection() as conn:
+            project_id = await _resolve_project_id_for_resource()
+            async with get_connection_with_project_context() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
                     SELECT id, content, importance, last_accessed, created_at
                     FROM working_memory
+                    WHERE project_id = %s
                     ORDER BY last_accessed DESC
                     LIMIT %s
                     """,
-                    (limit,),
+                    (project_id, limit),
                 )
 
                 results = []
@@ -679,6 +827,13 @@ def register_resources(server: FastMCP) -> list[str]:
                 logger.info(f"Retrieved {len(results)} working memory items (limit: {limit})")
                 return json.dumps(results, default=str, ensure_ascii=False)
 
+        except (RuntimeError, ProjectNotFoundError) as e:
+            logger.warning(f"Working memory resource project context error: {e}")
+            return json.dumps({
+                "error": "Missing or invalid project context",
+                "details": str(e),
+                "resource": "memory://working-memory",
+            })
         except Exception as e:
             logger.error(f"Failed to read working memory: {e}")
             return json.dumps({
@@ -718,20 +873,22 @@ def register_resources(server: FastMCP) -> list[str]:
         client = OpenAI(api_key=api_key)
 
         try:
-            async with get_connection() as conn:
+            project_id = await _resolve_project_id_for_resource()
+            async with get_connection_with_project_context() as conn:
                 register_vector(conn)
                 embedding = await get_embedding_with_retry(client, query.strip())
 
                 cursor = conn.cursor()
                 cursor.execute(
                     """
-                    SELECT id, query, reward, reflection, embedding <=> %s AS distance
+                    SELECT id, query, reward, reflection, embedding <=> %s::vector AS distance
                     FROM episode_memory
-                    WHERE (embedding <=> %s) <= %s
+                    WHERE project_id = %s
+                      AND (embedding <=> %s::vector) <= %s
                     ORDER BY distance
                     LIMIT 3
                     """,
-                    (embedding, embedding, 1.0 - min_similarity),
+                    (embedding, project_id, embedding, 1.0 - min_similarity),
                 )
 
                 results = []
@@ -747,6 +904,13 @@ def register_resources(server: FastMCP) -> list[str]:
                 logger.info(f"Retrieved {len(results)} episodes for query: {query[:50]}...")
                 return json.dumps(results, default=str, ensure_ascii=False)
 
+        except (RuntimeError, ProjectNotFoundError) as e:
+            logger.warning(f"Episode memory resource project context error: {e}")
+            return json.dumps({
+                "error": "Missing or invalid project context",
+                "details": str(e),
+                "resource": "memory://episode-memory",
+            })
         except Exception as e:
             logger.error(f"Failed to read episode memory: {e}")
             return json.dumps({
@@ -790,25 +954,23 @@ def register_resources(server: FastMCP) -> list[str]:
             })
 
         try:
-            async with get_connection() as conn:
+            project_id = await _resolve_project_id_for_resource()
+            async with get_connection_with_project_context() as conn:
                 query_sql = """
                     SELECT id, session_id, timestamp, speaker, content, metadata
                     FROM l0_raw
+                    WHERE project_id = %s
                 """
-                query_params: list[Any] = []
-                conditions = []
+                query_params: list[Any] = [project_id]
 
                 if session_id:
-                    conditions.append("session_id = %s")
+                    query_sql += " AND session_id = %s"
                     query_params.append(session_id)
 
                 if date_range:
                     start_date, end_date = date_range.split(":")
-                    conditions.append("timestamp BETWEEN %s AND %s")
+                    query_sql += " AND timestamp BETWEEN %s AND %s"
                     query_params.extend([start_date, end_date])
-
-                if conditions:
-                    query_sql += " WHERE " + " AND ".join(conditions)
 
                 query_sql += " ORDER BY timestamp DESC LIMIT %s"
                 query_params.append(limit)
@@ -830,6 +992,13 @@ def register_resources(server: FastMCP) -> list[str]:
                 logger.info(f"Retrieved {len(results)} L0 raw entries (limit: {limit})")
                 return json.dumps(results, default=str, ensure_ascii=False)
 
+        except (RuntimeError, ProjectNotFoundError) as e:
+            logger.warning(f"L0 raw resource project context error: {e}")
+            return json.dumps({
+                "error": "Missing or invalid project context",
+                "details": str(e),
+                "resource": "memory://l0-raw",
+            })
         except Exception as e:
             logger.error(f"Failed to read L0 raw: {e}")
             return json.dumps({
@@ -856,15 +1025,17 @@ def register_resources(server: FastMCP) -> list[str]:
             importance_min = max(0.0, min(1.0, importance_min))
 
         try:
-            async with get_connection() as conn:
+            project_id = await _resolve_project_id_for_resource()
+            async with get_connection_with_project_context() as conn:
                 query_sql = """
                     SELECT id, original_content, archived_at, importance, reason
                     FROM stale_memory
+                    WHERE project_id = %s
                 """
-                query_params: list[Any] = []
+                query_params: list[Any] = [project_id]
 
                 if importance_min >= 0.0:
-                    query_sql += " WHERE importance >= %s"
+                    query_sql += " AND importance >= %s"
                     query_params.append(importance_min)
 
                 query_sql += " ORDER BY archived_at DESC LIMIT %s"
@@ -887,6 +1058,13 @@ def register_resources(server: FastMCP) -> list[str]:
                 logger.info(f"Retrieved {len(results)} stale memory items{filter_desc} (limit: {limit})")
                 return json.dumps(results, default=str, ensure_ascii=False)
 
+        except (RuntimeError, ProjectNotFoundError) as e:
+            logger.warning(f"Stale memory resource project context error: {e}")
+            return json.dumps({
+                "error": "Missing or invalid project context",
+                "details": str(e),
+                "resource": "memory://stale-memory",
+            })
         except Exception as e:
             logger.error(f"Failed to read stale memory: {e}")
             return json.dumps({

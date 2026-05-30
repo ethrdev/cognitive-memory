@@ -2,17 +2,25 @@
 Integration tests for MCP Resources.
 
 Tests all 5 MCP resources with real PostgreSQL database operations.
-Validates functionality, error handling, and read-only behavior.
+Validates functionality, error handling, read-only behavior, and tenant
+isolation via Row-Level Security.
 """
 
+import asyncio
+import json
 import os
 import uuid
 from datetime import datetime, timedelta
 
 import pytest
 from openai import OpenAI
+from pgvector.psycopg2 import register_vector
 
-from mcp_server.db.connection import get_connection
+from mcp_server.db.connection import (
+    get_connection,
+    get_connection_with_project_context,
+)
+from mcp_server.middleware.context import clear_context, set_project_id
 from mcp_server.resources import (
     handle_episode_memory,
     handle_l0_raw,
@@ -21,6 +29,22 @@ from mcp_server.resources import (
     handle_working_memory,
 )
 from mcp_server.tools import get_embedding_with_retry
+
+TEST_PROJECT_ID = "test-project"
+
+
+@pytest.fixture(autouse=True)
+def tenant_context():
+    """Activate a known project context for every test (function-scoped).
+
+    Resources resolve their project_id from header / contextvar / env-var.
+    Tests don't get HTTP headers, so we pre-set the contextvar to the
+    'test-project' tenant (which exists in project_registry). After the test
+    we clear the context to keep tests fully isolated.
+    """
+    set_project_id(TEST_PROJECT_ID)
+    yield TEST_PROJECT_ID
+    clear_context()
 
 
 @pytest.fixture
@@ -33,15 +57,22 @@ async def setup_test_data():
 
     client = OpenAI(api_key=api_key)
 
-    async with get_connection() as conn:
+    async with get_connection_with_project_context() as conn:
         cursor = conn.cursor()
 
-        # Clear existing test data
-        cursor.execute("DELETE FROM stale_memory")
-        cursor.execute("DELETE FROM l0_raw")
-        cursor.execute("DELETE FROM episode_memory")
-        cursor.execute("DELETE FROM working_memory")
-        cursor.execute("DELETE FROM l2_insights")
+        # Clear existing test data. We use explicit `WHERE project_id` filters
+        # because the app DB user has BYPASSRLS — RLS alone wouldn't scope these
+        # to TEST_PROJECT_ID. insight_feedback is deleted first to satisfy the
+        # FK constraint that points at l2_insights.
+        cursor.execute(
+            "DELETE FROM insight_feedback WHERE insight_id IN "
+            "(SELECT id FROM l2_insights WHERE project_id = %s)",
+            (TEST_PROJECT_ID,),
+        )
+        for tbl in ("stale_memory", "l0_raw", "episode_memory",
+                    "working_memory", "l2_insights"):
+            cursor.execute(f"DELETE FROM {tbl} WHERE project_id = %s",
+                           (TEST_PROJECT_ID,))
         conn.commit()
 
         # Insert test L2 insights
@@ -57,20 +88,23 @@ async def setup_test_data():
 
         cursor.execute(
             """
-            INSERT INTO l2_insights (content, embedding, source_ids)
-            VALUES (%s, %s, %s), (%s, %s, %s), (%s, %s, %s)
+            INSERT INTO l2_insights (content, embedding, source_ids, project_id)
+            VALUES (%s, %s, %s, %s), (%s, %s, %s, %s), (%s, %s, %s, %s)
             RETURNING id
         """,
             (
                 "Machine learning requires careful feature engineering and model selection.",
                 embedding_1,
                 [1, 2],
+                TEST_PROJECT_ID,
                 "Deep learning neural networks excel at pattern recognition tasks.",
                 embedding_2,
                 [3, 4],
+                TEST_PROJECT_ID,
                 "Data preprocessing is crucial for successful machine learning pipelines.",
                 embedding_3,
                 [5, 6],
+                TEST_PROJECT_ID,
             ),
         )
         l2_ids = [row[0] for row in cursor.fetchall()]
@@ -79,11 +113,11 @@ async def setup_test_data():
         base_time = datetime.utcnow()
         cursor.execute(
             """
-            INSERT INTO working_memory (content, importance, last_accessed, created_at)
+            INSERT INTO working_memory (content, importance, last_accessed, created_at, project_id)
             VALUES
-                (%s, %s, %s, %s),
-                (%s, %s, %s, %s),
-                (%s, %s, %s, %s)
+                (%s, %s, %s, %s, %s),
+                (%s, %s, %s, %s, %s),
+                (%s, %s, %s, %s, %s)
             RETURNING id
         """,
             (
@@ -91,14 +125,17 @@ async def setup_test_data():
                 0.8,
                 base_time - timedelta(hours=1),
                 base_time - timedelta(hours=2),
+                TEST_PROJECT_ID,
                 "Note: Test all error conditions",
                 0.6,
                 base_time - timedelta(minutes=30),
                 base_time - timedelta(hours=1),
+                TEST_PROJECT_ID,
                 "Priority: Complete ",
                 0.9,
                 base_time,
                 base_time - timedelta(minutes=15),
+                TEST_PROJECT_ID,
             ),
         )
         wm_ids = [row[0] for row in cursor.fetchall()]
@@ -109,11 +146,11 @@ async def setup_test_data():
         )
         cursor.execute(
             """
-            INSERT INTO episode_memory (query, reward, reflection, embedding)
+            INSERT INTO episode_memory (query, reward, reflection, embedding, project_id)
             VALUES
-                (%s, %s, %s, %s),
-                (%s, %s, %s, %s),
-                (%s, %s, %s, %s)
+                (%s, %s, %s, %s, %s),
+                (%s, %s, %s, %s, %s),
+                (%s, %s, %s, %s, %s)
             RETURNING id
         """,
             (
@@ -121,16 +158,19 @@ async def setup_test_data():
                 0.8,
                 "Use @server.read_resource() decorator and register resource handlers",
                 query_embedding,
+                TEST_PROJECT_ID,
                 "What's the best way to handle database connections?",
                 0.7,
                 "Use context managers for proper connection pooling",
                 await get_embedding_with_retry(
                     client, "database connection management"
                 ),
+                TEST_PROJECT_ID,
                 "How to test MCP resources effectively?",
                 0.9,
                 "Write integration tests with real database and mock external APIs",
                 await get_embedding_with_retry(client, "testing mcp resources"),
+                TEST_PROJECT_ID,
             ),
         )
         episode_ids = [row[0] for row in cursor.fetchall()]
@@ -139,11 +179,11 @@ async def setup_test_data():
         session_id = str(uuid.uuid4())
         cursor.execute(
             """
-            INSERT INTO l0_raw (session_id, timestamp, speaker, content, metadata)
+            INSERT INTO l0_raw (session_id, timestamp, speaker, content, metadata, project_id)
             VALUES
-                (%s, %s, %s, %s, %s),
-                (%s, %s, %s, %s, %s),
-                (%s, %s, %s, %s, %s)
+                (%s, %s, %s, %s, %s, %s),
+                (%s, %s, %s, %s, %s, %s),
+                (%s, %s, %s, %s, %s, %s)
             RETURNING id
         """,
             (
@@ -151,17 +191,20 @@ async def setup_test_data():
                 datetime.utcnow() - timedelta(hours=2),
                 "user",
                 "I need help implementing MCP resources",
-                {"type": "question"},
+                json.dumps({"type": "question"}),
+                TEST_PROJECT_ID,
                 session_id,
                 datetime.utcnow() - timedelta(hours=1, minutes=50),
                 "assistant",
                 "I'll help you implement the 5 required MCP resources",
-                {"type": "response"},
+                json.dumps({"type": "response"}),
+                TEST_PROJECT_ID,
                 session_id,
                 datetime.utcnow() - timedelta(hours=1, minutes=45),
                 "user",
                 "What are the 5 resources I need to implement?",
-                {"type": "followup"},
+                json.dumps({"type": "followup"}),
+                TEST_PROJECT_ID,
             ),
         )
         l0_ids = [row[0] for row in cursor.fetchall()]
@@ -169,11 +212,11 @@ async def setup_test_data():
         # Insert test stale memory items
         cursor.execute(
             """
-            INSERT INTO stale_memory (original_content, archived_at, importance, reason)
+            INSERT INTO stale_memory (original_content, archived_at, importance, reason, project_id)
             VALUES
-                (%s, %s, %s, %s),
-                (%s, %s, %s, %s),
-                (%s, %s, %s, %s)
+                (%s, %s, %s, %s, %s),
+                (%s, %s, %s, %s, %s),
+                (%s, %s, %s, %s, %s)
             RETURNING id
         """,
             (
@@ -181,14 +224,17 @@ async def setup_test_data():
                 datetime.utcnow() - timedelta(days=7),
                 0.3,
                 "LRU_EVICTION",
+                TEST_PROJECT_ID,
                 "Completed task: Database schema design",
                 datetime.utcnow() - timedelta(days=5),
                 0.8,
                 "MANUAL_ARCHIVE",
+                TEST_PROJECT_ID,
                 "Deprecated note: Use different approach",
                 datetime.utcnow() - timedelta(days=3),
                 0.5,
                 "LRU_EVICTION",
+                TEST_PROJECT_ID,
             ),
         )
         stale_ids = [row[0] for row in cursor.fetchall()]
@@ -204,12 +250,16 @@ async def setup_test_data():
             "session_id": session_id,
         }
 
-        # Cleanup
-        cursor.execute("DELETE FROM stale_memory")
-        cursor.execute("DELETE FROM l0_raw")
-        cursor.execute("DELETE FROM episode_memory")
-        cursor.execute("DELETE FROM working_memory")
-        cursor.execute("DELETE FROM l2_insights")
+        # Cleanup (scoped to TEST_PROJECT_ID; insight_feedback first for FK)
+        cursor.execute(
+            "DELETE FROM insight_feedback WHERE insight_id IN "
+            "(SELECT id FROM l2_insights WHERE project_id = %s)",
+            (TEST_PROJECT_ID,),
+        )
+        for tbl in ("stale_memory", "l0_raw", "episode_memory",
+                    "working_memory", "l2_insights"):
+            cursor.execute(f"DELETE FROM {tbl} WHERE project_id = %s",
+                           (TEST_PROJECT_ID,))
         conn.commit()
 
 
@@ -531,10 +581,10 @@ class TestReadOnlyVerification:
     @pytest.mark.asyncio
     async def test_read_only_verification(self, setup_test_data):
         """Test that all resources are read-only (no database mutations)."""
-        async with get_connection() as conn:
+        async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
 
-            # Count rows before resource calls
+            # Count rows before resource calls (RLS-scoped to TEST_PROJECT_ID)
             cursor.execute("SELECT COUNT(*) FROM l2_insights")
             l2_count_before = cursor.fetchone()[0]
 
@@ -559,7 +609,7 @@ class TestReadOnlyVerification:
         await handle_l0_raw("memory://l0-raw?limit=10")
         await handle_stale_memory("memory://stale-memory?importance_min=0.5")
 
-        async with get_connection() as conn:
+        async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
 
             # Count rows after resource calls
@@ -655,3 +705,258 @@ class TestErrorHandlingConsistency:
         assert l2_result == []
         assert wm_result == []  # Assuming cleanup
         assert episode_result == []
+
+
+# ---------------------------------------------------------------------------
+# Tenant Isolation Tests (Story: Resource Tenant-Filter Hotfix 2026-05-30)
+# ---------------------------------------------------------------------------
+
+PROJECT_A = "tenant-iso-a"
+PROJECT_B = "tenant-iso-b"
+
+
+@pytest.fixture
+async def isolation_tenants():
+    """Register two throwaway tenants in project_registry + cleanup after test.
+
+    project_registry has no RLS, so we can INSERT/DELETE freely. The two
+    tenants are isolated-access (default) so RLS scopes them strictly to their
+    own rows in domain tables.
+    """
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO project_registry (project_id, access_level, name)
+            VALUES (%s, 'isolated', %s), (%s, 'isolated', %s)
+            ON CONFLICT (project_id) DO NOTHING
+            """,
+            (PROJECT_A, "Iso-Test A", PROJECT_B, "Iso-Test B"),
+        )
+        conn.commit()
+
+    yield (PROJECT_A, PROJECT_B)
+
+    # Cleanup: remove rows in domain tables (one project at a time), then the
+    # registry entries. We use explicit WHERE project_id = %s since the app DB
+    # user has BYPASSRLS (RLS doesn't restrict the DELETE on its own).
+    for pid in (PROJECT_A, PROJECT_B):
+        set_project_id(pid)
+        async with get_connection_with_project_context() as conn:
+            cur = conn.cursor()
+            for tbl in ("stale_memory", "l0_raw", "episode_memory",
+                        "working_memory", "l2_insights"):
+                cur.execute(f"DELETE FROM {tbl} WHERE project_id = %s", (pid,))
+            conn.commit()
+    clear_context()
+
+    async with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "DELETE FROM project_registry WHERE project_id IN (%s, %s)",
+            (PROJECT_A, PROJECT_B),
+        )
+        conn.commit()
+
+
+async def _seed_minimal_rows(project_id: str, marker: str) -> None:
+    """Insert one minimal row per RLS-tested table for a given tenant."""
+    set_project_id(project_id)
+    async with get_connection_with_project_context() as conn:
+        cur = conn.cursor()
+        now = datetime.utcnow()
+        cur.execute(
+            "INSERT INTO working_memory (content, importance, last_accessed, "
+            "created_at, project_id) VALUES (%s, 0.9, %s, %s, %s)",
+            (f"wm:{marker}", now, now, project_id),
+        )
+        cur.execute(
+            "INSERT INTO stale_memory (original_content, archived_at, importance, "
+            "reason, project_id) VALUES (%s, %s, 0.5, 'TEST', %s)",
+            (f"stale:{marker}", now, project_id),
+        )
+        sid = str(uuid.uuid4())
+        cur.execute(
+            "INSERT INTO l0_raw (session_id, timestamp, speaker, content, "
+            "metadata, project_id) VALUES (%s, %s, 'user', %s, %s, %s)",
+            (sid, now, f"l0:{marker}", json.dumps({"t": "iso"}), project_id),
+        )
+        # L2 + episode need real embeddings — handled in the isolation test
+        # itself (only if OPENAI_API_KEY is configured).
+        conn.commit()
+
+
+class TestTenantIsolation:
+    """RLS contract: each tenant sees only its own rows. Tier-1 risk coverage."""
+
+    @pytest.mark.asyncio
+    async def test_working_memory_isolated(self, isolation_tenants):
+        pa, pb = isolation_tenants
+        await _seed_minimal_rows(pa, "A")
+        await _seed_minimal_rows(pb, "B")
+
+        set_project_id(pa)
+        result_a = await handle_working_memory("memory://working-memory")
+        assert any("wm:A" in r["content"] for r in result_a)
+        assert not any("wm:B" in r["content"] for r in result_a)
+
+        set_project_id(pb)
+        result_b = await handle_working_memory("memory://working-memory")
+        assert any("wm:B" in r["content"] for r in result_b)
+        assert not any("wm:A" in r["content"] for r in result_b)
+
+    @pytest.mark.asyncio
+    async def test_stale_memory_isolated(self, isolation_tenants):
+        pa, pb = isolation_tenants
+        await _seed_minimal_rows(pa, "A")
+        await _seed_minimal_rows(pb, "B")
+
+        set_project_id(pa)
+        result_a = await handle_stale_memory("memory://stale-memory")
+        assert any("stale:A" in r["original_content"] for r in result_a)
+        assert not any("stale:B" in r["original_content"] for r in result_a)
+
+        set_project_id(pb)
+        result_b = await handle_stale_memory("memory://stale-memory")
+        assert any("stale:B" in r["original_content"] for r in result_b)
+        assert not any("stale:A" in r["original_content"] for r in result_b)
+
+    @pytest.mark.asyncio
+    async def test_l0_raw_isolated(self, isolation_tenants):
+        pa, pb = isolation_tenants
+        await _seed_minimal_rows(pa, "A")
+        await _seed_minimal_rows(pb, "B")
+
+        set_project_id(pa)
+        result_a = await handle_l0_raw("memory://l0-raw")
+        assert any("l0:A" in r["content"] for r in result_a)
+        assert not any("l0:B" in r["content"] for r in result_a)
+
+        set_project_id(pb)
+        result_b = await handle_l0_raw("memory://l0-raw")
+        assert any("l0:B" in r["content"] for r in result_b)
+        assert not any("l0:A" in r["content"] for r in result_b)
+
+    @pytest.mark.asyncio
+    async def test_l2_insights_isolated(self, isolation_tenants):
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key or api_key == "sk-your-openai-api-key-here":
+            pytest.skip("OpenAI API key required for L2 isolation test")
+        client = OpenAI(api_key=api_key)
+        embedding = await get_embedding_with_retry(client, "isolation-test-query")
+
+        pa, pb = isolation_tenants
+        for pid, marker in ((pa, "A"), (pb, "B")):
+            set_project_id(pid)
+            async with get_connection_with_project_context() as conn:
+                register_vector(conn)
+                cur = conn.cursor()
+                cur.execute(
+                    "INSERT INTO l2_insights (content, embedding, source_ids, project_id) "
+                    "VALUES (%s, %s, %s, %s)",
+                    (f"l2:{marker}:isolation-test-query", embedding, [1], pid),
+                )
+                conn.commit()
+
+        set_project_id(pa)
+        result_a = await handle_l2_insights(
+            "memory://l2-insights?query=isolation-test-query&top_k=10"
+        )
+        assert isinstance(result_a, list)
+        assert any("l2:A" in r["content"] for r in result_a)
+        assert not any("l2:B" in r["content"] for r in result_a)
+
+        set_project_id(pb)
+        result_b = await handle_l2_insights(
+            "memory://l2-insights?query=isolation-test-query&top_k=10"
+        )
+        assert isinstance(result_b, list)
+        assert any("l2:B" in r["content"] for r in result_b)
+        assert not any("l2:A" in r["content"] for r in result_b)
+
+    @pytest.mark.asyncio
+    async def test_episode_memory_isolated(self, isolation_tenants):
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key or api_key == "sk-your-openai-api-key-here":
+            pytest.skip("OpenAI API key required for episode isolation test")
+        client = OpenAI(api_key=api_key)
+        embedding = await get_embedding_with_retry(client, "episode-isolation-query")
+
+        pa, pb = isolation_tenants
+        for pid, marker in ((pa, "A"), (pb, "B")):
+            set_project_id(pid)
+            async with get_connection_with_project_context() as conn:
+                register_vector(conn)
+                cur = conn.cursor()
+                cur.execute(
+                    "INSERT INTO episode_memory (query, reward, reflection, "
+                    "embedding, project_id) VALUES (%s, 0.9, %s, %s, %s)",
+                    (
+                        f"ep:{marker}:episode-isolation-query",
+                        f"reflect-{marker}",
+                        embedding,
+                        pid,
+                    ),
+                )
+                conn.commit()
+
+        set_project_id(pa)
+        result_a = await handle_episode_memory(
+            "memory://episode-memory?query=episode-isolation-query&min_similarity=0.5"
+        )
+        assert isinstance(result_a, list)
+        assert any("ep:A" in r["query"] for r in result_a)
+        assert not any("ep:B" in r["query"] for r in result_a)
+
+        set_project_id(pb)
+        result_b = await handle_episode_memory(
+            "memory://episode-memory?query=episode-isolation-query&min_similarity=0.5"
+        )
+        assert isinstance(result_b, list)
+        assert any("ep:B" in r["query"] for r in result_b)
+        assert not any("ep:A" in r["query"] for r in result_b)
+
+
+class TestConcurrentTenantIsolation:
+    """Verify contextvar isolation across concurrent asyncio tasks."""
+
+    @pytest.mark.asyncio
+    async def test_concurrent_resource_reads_dont_leak(self, isolation_tenants):
+        pa, pb = isolation_tenants
+        await _seed_minimal_rows(pa, "A")
+        await _seed_minimal_rows(pb, "B")
+
+        async def read_as(pid: str) -> list[dict]:
+            # Each task has its own contextvar copy (Python contextvars semantics)
+            set_project_id(pid)
+            return await handle_working_memory("memory://working-memory")
+
+        # Spawn both reads on the event loop concurrently
+        result_a, result_b = await asyncio.gather(read_as(pa), read_as(pb))
+
+        assert any("wm:A" in r["content"] for r in result_a)
+        assert not any("wm:B" in r["content"] for r in result_a)
+        assert any("wm:B" in r["content"] for r in result_b)
+        assert not any("wm:A" in r["content"] for r in result_b)
+
+
+class TestNegativeContext:
+    """Without any project context, resources must error — not return all data."""
+
+    @pytest.mark.asyncio
+    async def test_no_context_errors_clearly(self):
+        # Clear what the autouse `tenant_context` fixture set
+        clear_context()
+        # And make sure env-var fallback can't rescue us
+        env_backup = os.environ.pop("PROJECT_ID", None)
+        try:
+            result = await handle_working_memory("memory://working-memory")
+            assert isinstance(result, dict)
+            assert "error" in result
+            assert "Missing project context" in result.get("details", "") \
+                or "Missing project context" in result.get("error", "")
+        finally:
+            if env_backup is not None:
+                os.environ["PROJECT_ID"] = env_backup
+            # Re-arm the fixture's tenant for subsequent tests in the same module
+            set_project_id(TEST_PROJECT_ID)

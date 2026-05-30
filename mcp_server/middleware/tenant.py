@@ -16,10 +16,10 @@ from dataclasses import dataclass
 from typing import Any
 
 import mcp.types as mt
-from mcp import McpError
-from mcp.types import ErrorData
 from fastmcp.server.dependencies import get_http_headers
 from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
+from mcp import McpError
+from mcp.types import ErrorData
 
 from mcp_server.exceptions import (
     ProjectContextRequiredError,
@@ -167,13 +167,14 @@ class TenantMiddleware(Middleware):
 
     async def _validate_project(self, project_id: str) -> ProjectMetadata:
         """
-        Validate project_id against registered projects.
+        Validate project_id against registered projects (instance-cached).
 
         Story 11.4.2: Project Context Validation
 
-        Queries the project_registry table to validate the project exists
-        and retrieves its metadata. Results are cached per-request to avoid
-        redundant database queries within the same tool call.
+        Thin wrapper around ``validate_project_id`` that adds per-request
+        instance-level caching. The underlying DB lookup lives in the module
+        function so it can be reused by other call sites (e.g. Resource
+        handlers, which don't go through TenantMiddleware).
 
         Args:
             project_id: The project identifier to validate
@@ -189,44 +190,66 @@ class TenantMiddleware(Middleware):
             logger.debug(f"Project validation cache hit for {project_id}")
             return self._validation_cache[project_id]
 
-        # Import here to avoid circular dependency
-        from mcp_server.db.connection import get_connection_sync
+        metadata = await validate_project_id(project_id)
+        self._validation_cache[project_id] = metadata
+        return metadata
 
-        try:
-            with get_connection_sync() as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    """
-                    SELECT project_id, access_level, name
-                    FROM project_registry
-                    WHERE project_id = %s
-                    """,
-                    (project_id,),
-                )
-                result = cursor.fetchone()
 
-                if result is None:
-                    logger.warning(f"Project not found in registry: {project_id}")
-                    raise ProjectNotFoundError(project_id)
+async def validate_project_id(project_id: str) -> ProjectMetadata:
+    """
+    Module-level project validation against ``project_registry``.
 
-                metadata = ProjectMetadata(
-                    project_id=result["project_id"],
-                    access_level=result["access_level"],
-                    name=result["name"],
-                )
+    Single source of truth for project_id validation. Used by:
+    - ``TenantMiddleware._validate_project`` (with per-request caching)
+    - ``mcp_server.resources._resolve_project_id_for_resource`` (no cache
+      needed; resource calls are short-lived)
 
-                # Cache result for this request
-                self._validation_cache[project_id] = metadata
+    Args:
+        project_id: The project identifier to validate
 
-                logger.debug(
-                    f"Project validated: {project_id} (access_level={metadata.access_level})"
-                )
-                return metadata
+    Returns:
+        ProjectMetadata containing project_id, access_level, and name
 
-        except ProjectNotFoundError:
-            # Re-raise our custom exception
-            raise
-        except Exception as e:
-            logger.error(f"Database error during project validation: {e}")
-            # Treat database errors as validation failures for security
-            raise ProjectNotFoundError(project_id) from e
+    Raises:
+        ProjectNotFoundError: If project_id is not in project_registry or
+            if a database error makes validation impossible (treated as
+            validation failure for security).
+    """
+    # Import here to avoid circular dependency
+    from mcp_server.db.connection import get_connection_sync
+
+    try:
+        with get_connection_sync() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT project_id, access_level, name
+                FROM project_registry
+                WHERE project_id = %s
+                """,
+                (project_id,),
+            )
+            result = cursor.fetchone()
+
+            if result is None:
+                logger.warning(f"Project not found in registry: {project_id}")
+                raise ProjectNotFoundError(project_id)
+
+            metadata = ProjectMetadata(
+                project_id=result["project_id"],
+                access_level=result["access_level"],
+                name=result["name"],
+            )
+
+            logger.debug(
+                f"Project validated: {project_id} (access_level={metadata.access_level})"
+            )
+            return metadata
+
+    except ProjectNotFoundError:
+        # Re-raise our custom exception
+        raise
+    except Exception as e:
+        logger.error(f"Database error during project validation: {e}")
+        # Treat database errors as validation failures for security
+        raise ProjectNotFoundError(project_id) from e

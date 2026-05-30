@@ -3,12 +3,32 @@ import json
 import logging
 import os
 from mcp_server.db.connection import initialize_pool
+from mcp_server.middleware.context import set_project_id
 from mcp_server.tools import handle_hybrid_search
 from mcp_server.resources import handle_working_memory
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(message)s') # Simplified logging for output
 logger = logging.getLogger(__name__)
+
+
+def _activate_project_context() -> str:
+    """Activate the project context for this script run.
+
+    Resources now require a project context (HTTP header, contextvar, or
+    PROJECT_ID env-var). When this script runs standalone we don't have an
+    HTTP request, so we read PROJECT_ID from the environment and set the
+    contextvar before any resource call.
+    """
+    project_id = os.environ.get("PROJECT_ID")
+    if not project_id:
+        project_id = "io"
+        logger.warning(
+            "PROJECT_ID env-var unset, defaulting to 'io'. "
+            "Set PROJECT_ID explicitly to read another tenant's state."
+        )
+    set_project_id(project_id)
+    return project_id
 
 async def get_working_memory():
     """Retrieve working memory items."""
@@ -104,14 +124,17 @@ def format_context(wm_items, core_items, io_items):
 async def main():
     # Initialize DB connection
     initialize_pool()
-    
+
+    # Activate tenant context — required for resource reads after RLS hotfix.
+    _activate_project_context()
+
     # Parallel fetch
     wm_task = asyncio.create_task(get_working_memory())
     core_task = asyncio.create_task(get_core_context())
     io_task = asyncio.create_task(get_io_state())
-    
+
     wm_items, core_items, io_items = await asyncio.gather(wm_task, core_task, io_task)
-    
+
     # Format and print
     formatted_context = format_context(wm_items, core_items, io_items)
     print(formatted_context)
