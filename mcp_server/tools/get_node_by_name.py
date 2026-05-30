@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from mcp_server.db.graph import get_node_by_name
+from mcp_server.db.graph import get_node_by_name, fuzzy_search_node_by_name
 from mcp_server.middleware.context import get_current_project
 from mcp_server.utils.response import add_response_metadata
 
@@ -65,10 +65,17 @@ async def handle_get_node_by_name(arguments: dict[str, Any]) -> dict[str, Any]:
                 }, project_id)
             else:
                 # Graceful null return - not an error
-                logger.debug(f"Node not found: name={name}")
+                # Fix 2026-02-12: Add fuzzy suggestions when exact match fails
+                logger.debug(f"Node not found: name={name}, trying fuzzy search")
+                fuzzy_results = await fuzzy_search_node_by_name(name, limit=5)
+                suggestions = [
+                    {"name": r["name"], "similarity": r["similarity"]}
+                    for r in fuzzy_results
+                ]
                 return add_response_metadata({
                     "node": None,
                     "status": "not_found",
+                    "suggestions": suggestions if suggestions else None,
                 }, project_id)
 
         except Exception as db_error:

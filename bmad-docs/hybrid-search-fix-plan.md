@@ -744,4 +744,42 @@ Schritt 5: Fix 4 (sector_filter Entscheidung)  ~10 min    → Nach Erfahrung mit
 
 ---
 
+---
+
+## Zusätzliche Fixes T1-T3 (Session 3, 2026-02-12)
+
+*Identifiziert durch System-Test und BMAD Party Mode.*
+
+### Fix T1: Trigram Keyword Fallback — `similarity()` → `word_similarity()` (P0)
+
+**Problem:** Der Trigram-Fallback in `keyword_search()` und `episode_keyword_search()` nutzte `similarity(content, query)`. Diese Funktion berechnet die Jaccard-Ähnlichkeit über ALLE Trigrams beider Strings. Bei 300-Wort-Dokumenten (~1500 Trigrams) gegen 3-Wort-Queries (~10 Trigrams) ergibt selbst perfekter Overlap nur ~10/1500 ≈ 0.007 — weit unter dem Threshold von 0.15. **Effekt: Der gesamte Keyword-Kanal war strukturell tot.**
+
+**Fix:** `word_similarity(query, content)` statt `similarity(content, query)`. `word_similarity()` findet den besten Substring-Match im Dokument. Threshold von 0.15 auf 0.3 (pg_trgm Default).
+
+**Dateien:** `mcp_server/tools/__init__.py` (2 Stellen: L2 keyword ~Zeile 469, Episode keyword ~Zeile 762)
+
+**Status:** Implementiert und verifiziert (2026-02-12). `keyword_results_count: 1` (war immer 0).
+
+### Fix T2: `graph_query_neighbors` limit-Parameter ignoriert (P1)
+
+**Problem:** `query_neighbors()` gibt eine Liste zurück. Der Code prüfte `if "neighbors" in result` — ein Dict-Key-Check auf einer Liste, immer `False`. Der `limit`-Parameter wurde komplett ignoriert.
+
+**Fix:** `isinstance(result, list) and len(result) > limit` → `result = result[:limit]`
+
+**Datei:** `mcp_server/tools/graph_query_neighbors.py` Zeile 187-192
+
+**Status:** Implementiert und verifiziert (2026-02-12). `neighbor_count: 5` bei `limit=5` (war 101).
+
+### Fix T3: `get_node_by_name` Fuzzy Fallback (P2)
+
+**Problem:** Tool erforderte exakten String-Match. Typos, alternative Schreibweisen oder fehlende Suffixe lieferten `null` ohne Hinweis auf ähnliche Nodes.
+
+**Fix:** Bei `not_found` automatisch `fuzzy_search_node_by_name()` mit `word_similarity()`. Bis zu 5 Vorschläge mit Similarity-Score.
+
+**Dateien:** `mcp_server/db/graph.py` (neue Funktion), `mcp_server/tools/get_node_by_name.py`
+
+**Status:** Implementiert und verifiziert (2026-02-12). `get_node_by_name("Drift")` → suggestions: `[{"name": "Drift-Projekt", "similarity": 1.0}]`
+
+---
+
 *Dieses Dokument enthält alle Informationen für die Umsetzung. Kein weiterer Kontext nötig.*

@@ -50,6 +50,7 @@ async def handle_graph_query_neighbors(arguments: dict[str, Any]) -> dict[str, A
         node_name = arguments.get("node_name")
         relation_type = arguments.get("relation_type")  # Optional
         depth = arguments.get("depth", 1)  # Optional, default 1
+        limit = arguments.get("limit")  # Optional, Fix 2026-02-12: cap result count
         direction = arguments.get("direction", "both")  # Optional, default "both"
         include_superseded = arguments.get("include_superseded", False)  # Optional, default False
         properties_filter = arguments.get("properties_filter")  # Optional, Story 7.6
@@ -182,6 +183,13 @@ async def handle_graph_query_neighbors(arguments: dict[str, Any]) -> dict[str, A
                 use_ief=use_ief,
                 query_embedding=query_embedding
             )
+
+            # Fix 2026-02-12: Apply limit to neighbor results after sorting
+            # query_neighbors returns a list of neighbor dicts, sorted by
+            # relevance_score. Limit caps the response size to save tokens.
+            if limit is not None and isinstance(limit, int) and limit > 0:
+                if isinstance(result, list) and len(result) > limit:
+                    result = result[:limit]
 
             # Story 11.3.2: Shadow audit for SELECT operations
             # Log cross-project violations if in shadow mode (non-blocking)

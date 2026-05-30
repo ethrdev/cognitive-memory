@@ -15,7 +15,7 @@ from typing import Any
 
 from mcp_server.analysis.smf import approve_proposal, get_proposal
 from mcp_server.external.anthropic_client import HaikuClient
-from mcp_server.middleware.context import get_current_project
+from mcp_server.middleware import context  # Import context module instead of function directly
 from mcp_server.utils.response import add_response_metadata
 
 
@@ -38,7 +38,7 @@ async def handle_smf_approve(arguments: dict[str, Any]) -> dict[str, Any]:
 
     try:
         # Story 11.4.3: Get project_id from middleware context
-        project_id = get_current_project()
+        project_id = context.get_current_project()
 
         # Extract parameters
         proposal_id = arguments.get("proposal_id")
@@ -147,7 +147,13 @@ async def handle_smf_approve(arguments: dict[str, Any]) -> dict[str, Any]:
         }, project_id)
 
     except Exception as e:
-        logger.error(f"Error approving SMF proposal {proposal_id}: {e}")
+        proposal_id_for_log = locals().get('proposal_id', 'unknown')
+        logger.error(f"Error approving SMF proposal {proposal_id_for_log}: {e}")
+        # Get project_id safely for error response
+        try:
+            project_id = context.get_current_project()
+        except Exception:
+            project_id = "unknown"
         return add_response_metadata({
             "error": "Failed to approve proposal",
             "details": str(e),
@@ -155,4 +161,4 @@ async def handle_smf_approve(arguments: dict[str, Any]) -> dict[str, Any]:
             "proposal_id": arguments.get("proposal_id"),
             "actor": arguments.get("actor"),
             "status": "error"
-        }, get_current_project())  # Still get project_id even in catch block
+        }, project_id)

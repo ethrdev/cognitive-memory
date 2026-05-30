@@ -755,6 +755,11 @@ result = await mcp_server.call_tool("graph_add_edge", {
         "description": "JSONB filter for edge properties (Story 7.6)",
         "additionalProperties": true
       },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Optional maximum number of neighbor results to return. Applied after sorting by relevance. Useful to cap token usage for high-connectivity nodes."
+      },
       "use_ief": {
         "type": "boolean",
         "default": false,
@@ -780,6 +785,7 @@ result = await mcp_server.call_tool("graph_add_edge", {
 - `direction` (string, optional, default: "both"): Traversal direction ("both", "outgoing", "incoming")
 - `include_superseded` (bool, optional, default: false): Include superseded edges
 - `properties_filter` (object, optional): JSONB edge property filter (Story 7.6)
+- `limit` (int, optional): Maximum number of results to return. Applied after sorting by relevance_score. Useful for high-connectivity nodes (e.g., I/O with 100+ neighbors). *(Added 2026-02-12)*
 - `use_ief` (bool, optional, default: false): Enable IEF scoring for identity-weighted results (Epic 7)
 - `query_embedding` (array[float], optional): 1536-dim embedding for semantic similarity in IEF
 
@@ -1015,6 +1021,99 @@ if result["path_found"]:
     for step in result["path"]:
         print(f"  {step['name']} -> {step.get('relation_to_next', 'END')}")
 ```
+
+---
+
+### get_node_by_name
+
+**Purpose:** Retrieve a graph node by its exact name for write-then-verify operations. Returns fuzzy suggestions when exact match fails. *(Fuzzy fallback added 2026-02-12)*
+
+**Signature:**
+```json
+{
+  "name": "get_node_by_name",
+  "description": "Retrieve a graph node by its name for verification purposes. Returns fuzzy suggestions if exact match not found.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "description": "Exact name of the node to retrieve"
+      }
+    },
+    "required": ["name"]
+  }
+}
+```
+
+**Parameters:**
+- `name` (string, required): Exact name of the node to look up
+
+**Returns (found):**
+```json
+{
+  "node_id": "uuid-123",
+  "label": "Entity",
+  "name": "Drift-Projekt",
+  "properties": {"status": "in_progress"},
+  "vector_id": 42,
+  "created_at": "2026-02-09T01:59:59Z",
+  "status": "success"
+}
+```
+
+**Returns (not found — with fuzzy suggestions):**
+```json
+{
+  "node": null,
+  "status": "not_found",
+  "suggestions": [
+    {"name": "Drift-Projekt", "similarity": 1.0},
+    {"name": "Drift Layer 01", "similarity": 0.45}
+  ]
+}
+```
+
+**Fuzzy Search (2026-02-12):**
+- Uses `word_similarity()` from pg_trgm extension
+- Returns up to 5 suggestions with similarity scores > 0.3
+- `suggestions` is `null` when no fuzzy matches found either
+- Never throws exceptions for missing nodes — always returns graceful response
+
+**Example Usage:**
+```python
+# Exact match
+result = await mcp_server.call_tool("get_node_by_name", {"name": "I/O"})
+# → status: "success", node_id: "uuid-..."
+
+# Fuzzy fallback
+result = await mcp_server.call_tool("get_node_by_name", {"name": "Drift"})
+# → status: "not_found", suggestions: [{"name": "Drift-Projekt", "similarity": 1.0}]
+```
+
+---
+
+### get_edge
+
+**Purpose:** Retrieve a specific edge between two named nodes with a given relation type.
+
+**Signature:**
+```json
+{
+  "name": "get_edge",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "source_name": {"type": "string", "description": "Name of the source node"},
+      "target_name": {"type": "string", "description": "Name of the target node"},
+      "relation": {"type": "string", "description": "Relation type of the edge"}
+    },
+    "required": ["source_name", "target_name", "relation"]
+  }
+}
+```
+
+**Returns:** Edge data including properties, weight, created_at, or error if not found.
 
 ---
 

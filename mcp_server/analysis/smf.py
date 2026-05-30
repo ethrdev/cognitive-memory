@@ -648,6 +648,16 @@ async def approve_proposal(
                 resolution_type=proposed_action.get("resolution_type"),
                 context=f"SMF proposal {proposal_id} approved by {actor}"
             )
+        elif proposed_action.get("action") == SMFAction.UPDATE_INSIGHT:
+            # Story 26.2: Execute insight update after bilateral approval
+            from mcp_server.db.insights import execute_update_with_history
+            await execute_update_with_history(
+                insight_id=proposed_action.get("insight_id"),
+                new_content=proposed_action.get("new_content"),
+                new_memory_strength=proposed_action.get("new_memory_strength"),
+                actor=actor,
+                reason=f"SMF proposal {proposal_id} approved"
+            )
 
         # Audit log
         await _log_audit_entry(
