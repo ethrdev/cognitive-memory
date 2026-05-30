@@ -26,6 +26,7 @@ pyyaml = "^6.0"
 ruamel-yaml = "^0.18.0"
 tabulate = "^0.9.0"
 cryptography = "^46.0.3"
+fastmcp = "^2.14.5"
 
 [tool.poetry.group.dev.dependencies]
 black = "^24.3.0"
@@ -37,6 +38,7 @@ pytest-cov = "^4.1.0"
 pre-commit = "^3.5.0"
 types-psycopg2 = "^2.9.21.20251012"
 types-jsonschema = "^4.25.1.20251009"
+asyncpg = "^0.31.0"
 
 [build-system]
 requires = ["poetry-core"]
@@ -132,14 +134,15 @@ ignore_errors = true
 minversion = "6.0"
 addopts = "-ra -q --strict-markers --strict-config"
 testpaths = ["tests"]
+norecursedirs = ["tests/disabled"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 markers = [
-    "P0: Critical path - must pass for merge",
-    "P1: High priority - feature validation",
-    "P2: Medium priority - edge cases",
-    "P3: Low priority - nice to have",
+    "p0: Critical path - must pass for merge",
+    "p1: High priority - feature validation",
+    "p2: Medium priority - edge cases",
+    "p3: Low priority - nice to have",
     "asyncio: marks tests as async",
     "e2e: End-to-end tests",
     "integration: marks tests as integration tests requiring real database",

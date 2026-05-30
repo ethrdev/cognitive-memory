@@ -90,7 +90,8 @@ development_status:
   11-6-1-hybrid-search-project-aware: done
   11-6-2-graph-query-operations: done
   11-6-3-insight-read-operations: done
-  epic-11-6-retrospective: optional
+  epic-11-6-retrospective: done
+  epic-11-6-retro-file: epic-11-6-retro-2026-02-11.md
 
   # Epic 11.7: SMF & Utility Operations
   epic-11-7: done
@@ -105,7 +106,8 @@ development_status:
   11-8-1-migration-scripts-tooling: done
   11-8-2-shadow-phase-execution-monitoring: done
   11-8-3-enforcing-phase-activation-validation: done
-  epic-11-8-retrospective: optional
+  epic-11-8-retrospective: done
+  epic-11-8-retro-file: epic-11-8-retro-2026-02-11.md
 
   # ═══════════════════════════════════════════════════════════════════════════
   # Epic 9: Structured Retrieval - Tags & Filter System
@@ -119,22 +121,45 @@ development_status:
   epic-9-1-retrospective: optional
 
   # Epic 9.2: Filter-Endpoints (list_episodes, list_insights)
-  epic-9-2: in-progress
+  epic-9-2: done
   9-2-1-list-epochs-extended-parameters: done
   9-2-2-list-insights-new-endpoint: done
   9-2-3-pagination-validation: done
-  epic-9-2-retrospective: optional
+  epic-9-2-retrospective: done
+  epic-9-2-retro-file: epic-9-2-retro-2026-02-11.md
 
   # Epic 9.3: Pre-Filtering in hybrid_search
-  epic-9-3: in-progress
+  epic-9-3: done
   9-3-1-hybrid-search-extended-parameters: done
   9-3-2-pre-filtering-implementation: done
   9-3-3-performance-validation: done
-  epic-9-3-retrospective: optional
+  epic-9-3-retrospective: done
+  epic-9-3-retro-file: epic-9-3-retro-2026-02-11.md
 
   # Epic 9.4: Retroaktives Tagging des Bestands
-  epic-9-4: in-progress
+  epic-9-4: done
   9-4-1-retroactive-tagging-script: done
   9-4-2-dry-run-mode: done
   9-4-3-idempotent-validation: done
-  epic-9-4-retrospective: optional
+  epic-9-4-retrospective: done
+  epic-9-4-retro-file: epic-9-4-retro-2026-02-11.md
+
+  # ═══════════════════════════════════════════════════════════════════════════════
+  # Epic TD-1: Test Infrastructure & Quality Assurance
+  # ═════════════════════════════════════════════════════════════════════════════
+  epic-td-1: done
+  td-1-1-test-infrastructure-repair: done
+
+  # ═══════════════════════════════════════════════════════════════════════════════
+  # Epic TD-2: Coverage Improvement
+  # ═══════════════════════════════════════════════════════════════════════════════
+  epic-td-2: done
+  td-2-1-coverage-improvement: done
+  # Session 2026-02-12: Story finalisiert, 14% Coverage erreicht
+  #   58 neue Tests erstellt (Unit + Integration)
+
+  # ═══════════════════════════════════════════════════════════════════════════════
+  # Epic TD-0: Test Infrastructure Fixes
+  # ═══════════════════════════════════════════════════════════════════════════════
+  epic-td-0: done
+  td-0-2-async-await-migration: done
