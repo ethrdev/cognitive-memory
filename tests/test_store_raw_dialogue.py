@@ -21,7 +21,7 @@ from mcp_server.tools import handle_store_raw_dialogue
 
 
 @pytest.fixture(scope="function", autouse=True)
-def cleanup_test_data():
+async def cleanup_test_data():
     """Clean up test data after each test."""
     yield  # Run the test first
 
@@ -29,7 +29,7 @@ def cleanup_test_data():
     try:
         from mcp_server.db.connection import get_connection
 
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             # Delete test entries (those with test session IDs)
             cursor.execute(
@@ -86,7 +86,7 @@ async def test_metadata_jsonb():
     # Verify metadata was stored correctly in database
     from mcp_server.db.connection import get_connection
 
-    with get_connection() as conn:
+    async with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT metadata FROM l0_raw WHERE session_id = %s", ("test-session-2",)
@@ -136,7 +136,7 @@ async def test_null_metadata():
     # Verify metadata is NULL in database
     from mcp_server.db.connection import get_connection
 
-    with get_connection() as conn:
+    async with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT metadata FROM l0_raw WHERE session_id = %s", ("test-session-4",)
@@ -171,7 +171,7 @@ async def test_session_grouping():
     # Verify all messages are grouped under same session
     from mcp_server.db.connection import get_connection
 
-    with get_connection() as conn:
+    async with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT COUNT(*) as count FROM l0_raw WHERE session_id = %s",
@@ -209,7 +209,7 @@ async def test_special_characters():
     # Verify content is stored exactly as provided (not executed)
     from mcp_server.db.connection import get_connection
 
-    with get_connection() as conn:
+    async with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT content, metadata FROM l0_raw WHERE session_id = %s",
@@ -246,7 +246,7 @@ async def test_empty_strings():
     # Verify empty string was stored
     from mcp_server.db.connection import get_connection
 
-    with get_connection() as conn:
+    async with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT content FROM l0_raw WHERE session_id = %s", ("test-session-7",)
@@ -274,7 +274,7 @@ async def test_long_content():
     # Verify long content was stored completely
     from mcp_server.db.connection import get_connection
 
-    with get_connection() as conn:
+    async with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT content FROM l0_raw WHERE session_id = %s", ("test-session-8",)
@@ -301,7 +301,7 @@ async def test_custom_speaker():
     # Verify speaker was stored correctly
     from mcp_server.db.connection import get_connection
 
-    with get_connection() as conn:
+    async with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT speaker FROM l0_raw WHERE session_id = %s", ("test-session-9",)

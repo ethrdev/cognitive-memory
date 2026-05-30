@@ -187,7 +187,8 @@ class TestCountByTypeTool:
 class TestGetAllCountsDBFunction:
     """Test suite for get_all_counts database function."""
 
-    def test_get_all_counts_returns_dict(self):
+    @pytest.mark.asyncio
+    async def test_get_all_counts_returns_dict(self):
         """Test that get_all_counts returns a dictionary with all counts."""
         from mcp_server.db.stats import get_all_counts
 
@@ -212,7 +213,8 @@ class TestGetAllCountsDBFunction:
             assert result["working_memory"] == 50
             assert result["raw_dialogues"] == 60
 
-    def test_get_all_counts_empty_tables(self):
+    @pytest.mark.asyncio
+    async def test_get_all_counts_empty_tables(self):
         """Test that empty tables return 0 counts."""
         from mcp_server.db.stats import get_all_counts
 

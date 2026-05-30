@@ -35,12 +35,12 @@ from mcp_server.db.graph import (
 class TestTGNAutoUpdate:
     """Test suite for TGN auto-update functionality."""
 
-    def setup_method(self):
+    async def setup_method(self):
         """Setup test data before each test."""
         self.test_nodes = {}
         self.test_edges = {}
 
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
 
             # Clean up any existing test data
@@ -89,10 +89,11 @@ class TestTGNAutoUpdate:
             )
             conn.commit()
 
-    def test_get_edge_by_names_updates_access_count(self):
+    @pytest.mark.asyncio
+    async def test_get_edge_by_names_updates_access_count(self):
         """Test 1: get_edge_by_names updates access_count (AC: #1)."""
         # Get initial state
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -116,7 +117,7 @@ class TestTGNAutoUpdate:
         assert result["relation"] == "TEST_DIRECTED"
 
         # Verify access stats were updated
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -131,14 +132,15 @@ class TestTGNAutoUpdate:
             assert updated["access_count"] == initial_count + 1
             assert updated["last_accessed"] > initial_time
 
-    def test_query_neighbors_does_not_update_access_counts(self):
+    @pytest.mark.asyncio
+    async def test_query_neighbors_does_not_update_access_counts(self):
         """Test 2: query_neighbors does NOT update access stats (2026-01-07 Decay Fix).
 
         CHANGE: Query operations no longer reset Ebbinghaus Decay.
         last_accessed/access_count remain unchanged after query.
         """
         # Get initial access counts for all edges connected to test_node_A
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -164,7 +166,7 @@ class TestTGNAutoUpdate:
         assert "test_node_C" in neighbor_names
 
         # Verify edges were NOT updated (2026-01-07 Decay Fix)
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -186,7 +188,8 @@ class TestTGNAutoUpdate:
                 assert after_time == initial_time, \
                     "Query should not update last_accessed"
 
-    def test_find_path_does_not_update_access_counts(self):
+    @pytest.mark.asyncio
+    async def test_find_path_does_not_update_access_counts(self):
         """Test 3: find_path does NOT update access stats (2026-01-07 Decay Fix).
 
         CHANGE: Path-finding operations no longer reset Ebbinghaus Decay.
@@ -196,7 +199,7 @@ class TestTGNAutoUpdate:
         edge_id = self.test_edges[edge_key]
 
         # Get initial access count for the edge
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -220,7 +223,7 @@ class TestTGNAutoUpdate:
         assert len(result["paths"]) > 0
 
         # Verify the edge was NOT updated (2026-01-07 Decay Fix)
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -237,13 +240,14 @@ class TestTGNAutoUpdate:
             assert after["last_accessed"] == initial_time, \
                 "find_path should not update last_accessed"
 
-    def test_update_edge_access_stats_bulk_operation(self):
+    @pytest.mark.asyncio
+    async def test_update_edge_access_stats_bulk_operation(self):
         """Test 4: Bulk operation efficiency."""
         # Get a list of test edge IDs
         edge_ids = list(self.test_edges.values())
 
         # Get initial counts
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             placeholders = ",".join(["%s"] * len(edge_ids))
             cursor.execute(
@@ -257,11 +261,11 @@ class TestTGNAutoUpdate:
             initial_counts = {str(row["id"]): row["access_count"] for row in cursor.fetchall()}
 
         # Call the helper function with multiple edges
-        with get_connection() as conn:
+        async with get_connection() as conn:
             _update_edge_access_stats(edge_ids, conn)
 
         # Verify all edges were updated in a single operation
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 f"""
@@ -276,7 +280,8 @@ class TestTGNAutoUpdate:
             for edge_id in edge_ids:
                 assert updated_counts[edge_id] == initial_counts[edge_id] + 1
 
-    def test_update_edge_access_stats_silent_fail_on_error(self):
+    @pytest.mark.asyncio
+    async def test_update_edge_access_stats_silent_fail_on_error(self):
         """Test 5: Silent fail on error (non-existent edge)."""
         # Test with non-existent edge IDs
         fake_edge_ids = [
@@ -285,15 +290,16 @@ class TestTGNAutoUpdate:
         ]
 
         # Should not raise an exception
-        with get_connection() as conn:
+        async with get_connection() as conn:
             # This should fail silently without raising
             _update_edge_access_stats(fake_edge_ids, conn)
 
         # Also test with empty list (should do nothing)
-        with get_connection() as conn:
+        async with get_connection() as conn:
             _update_edge_access_stats([], conn)
 
-    def test_multiple_access_count_increments(self):
+    @pytest.mark.asyncio
+    async def test_multiple_access_count_increments(self):
         """Test 6: Multiple increments accumulate correctly."""
         edge_id = self.test_edges["test_node_A_test_node_B_TEST_DIRECTED"]
 
@@ -303,7 +309,7 @@ class TestTGNAutoUpdate:
             time.sleep(0.001)  # Small delay
 
         # Verify count incremented correctly
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT access_count FROM edges WHERE id = %s;",
@@ -312,12 +318,13 @@ class TestTGNAutoUpdate:
             result = cursor.fetchone()
             assert result["access_count"] == 3
 
-    def test_access_count_never_goes_negative(self):
+    @pytest.mark.asyncio
+    async def test_access_count_never_goes_negative(self):
         """Test 7: access_count has CHECK constraint (never negative)."""
         edge_id = self.test_edges["test_node_A_test_node_B_TEST_DIRECTED"]
 
         # Try to manually set negative count (should fail due to CHECK constraint)
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             with pytest.raises(Exception):  # Should raise due to CHECK constraint
                 cursor.execute(
@@ -326,10 +333,11 @@ class TestTGNAutoUpdate:
                 )
                 conn.commit()
 
-    def test_direction_filtering_does_not_update_stats(self):
+    @pytest.mark.asyncio
+    async def test_direction_filtering_does_not_update_stats(self):
         """Test 8: query_neighbors with direction filtering does NOT update stats (2026-01-07)."""
         # Get initial stats for outgoing edges from A
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -354,7 +362,7 @@ class TestTGNAutoUpdate:
         assert "test_node_C" in neighbor_names
 
         # Verify outgoing edges were NOT updated (2026-01-07 Decay Fix)
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -375,12 +383,12 @@ class TestTGNAutoUpdate:
 class TestTGNDecayWithMemoryStrength:
     """Test suite for TGN Memory Strength and relevance_score calculation."""
 
-    def setup_method(self):
+    async def setup_method(self):
         """Setup test data before each test."""
         self.test_nodes = {}
         self.test_edges = {}
 
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
 
             # Clean up any existing test data
@@ -400,7 +408,8 @@ class TestTGNDecayWithMemoryStrength:
                 result = add_node(label, name, properties)
                 self.test_nodes[name] = result["node_id"]
 
-    def test_relevance_score_new_edge(self):
+    @pytest.mark.asyncio
+    async def test_relevance_score_new_edge(self):
         """Test: Frische Edge hat hohe Relevanz."""
         # Edge mit aktuellem Timestamp und access_count = 0
         # 2026-01-07: Now uses last_engaged instead of last_accessed
@@ -413,7 +422,8 @@ class TestTGNDecayWithMemoryStrength:
         score = calculate_relevance_score(edge_data)
         assert 0.99 <= score <= 1.0
 
-    def test_relevance_score_100_days_no_engagement(self):
+    @pytest.mark.asyncio
+    async def test_relevance_score_100_days_no_engagement(self):
         """Test 1: AC #1 - Edge mit 100 Tagen ohne Engagement."""
         # Given: Edge mit last_engaged vor 100 Tagen, access_count = 0
         # 2026-01-07: Changed from last_accessed to last_engaged
@@ -429,7 +439,8 @@ class TestTGNDecayWithMemoryStrength:
         # Then: Score ~0.37 (exp(-100/100) ≈ 0.368)
         assert 0.35 <= score <= 0.40
 
-    def test_relevance_score_100_days_high_access(self):
+    @pytest.mark.asyncio
+    async def test_relevance_score_100_days_high_access(self):
         """Test 2: AC #2 - Edge mit 100 Tagen und hohem access_count."""
         # Given: Edge mit last_engaged vor 100 Tagen, access_count = 10
         # 2026-01-07: Changed from last_accessed to last_engaged
@@ -445,7 +456,8 @@ class TestTGNDecayWithMemoryStrength:
         # Then: Score ~0.74 (S=340 → exp(-100/340) ≈ 0.745)
         assert 0.70 <= score <= 0.78
 
-    def test_relevance_score_constitutive(self):
+    @pytest.mark.asyncio
+    async def test_relevance_score_constitutive(self):
         """Test 3: AC #3 - Konstitutive Edge hat immer Score 1.0."""
         # Given: Konstitutive Edge (age doesn't matter for constitutive)
         edge_data = {
@@ -460,7 +472,8 @@ class TestTGNDecayWithMemoryStrength:
         # Then: Score ist immer 1.0
         assert score == 1.0
 
-    def test_relevance_score_high_importance(self):
+    @pytest.mark.asyncio
+    async def test_relevance_score_high_importance(self):
         """Test 5: AC #5 - Edge mit emotional sector nach 100 Tagen (Story 9-2)."""
         # Given: Edge mit memory_sector = "emotional" (S_base = 200, S_floor = 150)
         # Story 9-2: importance-based S_floor removed, now sector-specific
@@ -477,7 +490,8 @@ class TestTGNDecayWithMemoryStrength:
         # S_base = 200 für emotional memories
         assert 0.58 <= score <= 0.65
 
-    def test_relevance_score_medium_importance_floor(self):
+    @pytest.mark.asyncio
+    async def test_relevance_score_medium_importance_floor(self):
         """Test: Semantic sector mit S_floor enforcement (Story 9-2)."""
         # Story 9-2: importance-based S_floor removed, now sector-specific
         # Semantic sector has S_base = 100 (default, no S_floor configured)
@@ -491,7 +505,8 @@ class TestTGNDecayWithMemoryStrength:
         # exp(-50/100) = exp(-0.5) ≈ 0.607
         assert 0.60 <= score <= 0.62
 
-    def test_relevance_score_low_importance_no_floor(self):
+    @pytest.mark.asyncio
+    async def test_relevance_score_low_importance_no_floor(self):
         """Test: Procedural sector mit schnellerem decay (Story 9-2)."""
         # Story 9-2: Procedural sector has S_base = 120 (faster decay than emotional)
         edge_data = {
@@ -504,7 +519,8 @@ class TestTGNDecayWithMemoryStrength:
         # exp(-100/120) = exp(-0.833) ≈ 0.435
         assert 0.42 <= score <= 0.45
 
-    def test_relevance_score_no_timestamp(self):
+    @pytest.mark.asyncio
+    async def test_relevance_score_no_timestamp(self):
         """Test: Edge ohne last_engaged hat Score 1.0."""
         edge_data = {
             "edge_properties": {},
@@ -515,7 +531,8 @@ class TestTGNDecayWithMemoryStrength:
         score = calculate_relevance_score(edge_data)
         assert score == 1.0
 
-    def test_query_neighbors_has_relevance_score(self):
+    @pytest.mark.asyncio
+    async def test_query_neighbors_has_relevance_score(self):
         """Test 4a: AC #4 - query_neighbors hat relevance_score."""
         # Setup: Edge mit bekannten Werten erstellen
         result = add_edge(
@@ -528,7 +545,7 @@ class TestTGNDecayWithMemoryStrength:
         edge_id = result["edge_id"]
 
         # Setze last_engaged und access_count manuell (2026-01-07: changed from last_accessed)
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -551,7 +568,8 @@ class TestTGNDecayWithMemoryStrength:
         assert isinstance(neighbor["relevance_score"], float)
         assert 0.0 <= neighbor["relevance_score"] <= 1.0
 
-    def test_find_path_has_path_relevance(self):
+    @pytest.mark.asyncio
+    async def test_find_path_has_path_relevance(self):
         """Test 4b: AC #4 - find_path hat path_relevance."""
         # Erstelle direkte Verbindung A -> C für einfacheren Test
         result = add_edge(
@@ -564,7 +582,7 @@ class TestTGNDecayWithMemoryStrength:
         edge_id = result["edge_id"]
 
         # Setze last_engaged für reproduzierbare Ergebnisse (2026-01-07: changed from last_accessed)
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -599,7 +617,8 @@ class TestTGNDecayWithMemoryStrength:
             assert isinstance(edge["relevance_score"], float)
             assert 0.0 <= edge["relevance_score"] <= 1.0
 
-    def test_get_edge_by_id_function(self):
+    @pytest.mark.asyncio
+    async def test_get_edge_by_id_function(self):
         """Test get_edge_by_id Helper Funktion."""
         # Erstelle Edge mit bekannten Werten
         result = add_edge(
@@ -612,7 +631,7 @@ class TestTGNDecayWithMemoryStrength:
         edge_id = result["edge_id"]
 
         # Setze last_engaged und access_count (2026-01-07: changed from last_accessed)
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -636,7 +655,8 @@ class TestTGNDecayWithMemoryStrength:
         non_existent = get_edge_by_id("00000000-0000-0000-0000-000000000001")
         assert non_existent is None
 
-    def test_relevance_score_naive_datetime(self):
+    @pytest.mark.asyncio
+    async def test_relevance_score_naive_datetime(self):
         """Test: Naive datetime (no timezone) wird korrekt behandelt."""
         # Edge mit naive datetime (könnte von manchen DB-Konfigurationen kommen)
         # 2026-01-07: Now uses last_engaged
@@ -651,7 +671,8 @@ class TestTGNDecayWithMemoryStrength:
         assert isinstance(score, float)
         assert 0.0 <= score <= 1.0
 
-    def test_relevance_score_fallback_to_last_accessed(self):
+    @pytest.mark.asyncio
+    async def test_relevance_score_fallback_to_last_accessed(self):
         """Test: Fallback to last_accessed when last_engaged is missing (backwards compat)."""
         # Edge with only last_accessed (pre-migration data)
         edge_data = {
@@ -665,7 +686,8 @@ class TestTGNDecayWithMemoryStrength:
         # exp(-50/100) ≈ 0.607
         assert 0.58 <= score <= 0.65
 
-    def test_query_neighbors_sorted_by_relevance(self):
+    @pytest.mark.asyncio
+    async def test_query_neighbors_sorted_by_relevance(self):
         """Test: query_neighbors sortiert nach relevance_score."""
         # Erstelle zwei Edges mit unterschiedlicher Relevanz
         # Edge 1: Hoch relevant (frisch)
@@ -688,7 +710,7 @@ class TestTGNDecayWithMemoryStrength:
         edge_id = result["edge_id"]
 
         # Setze Edge 2 als alt (2026-01-07: changed from last_accessed)
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """

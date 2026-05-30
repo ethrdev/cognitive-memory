@@ -7,7 +7,7 @@ connections between nodes based on semantic similarity.
 
 import pytest
 from unittest.mock import Mock, patch
-from mcp_server.tools.suggest_lateral_edges import suggest_lateral_edges
+from mcp_server.tools.suggest_lateral_edges import handle_suggest_lateral_edges
 
 
 class TestSuggestLateralEdges:
@@ -32,7 +32,7 @@ class TestSuggestLateralEdges:
         ]
 
         # WHEN: Requesting suggestions
-        result = suggest_lateral_edges(mock_db_connection, node_name, top_k)
+        result = handle_suggest_lateral_edges(mock_db_connection, node_name, top_k)
 
         # THEN: Should return suggestions
         assert "suggestions" in result
@@ -57,7 +57,7 @@ class TestSuggestLateralEdges:
         ]
 
         # WHEN: Getting suggestions
-        result = suggest_lateral_edges(mock_db_connection, node_name, top_k)
+        result = handle_suggest_lateral_edges(mock_db_connection, node_name, top_k)
 
         # THEN: Should be ordered by similarity (descending)
         similarities = [s["similarity_score"] for s in result["suggestions"]]
@@ -81,7 +81,7 @@ class TestSuggestLateralEdges:
         ]
 
         # WHEN: Getting suggestions
-        result = suggest_lateral_edges(mock_db_connection, node_name, top_k)
+        result = handle_suggest_lateral_edges(mock_db_connection, node_name, top_k)
 
         # THEN: Should filter low-similarity results
         assert all(s["similarity_score"] >= 0.30 for s in result["suggestions"])
@@ -99,7 +99,7 @@ class TestSuggestLateralEdges:
         mock_db_connection.execute.return_value.fetchall.return_value = []
 
         # WHEN: Requesting suggestions
-        result = suggest_lateral_edges(mock_db_connection, node_name, top_k)
+        result = handle_suggest_lateral_edges(mock_db_connection, node_name, top_k)
 
         # THEN: Should return empty list
         assert "suggestions" in result
@@ -122,7 +122,7 @@ class TestSuggestLateralEdges:
         ]
 
         # WHEN: Requesting limited suggestions
-        result = suggest_lateral_edges(mock_db_connection, node_name, top_k)
+        result = handle_suggest_lateral_edges(mock_db_connection, node_name, top_k)
 
         # THEN: Should return exactly top_k results
         assert len(result["suggestions"]) == top_k
@@ -145,7 +145,7 @@ class TestSuggestLateralEdges:
         ]
 
         # WHEN: Getting suggestions
-        result = suggest_lateral_edges(mock_db_connection, node_name, top_k)
+        result = handle_suggest_lateral_edges(mock_db_connection, node_name, top_k)
 
         # THEN: Should not suggest already connected nodes
         # (Implementation should filter out existing edges)
@@ -171,7 +171,7 @@ class TestSuggestLateralEdges:
         ]
 
         # WHEN: Getting suggestions
-        result = suggest_lateral_edges(mock_db_connection, node_name, top_k)
+        result = handle_suggest_lateral_edges(mock_db_connection, node_name, top_k)
 
         # THEN: All scores should be in valid range
         for suggestion in result["suggestions"]:
@@ -194,7 +194,7 @@ class TestSuggestLateralEdges:
         ]
 
         # WHEN: Getting suggestions
-        result = suggest_lateral_edges(mock_db_connection, node_name, top_k)
+        result = handle_suggest_lateral_edges(mock_db_connection, node_name, top_k)
 
         # THEN: Should include description
         assert all("description" in s for s in result["suggestions"])

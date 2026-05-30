@@ -231,7 +231,8 @@ class TestListEpisodesTool:
 class TestListEpisodesDBFunction:
     """Test suite for list_episodes DB function."""
 
-    def test_list_episodes_db_function_exists(self):
+    @pytest.mark.asyncio
+    async def test_list_episodes_db_function_exists(self):
         """Test that the DB function can be imported."""
         from mcp_server.db.episodes import list_episodes
         assert callable(list_episodes)

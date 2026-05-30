@@ -25,21 +25,20 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from mcp_server.db.connection import (
     close_all_connections,
     get_connection,
-    initialize_pool,
 )
 from mcp_server.tools import add_episode, handle_store_episode
 
 
 @pytest.fixture(scope="session", autouse=True)
-def setup_test_database():
+async def setup_test_database():
     """Initialize database connection pool for tests."""
     # Load environment variables
     from dotenv import load_dotenv
 
     load_dotenv(".env.development")
 
-    # Initialize connection pool
-    initialize_pool()
+    # Connection pool is initialized by conftest.py init_connection_pool fixture
+    # This fixture just ensures environment is loaded
 
     yield
 
@@ -48,11 +47,11 @@ def setup_test_database():
 
 
 @pytest.fixture(scope="function", autouse=True)
-def cleanup_test_data():
+async def cleanup_test_data():
     """Clean up test episodes after each test."""
     yield
     try:
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             # Delete test episodes created during tests
             cursor.execute(
@@ -77,9 +76,10 @@ def mock_openai_client():
 class TestEpisodeMemoryInsertion:
     """Test Episode Memory Storage Logic."""
 
-    def test_valid_episode_insertion(self, mock_openai_client):
+    @pytest.mark.asyncio
+    async def test_valid_episode_insertion(self, mock_openai_client):
         """Test 1: Valid episode insertion - verify episode added to DB with all fields."""
-        with get_connection() as conn:
+        async with get_connection() as conn:
             # Clean up before test
             cursor = conn.cursor()
             cursor.execute("DELETE FROM episode_memory WHERE query LIKE 'test_%'")
@@ -92,7 +92,7 @@ class TestEpisodeMemoryInsertion:
 
             # Add episode using mocked OpenAI client
             with patch("mcp_server.tools.OpenAI", return_value=mock_openai_client):
-                result = asyncio.run(add_episode(query, reward, reflection, conn))
+                result = await add_episode(query, reward, reflection, conn)
 
             # Verify result structure
             assert "id" in result
@@ -121,9 +121,10 @@ class TestEpisodeMemoryInsertion:
 
             conn.commit()
 
-    def test_reward_validation_boundary_values(self, mock_openai_client):
+    @pytest.mark.asyncio
+    async def test_reward_validation_boundary_values(self, mock_openai_client):
         """Test 2: Reward validation - test boundary values (-1.0, 0.0, +1.0) and invalid (1.5, -1.5)."""
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM episode_memory WHERE query LIKE 'test_%'")
             conn.commit()
@@ -137,7 +138,7 @@ class TestEpisodeMemoryInsertion:
                 with patch(
                     "mcp_server.tools.OpenAI", return_value=mock_openai_client
                 ):
-                    result = asyncio.run(add_episode(query, reward, reflection, conn))
+                    result = await add_episode(query, reward, reflection, conn)
 
                 assert result["reward"] == reward
                 assert result["embedding_status"] == "success"
@@ -145,53 +146,55 @@ class TestEpisodeMemoryInsertion:
             # Test invalid rewards - should fail at validation level
             invalid_rewards = [1.5, -1.5, 2.0, -2.0]
             for reward in invalid_rewards:
-                result = asyncio.run(handle_store_episode(
+                result = await handle_store_episode(
                     {
                         "query": "test_invalid_reward",
                         "reward": reward,
                         "reflection": "test_reflection",
                     }
-                ))
+                )
 
                 assert result["embedding_status"] == "failed"
                 assert "Reward out of range" in result["error"]
 
-    def test_empty_query_reflection_validation(self):
+    @pytest.mark.asyncio
+    async def test_empty_query_reflection_validation(self):
         """Test 3: Empty query/reflection - verify error returned."""
         # Test empty query
-        result = asyncio.run(handle_store_episode(
+        result = await handle_store_episode(
             {"query": "", "reward": 0.5, "reflection": "test_reflection"}
-        ))
+        )
 
         assert result["embedding_status"] == "failed"
         assert "Invalid query parameter" in result["error"]
 
         # Test empty reflection
-        result = asyncio.run(handle_store_episode(
+        result = await handle_store_episode(
             {"query": "test_query", "reward": 0.5, "reflection": ""}
-        ))
+        )
 
         assert result["embedding_status"] == "failed"
         assert "Invalid reflection parameter" in result["error"]
 
         # Test whitespace-only strings
-        result = asyncio.run(handle_store_episode(
+        result = await handle_store_episode(
             {"query": "   ", "reward": 0.5, "reflection": "test_reflection"}
-        ))
+        )
 
         assert result["embedding_status"] == "failed"
         assert "Invalid query parameter" in result["error"]
 
-    def test_embedding_generation_verification(self, mock_openai_client):
+    @pytest.mark.asyncio
+    async def test_embedding_generation_verification(self, mock_openai_client):
         """Test 4: Embedding generation - verify query is embedded (1536-dim vector)."""
-        with get_connection() as conn:
+        async with get_connection() as conn:
             query = "test_embedding_query"
             reward = 0.7
             reflection = "test_embedding_reflection"
 
             # Test with mocked embedding
             with patch("mcp_server.tools.OpenAI", return_value=mock_openai_client):
-                result = asyncio.run(add_episode(query, reward, reflection, conn))
+                result = await add_episode(query, reward, reflection, conn)
 
             # Verify OpenAI API was called
             mock_openai_client.embeddings.create.assert_called_once_with(
@@ -212,9 +215,10 @@ class TestEpisodeMemoryInsertion:
 
             conn.commit()
 
-    def test_similarity_search_preparation(self):
+    @pytest.mark.asyncio
+    async def test_similarity_search_preparation(self):
         """Test 5: Similarity search preparation - add 3 episodes, verify embeddings differ."""
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "DELETE FROM episode_memory WHERE query LIKE 'test_similarity_%'"
@@ -243,7 +247,7 @@ class TestEpisodeMemoryInsertion:
                     "mcp_server.tools.OpenAI",
                     return_value=create_mock_embedding(embedding_value),
                 ):
-                    result = asyncio.run(add_episode(query, reward, reflection, conn))
+                    result = await add_episode(query, reward, reflection, conn)
                     stored_ids.append(result["id"])
 
             # Verify all episodes have different embeddings
@@ -269,9 +273,10 @@ class TestEpisodeMemoryInsertion:
 
             conn.commit()
 
-    def test_api_failure_handling(self):
+    @pytest.mark.asyncio
+    async def test_api_failure_handling(self):
         """Test 6: API failure handling - mock OpenAI API failure, verify retry logic and episode NOT stored."""
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "DELETE FROM episode_memory WHERE query LIKE 'test_api_failure_%'"
@@ -295,7 +300,7 @@ class TestEpisodeMemoryInsertion:
 
             with patch("mcp_server.tools.OpenAI", return_value=mock_client):
                 with pytest.raises(RuntimeError, match="Embedding generation failed"):
-                    asyncio.run(add_episode(query, reward, reflection, conn))
+                    await add_episode(query, reward, reflection, conn)
 
             # Verify episode was NOT stored in database
             cursor.execute(
@@ -307,7 +312,8 @@ class TestEpisodeMemoryInsertion:
             # Verify OpenAI API was called 3 times (retry logic)
             assert mock_client.embeddings.create.call_count == 3
 
-    def test_database_constraint_validation(self):
+    @pytest.mark.asyncio
+    async def test_database_constraint_validation(self):
         """Test 7: Verify reward validation happens at application level (no DB CHECK constraint).
 
         Note: The episode_memory table does NOT have a CHECK constraint on reward.
@@ -316,7 +322,7 @@ class TestEpisodeMemoryInsertion:
         (because there's no DB constraint), confirming that validation must be done
         at the application layer.
         """
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "DELETE FROM episode_memory WHERE query LIKE 'test_constraint_%'"
@@ -346,16 +352,17 @@ class TestEpisodeMemoryInsertion:
             cursor.execute("DELETE FROM episode_memory WHERE id = %s", (inserted_id,))
             conn.commit()
 
-    def test_mcp_tool_call_end_to_end_valid(self, mock_openai_client):
+    @pytest.mark.asyncio
+    async def test_mcp_tool_call_end_to_end_valid(self, mock_openai_client):
         """Integration test: Valid MCP tool call - success response format."""
         query = "test_mcp_tool_valid"
         reward = 0.8
         reflection = "test_mcp_tool_reflection"
 
         with patch("mcp_server.tools.OpenAI", return_value=mock_openai_client):
-            result = asyncio.run(handle_store_episode(
+            result = await handle_store_episode(
                 {"query": query, "reward": reward, "reflection": reflection}
-            ))
+            )
 
         # Verify success response format
         assert "id" in result
@@ -370,16 +377,17 @@ class TestEpisodeMemoryInsertion:
         assert isinstance(result["id"], int)
         assert result["id"] > 0
 
-    def test_mcp_tool_call_end_to_end_invalid(self):
+    @pytest.mark.asyncio
+    async def test_mcp_tool_call_end_to_end_invalid(self):
         """Integration test: Invalid MCP tool call - error response format."""
         # Test invalid reward
-        result = asyncio.run(handle_store_episode(
+        result = await handle_store_episode(
             {
                 "query": "test_mcp_tool_invalid",
                 "reward": -2.0,  # Invalid reward
                 "reflection": "test_reflection",
             }
-        ))
+        )
 
         # Verify error response format
         assert "error" in result
@@ -391,9 +399,10 @@ class TestEpisodeMemoryInsertion:
         assert result["tool"] == "store_episode"
         assert "Reward out of range" in result["error"]
 
-    def test_multiple_episodes_storage(self, mock_openai_client):
+    @pytest.mark.asyncio
+    async def test_multiple_episodes_storage(self, mock_openai_client):
         """Integration test: Add 5 episodes → verify all stored in episode_memory table."""
-        with get_connection() as conn:
+        async with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "DELETE FROM episode_memory WHERE query LIKE 'test_multiple_%'"
@@ -411,9 +420,9 @@ class TestEpisodeMemoryInsertion:
             stored_ids = []
             with patch("mcp_server.tools.OpenAI", return_value=mock_openai_client):
                 for query, reward, reflection in episodes:
-                    result = asyncio.run(handle_store_episode(
+                    result = await handle_store_episode(
                         {"query": query, "reward": reward, "reflection": reflection}
-                    ))
+                    )
                     stored_ids.append(result["id"])
 
             # Verify all episodes were stored

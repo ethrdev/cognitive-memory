@@ -28,7 +28,8 @@ logger = logging.getLogger(__name__)
 class TestRRFFusion:
     """Test RRF Fusion algorithm with mocked search results."""
 
-    def test_empty_result_handling(self):
+    @pytest.mark.asyncio
+    async def test_empty_result_handling(self):
         """Test AC4: Both searches return empty → return [] (NOT an error)."""
         semantic_results = []
         keyword_results = []
@@ -37,7 +38,8 @@ class TestRRFFusion:
         result = rrf_fusion(semantic_results, keyword_results, weights)
         assert result == []
 
-    def test_semantic_only_results(self):
+    @pytest.mark.asyncio
+    async def test_semantic_only_results(self):
         """Test AC4: Semantic-only results with keyword returning empty."""
         semantic_results = [
             {"id": 1, "content": "consciousness", "source_ids": [1, 2]},
@@ -58,7 +60,8 @@ class TestRRFFusion:
         assert abs(result[0]["score"] - expected_score_1) < 1e-9
         assert abs(result[1]["score"] - expected_score_2) < 1e-9
 
-    def test_keyword_only_results(self):
+    @pytest.mark.asyncio
+    async def test_keyword_only_results(self):
         """Test AC4: Keyword-only results with semantic returning empty."""
         semantic_results = []
         keyword_results = [
@@ -79,7 +82,8 @@ class TestRRFFusion:
         assert abs(result[0]["score"] - expected_score_1) < 1e-9
         assert abs(result[1]["score"] - expected_score_2) < 1e-9
 
-    def test_deduplication(self):
+    @pytest.mark.asyncio
+    async def test_deduplication(self):
         """Test AC3: Same document in both result sets → scores merged."""
         semantic_results = [
             {"id": 1, "content": "consciousness", "source_ids": [1]},
@@ -107,7 +111,8 @@ class TestRRFFusion:
         expected_total_score = expected_semantic_score + expected_keyword_score
         assert abs(doc_1["score"] - expected_total_score) < 1e-9
 
-    def test_custom_weights(self):
+    @pytest.mark.asyncio
+    async def test_custom_weights(self):
         """Test AC6: Custom weights recalculated correctly."""
         semantic_results = [{"id": 1, "content": "consciousness", "source_ids": [1]}]
         keyword_results = [{"id": 2, "content": "autonomy", "source_ids": [2]}]
@@ -126,7 +131,8 @@ class TestRRFFusion:
 class TestParameterValidation:
     """Test parameter validation for hybrid_search tool."""
 
-    def test_invalid_embedding_dimension(self):
+    @pytest.mark.asyncio
+    async def test_invalid_embedding_dimension(self):
         """Test AC8: Invalid embedding dimension → error returned."""
         # Mock 512-dim embedding instead of 1536
         query_embedding = [0.1] * 512
@@ -134,13 +140,14 @@ class TestParameterValidation:
 
         arguments = {"query_embedding": query_embedding, "query_text": query_text}
 
-        result = asyncio.run(handle_hybrid_search(arguments))
+        result = await handle_hybrid_search(arguments)
 
         assert "error" in result
         assert "embedding dimension" in result["details"]
         assert "1536" in result["details"]
 
-    def test_invalid_weights_sum_normalized(self):
+    @pytest.mark.asyncio
+    async def test_invalid_weights_sum_normalized(self):
         """Test Bug #1 fix: Weights sum != 1.0 → normalized instead of error."""
         query_embedding = [0.1] * 1536
         query_text = "consciousness"
@@ -152,7 +159,7 @@ class TestParameterValidation:
             "weights": weights,
         }
 
-        result = asyncio.run(handle_hybrid_search(arguments))
+        result = await handle_hybrid_search(arguments)
 
         # Bug #1 fix: Weights are now normalized instead of rejected
         assert result["status"] == "success"
@@ -161,7 +168,8 @@ class TestParameterValidation:
         applied = result["applied_weights"]
         assert abs(applied["semantic"] + applied["keyword"] + applied["graph"] - 1.0) < 1e-6
 
-    def test_weight_validation_precision_normalized(self):
+    @pytest.mark.asyncio
+    async def test_weight_validation_precision_normalized(self):
         """Test Bug #1 fix: Slightly off weights → normalized instead of error."""
         query_embedding = [0.1] * 1536
         query_text = "consciousness"
@@ -173,14 +181,15 @@ class TestParameterValidation:
             "weights": weights,
         }
 
-        result = asyncio.run(handle_hybrid_search(arguments))
+        result = await handle_hybrid_search(arguments)
 
         # Bug #1 fix: Weights are now normalized instead of rejected
         assert result["status"] == "success"
         applied = result["applied_weights"]
         assert abs(applied["semantic"] + applied["keyword"] + applied["graph"] - 1.0) < 1e-6
 
-    def test_top_k_validation(self):
+    @pytest.mark.asyncio
+    async def test_top_k_validation(self):
         """Test AC12: top_k validation edge cases."""
         query_embedding = [0.1] * 1536
         query_text = "consciousness"
@@ -191,7 +200,7 @@ class TestParameterValidation:
             "query_text": query_text,
             "top_k": 0,
         }
-        result = asyncio.run(handle_hybrid_search(arguments))
+        result = await handle_hybrid_search(arguments)
         assert "error" in result
         assert "top_k" in result["details"]
 
@@ -201,7 +210,7 @@ class TestParameterValidation:
             "query_text": query_text,
             "top_k": -5,
         }
-        result = asyncio.run(handle_hybrid_search(arguments))
+        result = await handle_hybrid_search(arguments)
         assert "error" in result
         assert "top_k" in result["details"]
 
@@ -211,18 +220,19 @@ class TestParameterValidation:
             "query_text": query_text,
             "top_k": 200,
         }
-        result = asyncio.run(handle_hybrid_search(arguments))
+        result = await handle_hybrid_search(arguments)
         assert "error" in result
         assert "top_k" in result["details"]
 
-    def test_empty_query_text(self):
+    @pytest.mark.asyncio
+    async def test_empty_query_text(self):
         """Test AC9: Empty query text → error returned."""
         query_embedding = [0.1] * 1536
         query_text = ""  # Empty string
 
         arguments = {"query_embedding": query_embedding, "query_text": query_text}
 
-        result = asyncio.run(handle_hybrid_search(arguments))
+        result = await handle_hybrid_search(arguments)
 
         assert "error" in result
         assert "query_text" in result["details"]
@@ -232,7 +242,7 @@ class TestDatabaseIntegration:
     """Test hybrid search with real database operations."""
 
     @pytest.fixture
-    def test_data(self):
+    async def test_data(self):
         """Seed test database with sample L2 insights."""
         test_insights = [
             {
@@ -264,13 +274,13 @@ class TestDatabaseIntegration:
         return test_insights
 
     @pytest.fixture
-    def setup_test_data(self, test_data):
+    async def setup_test_data(self, test_data):
         """Insert test data into database and cleanup after."""
         inserted_ids = []
 
         try:
             # Insert test data
-            with get_connection() as conn:
+            async with get_connection() as conn:
                 from pgvector.psycopg2 import register_vector
 
                 register_vector(conn)
@@ -299,7 +309,7 @@ class TestDatabaseIntegration:
             # Cleanup test data
             if inserted_ids:
                 try:
-                    with get_connection() as conn:
+                    async with get_connection() as conn:
                         cursor = conn.cursor()
                         # Use parameterized query with tuple of IDs
                         cursor.execute(
@@ -311,7 +321,8 @@ class TestDatabaseIntegration:
                 except Exception as e:
                     logger.error(f"Failed to cleanup test data: {e}")
 
-    def test_valid_hybrid_search(self, setup_test_data):
+    @pytest.mark.asyncio
+    async def test_valid_hybrid_search(self, setup_test_data):
         """Test AC1: Valid hybrid search returns Top-5 results."""
         query_embedding = [0.15] * 1536  # Close to first test insight
         query_text = "consciousness"
@@ -322,7 +333,7 @@ class TestDatabaseIntegration:
             "top_k": 5,
         }
 
-        result = asyncio.run(handle_hybrid_search(arguments))
+        result = await handle_hybrid_search(arguments)
 
         assert "error" not in result
         assert result["status"] == "success"
@@ -337,7 +348,8 @@ class TestDatabaseIntegration:
         assert "source_ids" in first_result
         assert isinstance(first_result["source_ids"], list)
 
-    def test_top_k_selection(self, setup_test_data):
+    @pytest.mark.asyncio
+    async def test_top_k_selection(self, setup_test_data):
         """Test AC10: Exactly top_k results returned."""
         query_embedding = [0.1] * 1536
         query_text = "experience"
@@ -348,16 +360,17 @@ class TestDatabaseIntegration:
             "top_k": 3,
         }
 
-        result = asyncio.run(handle_hybrid_search(arguments))
+        result = await handle_hybrid_search(arguments)
 
         assert "error" not in result
         assert len(result["results"]) <= 3  # Should return <= 3 results
 
-    def test_german_content(self, setup_test_data):
+    @pytest.mark.asyncio
+    async def test_german_content(self, setup_test_data):
         """Test AC11: German content test demonstrates FTS language issue."""
         # Add German content to test data
         try:
-            with get_connection() as conn:
+            async with get_connection() as conn:
                 from pgvector.psycopg2 import register_vector
 
                 register_vector(conn)
@@ -391,7 +404,7 @@ class TestDatabaseIntegration:
                 "top_k": 1,
             }
 
-            result = asyncio.run(handle_hybrid_search(arguments))
+            result = await handle_hybrid_search(arguments)
 
             # This test documents the German language issue
             # It may not work perfectly due to 'english' FTS config
@@ -403,7 +416,7 @@ class TestDatabaseIntegration:
         finally:
             # Cleanup German content
             try:
-                with get_connection() as conn:
+                async with get_connection() as conn:
                     cursor = conn.cursor()
                     cursor.execute(
                         "DELETE FROM l2_insights WHERE id = %s", (german_id,)
@@ -412,7 +425,8 @@ class TestDatabaseIntegration:
             except Exception as e:
                 logger.error(f"Failed to cleanup German test content: {e}")
 
-    def test_empty_result_handling_real_db(self):
+    @pytest.mark.asyncio
+    async def test_empty_result_handling_real_db(self):
         """Test AC13: Both searches return empty → [] returned (NOT error).
 
         NOTE: This test is fragile because pgvector semantic search always returns
@@ -431,7 +445,7 @@ class TestDatabaseIntegration:
             "top_k": 5,
         }
 
-        result = asyncio.run(handle_hybrid_search(arguments))
+        result = await handle_hybrid_search(arguments)
 
         # Should return success with empty results (NOT an error)
         assert "error" not in result
@@ -445,7 +459,8 @@ class TestDatabaseIntegration:
 class TestPerformance:
     """Performance tests for hybrid search."""
 
-    def test_performance_benchmark(self):
+    @pytest.mark.asyncio
+    async def test_performance_benchmark(self):
         """Test NFR001: Hybrid search <1s latency."""
         pytest.skip("Performance test requires larger dataset - implement separately")
 
@@ -465,7 +480,8 @@ class TestEpisodeMemoryIntegration:
     3. RRF fusion correctly handles mixed ID types
     """
 
-    def test_rrf_fusion_with_episode_string_ids(self):
+    @pytest.mark.asyncio
+    async def test_rrf_fusion_with_episode_string_ids(self):
         """Test that RRF fusion handles episode string IDs correctly."""
         semantic_results = [
             {"id": 1, "content": "L2 insight content", "source_ids": [1, 2]},
@@ -490,7 +506,8 @@ class TestEpisodeMemoryIntegration:
         l2_result = next((r for r in result if r["id"] == 1), None)
         assert l2_result is not None
 
-    def test_hybrid_search_response_includes_episode_counts(self):
+    @pytest.mark.asyncio
+    async def test_hybrid_search_response_includes_episode_counts(self):
         """Test that hybrid_search response includes episode search counts."""
         # This test verifies the response format includes new episode fields
         arguments = {
@@ -498,7 +515,7 @@ class TestEpisodeMemoryIntegration:
             "top_k": 5,
         }
 
-        result = asyncio.run(handle_hybrid_search(arguments))
+        result = await handle_hybrid_search(arguments)
 
         # Should have episode count fields in response
         assert "episode_semantic_count" in result, "Response missing episode_semantic_count"
@@ -510,7 +527,8 @@ class TestEpisodeMemoryIntegration:
         assert result["episode_semantic_count"] >= 0
         assert result["episode_keyword_count"] >= 0
 
-    def test_mixed_id_types_in_results(self):
+    @pytest.mark.asyncio
+    async def test_mixed_id_types_in_results(self):
         """Test that results can contain both int and string IDs."""
         semantic_results = [
             {"id": 838, "content": "UNVOLLSTÄNDIG 2025-12-05", "source_ids": [835, 836, 837]},
@@ -537,7 +555,8 @@ class TestMultiLanguageKeywordSearch:
     Verifies that keyword search works for German text.
     """
 
-    def test_simple_language_config_for_german(self):
+    @pytest.mark.asyncio
+    async def test_simple_language_config_for_german(self):
         """Test that 'simple' language config handles German compound words."""
         from mcp_server.tools import keyword_search
 
@@ -568,7 +587,8 @@ class TestSectorFilter:
     6. Invalid sector values return validation errors
     """
 
-    def test_sector_filter_validation_invalid_sector(self):
+    @pytest.mark.asyncio
+    async def test_sector_filter_validation_invalid_sector(self):
         """Test AC #7: Invalid sector value returns validation error with list of valid sectors."""
         query_embedding = [0.1] * 1536
         query_text = "consciousness"
@@ -580,13 +600,14 @@ class TestSectorFilter:
             "sector_filter": sector_filter,
         }
 
-        result = asyncio.run(handle_hybrid_search(arguments))
+        result = await handle_hybrid_search(arguments)
 
         assert "error" in result
         assert "sector" in result["details"].lower()
         assert "invalid" in result["details"].lower()
 
-    def test_sector_filter_validation_not_array(self):
+    @pytest.mark.asyncio
+    async def test_sector_filter_validation_not_array(self):
         """Test that non-array sector_filter returns validation error."""
         query_embedding = [0.1] * 1536
         query_text = "consciousness"
@@ -598,12 +619,13 @@ class TestSectorFilter:
             "sector_filter": sector_filter,
         }
 
-        result = asyncio.run(handle_hybrid_search(arguments))
+        result = await handle_hybrid_search(arguments)
 
         assert "error" in result
         assert "array" in result["details"].lower()
 
-    def test_sector_filter_empty_array(self):
+    @pytest.mark.asyncio
+    async def test_sector_filter_empty_array(self):
         """Test AC #4: Empty sector_filter returns empty results immediately."""
         query_embedding = [0.1] * 1536
         query_text = "consciousness"
@@ -615,7 +637,7 @@ class TestSectorFilter:
             "sector_filter": sector_filter,
         }
 
-        result = asyncio.run(handle_hybrid_search(arguments))
+        result = await handle_hybrid_search(arguments)
 
         # Should return success with all zero counts
         assert result["status"] == "success"
@@ -626,7 +648,8 @@ class TestSectorFilter:
         assert result["final_results_count"] == 0
         assert result["sector_filter"] == []
 
-    def test_sector_filter_none(self):
+    @pytest.mark.asyncio
+    async def test_sector_filter_none(self):
         """Test AC #3: sector_filter=None returns all sectors (no filtering)."""
         query_embedding = [0.1] * 1536
         query_text = "consciousness"
@@ -637,14 +660,15 @@ class TestSectorFilter:
             "sector_filter": None,  # Explicit None
         }
 
-        result = asyncio.run(handle_hybrid_search(arguments))
+        result = await handle_hybrid_search(arguments)
 
         # Should return success with results
         assert result["status"] == "success"
         # sector_filter should be None in response
         assert result.get("sector_filter") is None
 
-    def test_sector_filter_single_sector(self):
+    @pytest.mark.asyncio
+    async def test_sector_filter_single_sector(self):
         """Test AC #1: Single sector filter returns only that sector."""
         query_embedding = [0.1] * 1536
         query_text = "consciousness"
@@ -656,14 +680,15 @@ class TestSectorFilter:
             "sector_filter": sector_filter,
         }
 
-        result = asyncio.run(handle_hybrid_search(arguments))
+        result = await handle_hybrid_search(arguments)
 
         # Should return success
         assert result["status"] == "success"
         # sector_filter should be in response
         assert result["sector_filter"] == ["emotional"]
 
-    def test_sector_filter_multiple_sectors(self):
+    @pytest.mark.asyncio
+    async def test_sector_filter_multiple_sectors(self):
         """Test AC #2: Multiple sector filter returns results from those sectors."""
         query_embedding = [0.1] * 1536
         query_text = "consciousness"
@@ -675,14 +700,15 @@ class TestSectorFilter:
             "sector_filter": sector_filter,
         }
 
-        result = asyncio.run(handle_hybrid_search(arguments))
+        result = await handle_hybrid_search(arguments)
 
         # Should return success
         assert result["status"] == "success"
         # sector_filter should be in response
         assert result["sector_filter"] == ["emotional", "semantic"]
 
-    def test_sector_filter_all_valid_sectors(self):
+    @pytest.mark.asyncio
+    async def test_sector_filter_all_valid_sectors(self):
         """Test that all 5 valid sectors are accepted."""
         query_embedding = [0.1] * 1536
         query_text = "consciousness"
@@ -694,12 +720,13 @@ class TestSectorFilter:
             "sector_filter": sector_filter,
         }
 
-        result = asyncio.run(handle_hybrid_search(arguments))
+        result = await handle_hybrid_search(arguments)
 
         # Should return success (all sectors are valid)
         assert result["status"] == "success"
 
-    def test_sector_filter_in_response_params(self):
+    @pytest.mark.asyncio
+    async def test_sector_filter_in_response_params(self):
         """Test AC #6 (partial): sector_filter is included in response query_params."""
         query_embedding = [0.1] * 1536
         query_text = "consciousness"
@@ -711,19 +738,19 @@ class TestSectorFilter:
             "sector_filter": sector_filter,
         }
 
-        result = asyncio.run(handle_hybrid_search(arguments))
+        result = await handle_hybrid_search(arguments)
 
         # sector_filter should be in response
         assert "sector_filter" in result
         assert result["sector_filter"] == ["semantic"]
 
     @pytest.fixture
-    def setup_test_data_with_sectors(self):
+    async def setup_test_data_with_sectors(self):
         """Insert test data with memory_sector in metadata."""
         inserted_ids = []
 
         try:
-            with get_connection() as conn:
+            async with get_connection() as conn:
                 from pgvector.psycopg2 import register_vector
                 import json
 
@@ -776,7 +803,7 @@ class TestSectorFilter:
             # Cleanup
             if inserted_ids:
                 try:
-                    with get_connection() as conn:
+                    async with get_connection() as conn:
                         cursor = conn.cursor()
                         cursor.execute(
                             "DELETE FROM l2_insights WHERE id = ANY(%s)",
@@ -786,7 +813,8 @@ class TestSectorFilter:
                 except Exception as e:
                     logger.error(f"Failed to cleanup test data: {e}")
 
-    def test_sector_filter_filters_by_metadata_sector(
+    @pytest.mark.asyncio
+    async def test_sector_filter_filters_by_metadata_sector(
         self, setup_test_data_with_sectors
     ):
         """Test AC #1, #2: Results are filtered by memory_sector in metadata."""
@@ -801,7 +829,7 @@ class TestSectorFilter:
             "sector_filter": sector_filter,
         }
 
-        result = asyncio.run(handle_hybrid_search(arguments))
+        result = await handle_hybrid_search(arguments)
 
         # Should return success
         assert result["status"] == "success"

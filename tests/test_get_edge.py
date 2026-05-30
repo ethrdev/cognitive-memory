@@ -380,13 +380,13 @@ class TestGetEdgeIntegration:
 
         try:
             # Step 1: Create source and target nodes
-            source_result = add_node(
+            source_result = await add_node(
                 label="TestLabel",
                 name=test_source,
                 properties="{}",
                 vector_id=None
             )
-            target_result = add_node(
+            target_result = await add_node(
                 label="TestLabel",
                 name=test_target,
                 properties="{}",
@@ -396,7 +396,7 @@ class TestGetEdgeIntegration:
             target_id = target_result["node_id"]
 
             # Step 2: Create edge between nodes
-            edge_result = add_edge(
+            edge_result = await add_edge(
                 source_id=source_id,
                 target_id=target_id,
                 relation=test_relation,
@@ -406,7 +406,7 @@ class TestGetEdgeIntegration:
             created_edge_id = edge_result["edge_id"]
 
             # Step 3: Verify via get_edge_by_names DB function
-            edge = get_edge_by_names(test_source, test_target, test_relation)
+            edge = await get_edge_by_names(test_source, test_target, test_relation)
             assert edge is not None
             assert edge["id"] == created_edge_id
             assert edge["relation"] == test_relation

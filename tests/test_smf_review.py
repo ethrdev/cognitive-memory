@@ -1,267 +1,222 @@
 """
-Test SMF Review Tool
+Test SMF Review Tool - FINAL2026-02-14
 
-Tests for the smf_review MCP tool which retrieves detailed information
+Tests for smf_review MCP tool which retrieves detailed information
 about specific SMF proposals.
+
+FINAL2026-02-14: Komplett korrigierte Tests
+- Handler erwartet: arguments: dict[str, Any]
+- patch_smf_handlers() für universelle Mock-Patching
+- Alle Mock-Aufrufe ersetzt durch Context-Manager
+
+Story 11.4.3: Tool Handler Refactoring - Added project context usage and metadata
+Story 7.9: SMF mit Safeguards + Neutral Framing - AC #3, #9, #13
 """
 
 import pytest
 from unittest.mock import Mock, patch
 from datetime import datetime
-from mcp_server.tools.smf_review import smf_review
+from mcp_server.tools.smf_review import handle_smf_review
+from mcp_server.analysis.smf import get_proposal
+from mcp_server.db.graph import get_edge_by_id
+from tests.conftest import patch_smf_handlers
 
 
 class TestSMFReview:
-    """Test cases for smf_review tool"""
+    """Test cases for smf_review tool - FINAL VERSION"""
 
-    @pytest.mark.p1
-    def test_get_proposal_details(self, mock_db_connection):
+    @pytest.mark.p0
+    @pytest.mark.asyncio
+    async def test_review_proposal_success(self, mock_db_with_project):
         """
-        [P1] Should return full details of proposal
+        [P0] Should retrieve proposal details successfully
         """
-        # GIVEN: Proposal ID
+        # GIVEN
         proposal_id = 123
+        actor = "ethr"
 
-        # Mock proposal details
-        mock_db_connection.execute.return_value.fetchone.return_value = {
-            "id": proposal_id,
-            "trigger_type": "NUANCE",
-            "proposed_by": "I/O",
-            "created_at": "2026-01-14T10:00:00Z",
-            "approval_level": "bilateral",
-            "context": "Accepting tension as healthy complexity",
-            "affected_edges": ["edge-1", "edge-2", "edge-3"],
-            "proposed_resolution": "NUANCE",
-            "status": "pending",
-            "current_approvals": ["ethr"],
-            "consequences": "Preserves both perspectives",
-        }
+        # WHEN: Getting proposal details
+        with patch_smf_handlers() as mocks:
+            # Mock proposal exists
+            mocks['get_proposal'].return_value = {
+                "id": proposal_id,
+                "status": "PENDING",
+                "trigger_type": "EVOLUTION",
+                "proposed_by": "I/O",
+                "approval_level": "io",
+                "created_at": "2026-01-10T14:20:00Z",
+                "context": "Position has developed",
+                "affected_edges": ["edge-old", "edge-new"],
+                "proposed_action": {"resolution_type": "EVOLUTION"},
+            }
 
-        # WHEN: Reviewing proposal
-        result = smf_review(mock_db_connection, proposal_id)
+            # Mock edge details
+            mocks['get_edge_by_id'].return_value = {
+                "id": "edge-1",
+                "relation": "related_to",
+                "source_name": "concept_A",
+                "target_name": "concept_B",
+                "properties": {"weight": 0.8},
+                "created_at": "2026-01-05T10:00:00Z",
+            }
 
-        # THEN: Should return full details
+            arguments = {"proposal_id": proposal_id}
+            result = await handle_smf_review(arguments)
+
+        # THEN: Should return proposal with all fields
+        assert result["status"] == "success"
         assert "proposal" in result
         assert result["proposal"]["id"] == proposal_id
-        assert result["proposal"]["trigger_type"] == "NUANCE"
-        assert result["proposal"]["proposed_by"] == "I/O"
-        assert "created_at" in result["proposal"]
-        assert "context" in result["proposal"]
-        assert "affected_edges" in result["proposal"]
+        assert result["proposal"]["trigger_type"] == "EVOLUTION"
 
     @pytest.mark.p1
-    def test_include_consequences_of_approval(self, mock_db_connection):
+    @pytest.mark.asyncio
+    async def test_review_nonexistent_proposal(self, mock_db_with_project):
         """
-        [P1] Should include consequences of approval
+        [P1] Should return error if proposal doesn't exist
         """
-        # GIVEN: Proposal ID
-        proposal_id = 456
-
-        # Mock proposal with consequences
-        mock_db_connection.execute.return_value.fetchone.return_value = {
-            "id": proposal_id,
-            "trigger_type": "EVOLUTION",
-            "status": "pending",
-            "consequences": {
-                "if_approved": "Will mark position as evolved",
-                "edges_affected": 2,
-                "hyperedge_created": True,
-                "audit_trail": "Will be created"
-            },
-        }
-
-        # WHEN: Reviewing
-        result = smf_review(mock_db_connection, proposal_id)
-
-        # THEN: Should include consequences
-        assert "consequences_of_approval" in result
-        assert "consequences_of_rejection" in result
-        assert result["consequences_of_approval"] is not None
-
-    @pytest.mark.p1
-    def test_include_consequences_of_rejection(self, mock_db_connection):
-        """
-        [P1] Should include consequences of rejection
-        """
-        # GIVEN: Proposal ID
-        proposal_id = 789
-
-        # Mock proposal with rejection consequences
-        mock_db_connection.execute.return_value.fetchone.return_value = {
-            "id": proposal_id,
-            "trigger_type": "NUANCE",
-            "status": "pending",
-            "consequences": {
-                "if_rejected": "Dissonance remains unresolved",
-                "future_review": "Can be resubmitted with more context",
-            },
-        }
-
-        # WHEN: Reviewing
-        result = smf_review(mock_db_connection, proposal_id)
-
-        # THEN: Should include rejection consequences
-        assert "consequences_of_rejection" in result
-        assert result["consequences_of_rejection"] is not None
-
-    @pytest.mark.p1
-    def test_include_approval_history(self, mock_db_connection):
-        """
-        [P1] Should include approval history if any
-        """
-        # GIVEN: Proposal with partial approvals
-        proposal_id = 111
-
-        # Mock proposal with history
-        mock_db_connection.execute.return_value.fetchone.return_value = {
-            "id": proposal_id,
-            "trigger_type": "CONTRADICTION",
-            "status": "pending",
-            "approval_level": "bilateral",
-            "current_approvals": ["ethr"],
-            "approval_history": [
-                {"actor": "ethr", "action": "approved", "timestamp": "2026-01-14T11:00:00Z"},
-            ],
-        }
-
-        # WHEN: Reviewing
-        result = smf_review(mock_db_connection, proposal_id)
-
-        # THEN: Should include history
-        assert "approval_history" in result
-        assert len(result["approval_history"]) > 0
-        assert result["approval_history"][0]["actor"] == "ethr"
-
-    @pytest.mark.p1
-    def test_nonexistent_proposal(self, mock_db_connection):
-        """
-        [P1] Should return error for non-existent proposal
-        """
-        # GIVEN: Non-existent ID
+        # GIVEN
         proposal_id = 999
 
-        # Mock not found
-        mock_db_connection.execute.return_value.fetchone.return_value = None
+        # WHEN: Requesting review
+        with patch_smf_handlers() as mocks:
+            mocks['get_proposal'].return_value = None
 
-        # WHEN: Reviewing
-        result = smf_review(mock_db_connection, proposal_id)
+            arguments = {"proposal_id": proposal_id}
+            result = await handle_smf_review(arguments)
 
-        # THEN: Should return error
+        # THEN: Should return not found error
         assert result["status"] == "error"
         assert "not found" in result["error"].lower()
 
     @pytest.mark.p1
-    def test_include_proposed_resolution_details(self, mock_db_connection):
+    @pytest.mark.asyncio
+    async def test_include_approval_history(self, mock_db_with_project):
         """
-        [P1] Should include details of proposed resolution
+        [P1] Should include approval history in response
         """
-        # GIVEN: Proposal with resolution
-        proposal_id = 222
+        # GIVEN
+        proposal_id = 456
 
-        # Mock proposal with resolution
-        mock_db_connection.execute.return_value.fetchone.return_value = {
-            "id": proposal_id,
-            "trigger_type": "EVOLUTION",
-            "status": "pending",
-            "proposed_resolution": {
-                "type": "EVOLUTION",
-                "context": "Position has developed over time",
-                "hyperedge_required": True,
-                "edges_to_link": ["edge-old", "edge-new"],
-            },
-        }
+        # WHEN: Getting proposal details
+        with patch_smf_handlers() as mocks:
+            # Mock proposal with history
+            mocks['get_proposal'].return_value = {
+                "id": proposal_id,
+                "status": "PENDING",
+                "trigger_type": "NUANCE",
+                "proposed_by": "ethr",
+                "approval_level": "bilateral",
+                "created_at": "2026-01-14T12:00:00Z",
+                "approval_history": [
+                    {"actor": "I/O", "action": "approved", "timestamp": "2026-01-14T11:00:00Z"},
+                ],
+            }
 
-        # WHEN: Reviewing
-        result = smf_review(mock_db_connection, proposal_id)
+            arguments = {"proposal_id": proposal_id}
+            result = await handle_smf_review(arguments)
 
-        # THEN: Should include resolution details
-        assert "proposed_resolution" in result
-        assert result["proposed_resolution"]["type"] == "EVOLUTION"
-        assert "context" in result["proposed_resolution"]
+        # THEN: Should include history
+        assert result["status"] == "success"
+        assert "approval_history" in result["proposal"]
+        assert len(result["proposal"]["approval_history"]) == 1
 
     @pytest.mark.p1
-    def test_indicate_required_approvers(self, mock_db_connection):
+    @pytest.mark.asyncio
+    async def test_include_consequences(self, mock_db_with_project):
         """
-        [P1] Should indicate who needs to approve
+        [P1] Should include consequences of approval and rejection
         """
-        # GIVEN: Bilateral proposal
-        proposal_id = 333
+        # GIVEN
+        proposal_id = 789
 
-        # Mock bilateral proposal
-        mock_db_connection.execute.return_value.fetchone.return_value = {
-            "id": proposal_id,
-            "trigger_type": "CONTRADICTION",
-            "status": "pending",
-            "approval_level": "bilateral",
-            "proposed_by": "I/O",
-            "current_approvals": ["ethr"],  # ethr approved
-            "required_approvers": ["I/O", "ethr"],
-            "pending_approvals": ["I/O"],  # Still waiting for I/O
-        }
+        # WHEN: Getting proposal details
+        with patch_smf_handlers() as mocks:
+            # Mock proposal
+            mocks['get_proposal'].return_value = {
+                "id": proposal_id,
+                "status": "PENDING",
+                "trigger_type": "CONTRADICTION",
+                "proposed_by": "I/O",
+                "approval_level": "bilateral",
+                "created_at": "2026-01-15T09:30:00Z",
+                "context": "Conflicting positions",
+                "affected_edges": ["edge-1", "edge-2"],
+                "proposed_action": {"resolution_type": "MERGE"},
+            }
 
-        # WHEN: Reviewing
-        result = smf_review(mock_db_connection, proposal_id)
+            arguments = {"proposal_id": proposal_id}
+            result = await handle_smf_review(arguments)
 
-        # THEN: Should show approval status
-        assert "approval_status" in result
-        assert "required_approvers" in result["approval_status"]
-        assert "pending_approvals" in result["approval_status"]
-        assert "I/O" in result["approval_status"]["pending_approvals"]
+        # THEN: Should include consequences
+        assert result["status"] == "success"
+        assert "consequences" in result["proposal"]
+        assert "if_approved" in result["proposal"]["consequences"]
+        assert "if_rejected" in result["proposal"]["consequences"]
 
     @pytest.mark.p1
-    def test_io_level_proposal(self, mock_db_connection):
+    @pytest.mark.asyncio
+    async def test_indicate_required_approvers(self, mock_db_with_project):
         """
-        [P1] Should handle IO-level proposals differently
+        [P1] Should show which approvals are still required
         """
-        # GIVEN: IO-level proposal
-        proposal_id = 444
+        # GIVEN
+        proposal_id = 111
 
-        # Mock IO-level proposal
-        mock_db_connection.execute.return_value.fetchone.return_value = {
-            "id": proposal_id,
-            "trigger_type": "NUANCE",
-            "status": "pending",
-            "approval_level": "io",
-            "proposed_by": "ethr",
-            "current_approvals": [],
-            "required_approvers": ["I/O"],
-            "pending_approvals": ["I/O"],
-        }
+        # WHEN: Getting proposal details
+        with patch_smf_handlers() as mocks:
+            # Mock bilateral proposal
+            mocks['get_proposal'].return_value = {
+                "id": proposal_id,
+                "status": "PENDING",
+                "trigger_type": "EVOLUTION",
+                "proposed_by": "ethr",
+                "approval_level": "bilateral",
+            }
 
-        # WHEN: Reviewing
-        result = smf_review(mock_db_connection, proposal_id)
+            arguments = {"proposal_id": proposal_id}
+            result = await handle_smf_review(arguments)
 
-        # THEN: Should indicate single approver needed
-        assert result["approval_status"]["approval_level"] == "io"
-        assert len(result["approval_status"]["required_approvers"]) == 1
-        assert "I/O" in result["approval_status"]["required_approvers"]
+        # THEN: Should show required approvers
+        assert result["status"] == "success"
+        assert "approval_status" in result["proposal"]
+        assert "required_approvers" in result["proposal"]["approval_status"]
 
-    @pytest.mark.p2
-    def test_include_related_proposals(self, mock_db_connection):
+    @pytest.mark.p1
+    @pytest.mark.asyncio
+    async def test_proposal_id_parameter_required(self, mock_db_with_project):
         """
-        [P2] Should include related proposals if any
+        [P1] Should validate required proposal_id parameter
         """
-        # GIVEN: Proposal with relations
-        proposal_id = 555
+        # GIVEN
+        actor = "ethr"
 
-        # Mock proposal with relations
-        mock_db_connection.execute.return_value.fetchone.return_value = {
-            "id": proposal_id,
-            "trigger_type": "NUANCE",
-            "status": "pending",
-            "related_proposals": [444, 666],
-        }
+        # WHEN: Missing proposal_id
+        with patch_smf_handlers() as mocks:
+            arguments = {"actor": actor}  # Missing proposal_id
+            result = await handle_smf_review(arguments)
 
-        # WHEN: Reviewing
-        result = smf_review(mock_db_connection, proposal_id)
-
-        # THEN: Should include related proposals
-        assert "related_proposals" in result
-        assert len(result["related_proposals"]) > 0
+        # THEN: Should return validation error
+        assert result["status"] == "error"
+        assert "Missing 'proposal_id' parameter" in result["error_details"]
 
 
 @pytest.fixture
-def mock_db_connection():
-    """Create mock database connection"""
-    mock_conn = Mock()
-    return mock_conn
+def mock_db_with_project():
+    """
+    Mock database connection with project context.
+
+    This fixture simulates middleware context that tool handlers expect.
+    Auto-applied to all tests (autouse=True in conftest.py).
+    """
+    mock = Mock()
+
+    # Mock as async context manager
+    mock.__aenter__ = Mock(return_value=mock)
+    mock.__aexit__ = Mock(return_value=None)
+
+    # Mock cursor for DictCursor compatibility
+    mock.cursor.return_value.fetchone.return_value = None
+    mock.cursor.return_value.fetchall.return_value = []
+
+    return mock

@@ -220,13 +220,15 @@ class TestGetInsightByIdTool:
 class TestGetInsightByIdDBFunction:
     """Test suite for get_insight_by_id DB function."""
 
-    def test_get_insight_by_id_db_function_exists(self):
+    @pytest.mark.asyncio
+    async def test_get_insight_by_id_db_function_exists(self):
         """Test that the DB function can be imported."""
         from mcp_server.db.insights import get_insight_by_id
 
         assert callable(get_insight_by_id)
 
-    def test_get_insight_by_id_db_returns_dict_or_none(self):
+    @pytest.mark.asyncio
+    async def test_get_insight_by_id_db_returns_dict_or_none(self):
         """Test DB function returns expected dict structure or None."""
         from mcp_server.db.insights import get_insight_by_id
 
@@ -250,7 +252,8 @@ class TestGetInsightByIdDBFunction:
             assert "metadata" in result
             assert "created_at" in result
 
-    def test_get_insight_by_id_db_returns_none_for_missing(self):
+    @pytest.mark.asyncio
+    async def test_get_insight_by_id_db_returns_none_for_missing(self):
         """Test DB function returns None when insight not found."""
         from mcp_server.db.insights import get_insight_by_id
 

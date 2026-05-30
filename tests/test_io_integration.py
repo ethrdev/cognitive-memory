@@ -102,4 +102,5 @@ async def test_io_integration():
                 print("Cleanup completed.")
 
 if __name__ == "__main__":
+    import asyncio
     asyncio.run(test_io_integration())

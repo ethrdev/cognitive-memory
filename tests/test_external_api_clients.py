@@ -10,11 +10,11 @@ Priority: P0 (Critical) - External API clients are critical for system operation
 import pytest
 from unittest.mock import Mock, patch, AsyncMock, MagicMock
 from openai import AsyncOpenAI, RateLimitError, APITimeoutError
-from anthropic import AsyncAnthropic, Message
+from anthropic import AsyncAnthropic
 import asyncio
 
-from mcp_server.external.openai_client import OpenAIClient
-from mcp_server.external.anthropic_client import AnthropicClient
+from mcp_server.external.openai_client import OpenAIEmbeddingsClient
+from mcp_server.external.anthropic_client import HaikuClient
 
 
 @pytest.mark.P0
@@ -29,7 +29,7 @@ class TestOpenAIClient:
     @pytest.fixture
     def openai_client(self, mock_openai_client):
         """Create OpenAI client with mocked dependencies."""
-        return OpenAIClient(
+        return OpenAIEmbeddingsClient(
             client=mock_openai_client,
             max_retries=3,
             timeout=30.0,
@@ -170,7 +170,7 @@ class TestOpenAIClient:
 
 
 @pytest.mark.P0
-class TestAnthropicClient:
+class TestHaikuClient:
     """P0 tests for Anthropic client."""
 
     @pytest.fixture
@@ -181,7 +181,7 @@ class TestAnthropicClient:
     @pytest.fixture
     def anthropic_client(self, mock_anthropic_client):
         """Create Anthropic client with mocked dependencies."""
-        return AnthropicClient(
+        return HaikuClient(
             client=mock_anthropic_client,
             max_retries=3,
             timeout=30.0,
@@ -329,7 +329,7 @@ class TestExternalAPIClientIntegration:
         mock_anthropic = AsyncAnthropic(api_key="test")
 
         openai_client = OpenAIClient(client=mock_openai)
-        anthropic_client = AnthropicClient(client=mock_anthropic)
+        anthropic_client = HaikuClient(client=mock_anthropic)
 
         # Mock responses
         mock_openai.embeddings.create = AsyncMock(

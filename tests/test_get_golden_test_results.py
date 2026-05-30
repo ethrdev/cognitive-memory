@@ -8,7 +8,7 @@ tracking and model drift detection.
 import pytest
 from unittest.mock import Mock, patch
 from datetime import datetime, timedelta
-from mcp_server.tools.get_golden_test_results import get_golden_test_results
+from mcp_server.tools.get_golden_test_results import handle_get_golden_test_results
 
 
 class TestGetGoldenTestResults:
@@ -32,7 +32,7 @@ class TestGetGoldenTestResults:
         ]
 
         # WHEN: Getting golden test results
-        result = get_golden_test_results(mock_db_connection, date)
+        result = handle_get_golden_test_results(mock_db_connection, date)
 
         # THEN: Should return metrics
         assert "daily_metrics" in result
@@ -58,7 +58,7 @@ class TestGetGoldenTestResults:
         ]
 
         # WHEN: Getting results
-        result = get_golden_test_results(mock_db_connection, date)
+        result = handle_get_golden_test_results(mock_db_connection, date)
 
         # THEN: Should detect drift
         assert "drift_detected" in result
@@ -85,7 +85,7 @@ class TestGetGoldenTestResults:
         ]
 
         # WHEN: Getting results
-        result = get_golden_test_results(mock_db_connection, date)
+        result = handle_get_golden_test_results(mock_db_connection, date)
 
         # THEN: Should not detect drift
         assert result["drift_detected"] is False
@@ -109,7 +109,7 @@ class TestGetGoldenTestResults:
         ]
 
         # WHEN: Getting results
-        result = get_golden_test_results(mock_db_connection, date)
+        result = handle_get_golden_test_results(mock_db_connection, date)
 
         # THEN: Should report threshold violations
         assert "threshold_violations" in result
@@ -134,7 +134,7 @@ class TestGetGoldenTestResults:
         ]
 
         # WHEN: Getting results
-        result = get_golden_test_results(mock_db_connection, date)
+        result = handle_get_golden_test_results(mock_db_connection, date)
 
         # THEN: Should calculate trend
         assert "trend" in result
@@ -157,7 +157,7 @@ class TestGetGoldenTestResults:
         ]
 
         # WHEN: Getting results for specific date
-        result = get_golden_test_results(mock_db_connection, date)
+        result = handle_get_golden_test_results(mock_db_connection, date)
 
         # THEN: Should return that date's results
         assert "daily_metrics" in result
@@ -182,7 +182,7 @@ class TestGetGoldenTestResults:
         ]
 
         # WHEN: Getting results
-        result = get_golden_test_results(mock_db_connection, date)
+        result = handle_get_golden_test_results(mock_db_connection, date)
 
         # THEN: Should include statistics
         assert "statistics" in result

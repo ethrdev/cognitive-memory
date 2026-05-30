@@ -24,36 +24,29 @@ from mcp_server.tools import calculate_fidelity, handle_compress_to_l2_insight
 
 
 @pytest.fixture(scope="session", autouse=True)
-def setup_test_database():
+async def setup_test_database():
     """Initialize database connection pool for tests."""
     # Load environment variables
     from dotenv import load_dotenv
 
     load_dotenv(".env.development")
 
-    # Initialize connection pool (sync version for pytest fixture)
-    initialize_pool_sync()
+    # Connection pool is initialized by conftest.py init_connection_pool fixture
 
     # Create test-project in project_registry for RLS
-    async def _create_test_project():
-        async with get_connection() as conn:
-            cursor = conn.cursor()
-            # Check if project exists, insert if not
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        # Check if project exists, insert if not
+        cursor.execute(
+            "SELECT id FROM project_registry WHERE project_id = %s",
+            ("test-project",)
+        )
+        if not cursor.fetchone():
             cursor.execute(
-                "SELECT id FROM project_registry WHERE project_id = %s",
-                ("test-project",)
+                "INSERT INTO project_registry (project_id, name, access_level) VALUES (%s, %s, %s)",
+                ("test-project", "Test Project", "isolated")
             )
-            if not cursor.fetchone():
-                cursor.execute(
-                    "INSERT INTO project_registry (project_id, name, access_level) VALUES (%s, %s, %s)",
-                    ("test-project", "Test Project", "isolated")
-                )
-                conn.commit()
-
-    try:
-        asyncio.run(_create_test_project())
-    except Exception as e:
-        print(f"Warning: Could not create test-project: {e}")
+            conn.commit()
 
     yield
 
@@ -62,19 +55,14 @@ def setup_test_database():
 
 
 @pytest.fixture(scope="function", autouse=True)
-def cleanup_test_data():
+async def cleanup_test_data():
     """Clean up test data after each test."""
     yield
-    async def _cleanup():
-        async with get_connection() as conn:
-            cursor = conn.cursor()
-            # Delete test insights created during tests
-            cursor.execute("DELETE FROM l2_insights WHERE content LIKE 'test_%'")
-            conn.commit()
-    try:
-        asyncio.run(_cleanup())
-    except Exception:
-        pass  # Ignore cleanup errors
+    async with get_connection() as conn:
+        cursor = conn.cursor()
+        # Delete test insights created during tests
+        cursor.execute("DELETE FROM l2_insights WHERE content LIKE 'test_%'")
+        conn.commit()
 
 
 @pytest.fixture
@@ -91,33 +79,38 @@ def mock_openai_client():
 class TestCalculateFidelity:
     """Test semantic fidelity calculation."""
 
-    def test_high_density_content(self):
+    @pytest.mark.asyncio
+    async def test_high_density_content(self):
         """Test content with high semantic density (>0.5)."""
         content = "Machine learning algorithms analyze complex mathematical patterns efficiently"
         fidelity = calculate_fidelity(content)
         assert fidelity > 0.5, f"Expected fidelity >0.5, got {fidelity}"
         assert fidelity <= 1.0, f"Fidelity should be <=1.0, got {fidelity}"
 
-    def test_low_density_content(self):
+    @pytest.mark.asyncio
+    async def test_low_density_content(self):
         """Test content with low semantic density (<0.5)."""
         content = "this is a test that has many words but not much meaning at all"
         fidelity = calculate_fidelity(content)
         assert fidelity < 0.5, f"Expected fidelity <0.5, got {fidelity}"
         assert fidelity >= 0.0, f"Fidelity should be >=0.0, got {fidelity}"
 
-    def test_empty_content(self):
+    @pytest.mark.asyncio
+    async def test_empty_content(self):
         """Test empty content returns 0.0."""
         assert calculate_fidelity("") == 0.0
         assert calculate_fidelity("   ") == 0.0
         assert calculate_fidelity(None) == 0.0
 
-    def test_single_word(self):
+    @pytest.mark.asyncio
+    async def test_single_word(self):
         """Test single semantic word."""
         content = "algorithm"
         fidelity = calculate_fidelity(content)
         assert fidelity == 1.0, f"Single word should have fidelity 1.0, got {fidelity}"
 
-    def test_stop_words_filtering(self):
+    @pytest.mark.asyncio
+    async def test_stop_words_filtering(self):
         """Test that stop words are properly filtered."""
         content = "the machine learning algorithm processes data"
         fidelity = calculate_fidelity(content)
@@ -128,7 +121,8 @@ class TestCalculateFidelity:
             abs(fidelity - expected) < 0.1
         ), f"Expected ~{expected:.3f}, got {fidelity}"
 
-    def test_german_stop_words(self):
+    @pytest.mark.asyncio
+    async def test_german_stop_words(self):
         """Test that German stop words are properly filtered."""
         content = "der machine learning algorithm"
         fidelity = calculate_fidelity(content)
