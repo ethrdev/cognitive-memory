@@ -44,6 +44,8 @@ from mcp_server.db.connection import (
 )
 from mcp_server.middleware.context import get_current_project
 from mcp_server.tools.count_by_type import handle_count_by_type
+from mcp_server.tools.delete_edge import handle_delete_edge
+from mcp_server.tools.delete_node import handle_delete_node
 from mcp_server.tools.dissonance_check import DISSONANCE_CHECK_TOOL
 from mcp_server.tools.dissonance_check import (
     handle_dissonance_check as handle_dissonance_check_impl,
@@ -314,6 +316,7 @@ def semantic_search(
         FROM l2_insights
         WHERE is_deleted = FALSE
           AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
+          AND (metadata->>'source' IS DISTINCT FROM 'graph_node_embedding')
           {filter_clause}{sector_clause}{pre_filter_clause}
         ORDER BY distance
         LIMIT %s;
@@ -450,6 +453,7 @@ def keyword_search(
         FROM l2_insights
         WHERE is_deleted = FALSE
           AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
+          AND (metadata->>'source' IS DISTINCT FROM 'graph_node_embedding')
           AND to_tsvector('{language}', content) @@ plainto_tsquery('{language}', %s)
         {filter_clause}{sector_clause}{pre_filter_clause}
         ORDER BY rank DESC
@@ -479,6 +483,7 @@ def keyword_search(
             FROM l2_insights
             WHERE is_deleted = FALSE
               AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
+              AND (metadata->>'source' IS DISTINCT FROM 'graph_node_embedding')
               AND word_similarity(%s, content) > 0.3
             {filter_clause}{sector_clause}{pre_filter_clause}
             ORDER BY rank DESC
@@ -1042,7 +1047,8 @@ async def graph_search(
                     SELECT id, content, source_ids, metadata, io_category, is_identity, source_file, project_id
                     FROM l2_insights
                     WHERE id = %s
-                        AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[]);
+                        AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
+                        AND (metadata->>'source' IS DISTINCT FROM 'graph_node_embedding');
                     """,
                     (vector_id,)
                 )
@@ -3351,6 +3357,60 @@ def register_tools(server) -> list:
             },
         ),
         Tool(
+            name="delete_edge",
+            description="Delete a graph edge (project-scoped). Address the edge either by 'edge_id' or by 'source_name' + 'target_name' + 'relation'. Constitutive edges require 'consent_given': true.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "edge_id": {
+                        "type": "string",
+                        "description": "UUID of the edge to delete (alternative to source/target/relation)",
+                    },
+                    "source_name": {
+                        "type": "string",
+                        "description": "Name of the source node (used together with target_name + relation to resolve the edge)",
+                    },
+                    "target_name": {
+                        "type": "string",
+                        "description": "Name of the target node",
+                    },
+                    "relation": {
+                        "type": "string",
+                        "description": "Relationship type of the edge to delete",
+                    },
+                    "consent_given": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Required (true) to delete a constitutive edge that defines identity",
+                    },
+                },
+                "required": [],
+            },
+        ),
+        Tool(
+            name="delete_node",
+            description="Delete a graph node and all of its incident edges (project-scoped). Address the node by 'node_id' or 'name'. Requires 'confirm': true — this cannot be undone.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "node_id": {
+                        "type": "string",
+                        "description": "UUID of the node to delete (alternative to name)",
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Name of the node to delete",
+                    },
+                    "confirm": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Must be true to actually delete the node and its incident edges",
+                    },
+                },
+                "required": [],
+            },
+        ),
+        Tool(
             name="count_by_type",
             description="Get counts of all memory types for audit and integrity checks. Returns counts for graph_nodes, graph_edges, l2_insights, episodes, working_memory, and raw_dialogues.",
             inputSchema={
@@ -3718,6 +3778,13 @@ def register_tools(server) -> list:
                         "maximum": 10,
                         "default": 5,
                     },
+                    "min_confidence": {
+                        "type": "number",
+                        "description": "Minimum confidence score for a suggestion to be returned (default: 0.5)",
+                        "minimum": 0.0,
+                        "maximum": 1.0,
+                        "default": 0.5,
+                    },
                 },
                 "required": ["node_name"],
             },
@@ -3778,6 +3845,8 @@ def register_tools(server) -> list:
         "get_node_by_name": handle_get_node_by_name,
         "list_nodes_by_label": handle_list_nodes_by_label,
         "get_edge": handle_get_edge,
+        "delete_edge": handle_delete_edge,
+        "delete_node": handle_delete_node,
         "count_by_type": handle_count_by_type,
         "list_episodes": handle_list_episodes,
         "list_insights": handle_list_insights,
@@ -3889,6 +3958,14 @@ def register_tools(server) -> list:
         @server.tool()
         async def get_edge(arguments: dict[str, Any]) -> dict[str, Any]:
             return await handle_get_edge(arguments)
+
+        @server.tool()
+        async def delete_edge(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_delete_edge(arguments)
+
+        @server.tool()
+        async def delete_node(arguments: dict[str, Any]) -> dict[str, Any]:
+            return await handle_delete_node(arguments)
 
         @server.tool()
         async def count_by_type(arguments: dict[str, Any]) -> dict[str, Any]:

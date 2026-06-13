@@ -1678,12 +1678,16 @@ async def delete_edge(
         async with get_connection_with_project_context() as conn:
             cursor = conn.cursor()
 
-            # First, fetch the edge to check its properties
+            # First, fetch the edge to check its properties.
+            # Defense-in-depth: explicit project scope so an edge from another
+            # project cannot be touched even if RLS is bypassed (neondb_owner has
+            # BYPASSRLS).
             cursor.execute(
                 """
                 SELECT id, source_id, target_id, relation, weight, properties
                 FROM edges
-                WHERE id = %s::uuid;
+                WHERE id = %s::uuid
+                    AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[]);
                 """,
                 (edge_id,),
             )
@@ -1728,11 +1732,12 @@ async def delete_edge(
                     relation=relation
                 )
 
-            # Proceed with deletion
+            # Proceed with deletion (project-scoped, defense-in-depth)
             cursor.execute(
                 """
                 DELETE FROM edges
                 WHERE id = %s::uuid
+                    AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
                 RETURNING id;
                 """,
                 (edge_id,),
@@ -1777,6 +1782,140 @@ async def delete_edge(
         raise
     except Exception as e:
         logger.error(f"Failed to delete edge: edge_id={edge_id}, error={e}")
+        raise
+
+
+async def delete_node(node_id: str) -> dict[str, Any]:
+    """
+    Delete a node and all of its incident edges, scoped to the current project.
+
+    The node is looked up and deleted with an explicit project_id filter
+    (defense-in-depth on top of RLS), so a node belonging to another project is
+    never touched. All edges where the node is source OR target are removed first,
+    then the node itself.
+
+    Args:
+        node_id: UUID string of the node to delete.
+
+    Returns:
+        Dict with:
+        - deleted: bool (True if the node existed and was removed)
+        - node_id: the node id
+        - name: the deleted node's name (if it existed)
+        - edges_deleted: number of incident edges removed
+        - embedding_row_deleted: bool (True if a graph_node_embedding carrier
+          L2 row was cleaned up along with the node)
+        - reason: present only when deleted is False
+
+    Graph-Enforcement A3: delete_node tool (löscht Knoten + inzidente Kanten).
+    Graph-Enforcement A2 (Folgeauftrag): wenn der Knoten via vector_id auf eine
+    reine Embedding-Träger-Zeile (metadata.source='graph_node_embedding') zeigt,
+    wird diese Zeile mitgelöscht. Echte Insights werden NIE gelöscht.
+    """
+    from mcp_server.middleware.context import get_current_project
+
+    logger = logging.getLogger(__name__)
+    project_id = get_current_project()
+
+    try:
+        async with get_connection_with_project_context() as conn:
+            cursor = conn.cursor()
+
+            # Verify the node exists within an allowed project before deleting.
+            # Fetch vector_id so we can clean up its embedding carrier row.
+            cursor.execute(
+                """
+                SELECT id, name, vector_id
+                FROM nodes
+                WHERE id = %s::uuid
+                    AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[]);
+                """,
+                (node_id,),
+            )
+            node_row = cursor.fetchone()
+
+            if not node_row:
+                logger.warning(
+                    f"Node not found for deletion (or out of project scope): "
+                    f"node_id={node_id}, project_id={project_id}"
+                )
+                return {
+                    "deleted": False,
+                    "node_id": node_id,
+                    "edges_deleted": 0,
+                    "reason": "Node not found",
+                }
+
+            node_name = node_row["name"]
+            vector_id = node_row["vector_id"]
+
+            # Delete all incident edges (source OR target), project-scoped.
+            cursor.execute(
+                """
+                DELETE FROM edges
+                WHERE (source_id = %s::uuid OR target_id = %s::uuid)
+                    AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
+                RETURNING id;
+                """,
+                (node_id, node_id),
+            )
+            edges_deleted = len(cursor.fetchall())
+
+            # Delete the node itself, project-scoped.
+            cursor.execute(
+                """
+                DELETE FROM nodes
+                WHERE id = %s::uuid
+                    AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
+                RETURNING id;
+                """,
+                (node_id,),
+            )
+            deleted_row = cursor.fetchone()
+
+            # Clean up the embedding carrier row, but ONLY if it is a pure
+            # graph_node_embedding vehicle. The marker guard guarantees a node
+            # that exceptionally points at a real insight never deletes it.
+            embedding_row_deleted = False
+            if deleted_row and vector_id is not None:
+                cursor.execute(
+                    """
+                    DELETE FROM l2_insights
+                    WHERE id = %s
+                        AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
+                        AND metadata->>'source' = 'graph_node_embedding'
+                    RETURNING id;
+                    """,
+                    (vector_id,),
+                )
+                embedding_row_deleted = cursor.fetchone() is not None
+
+            conn.commit()
+
+            if deleted_row:
+                logger.info(
+                    f"Deleted node: node_id={node_id}, name={node_name}, "
+                    f"edges_deleted={edges_deleted}, "
+                    f"embedding_row_deleted={embedding_row_deleted}, "
+                    f"project_id={project_id}"
+                )
+                return {
+                    "deleted": True,
+                    "node_id": node_id,
+                    "name": node_name,
+                    "edges_deleted": edges_deleted,
+                    "embedding_row_deleted": embedding_row_deleted,
+                }
+
+            return {
+                "deleted": False,
+                "node_id": node_id,
+                "edges_deleted": edges_deleted,
+                "reason": "Delete operation returned no rows",
+            }
+
+    except Exception as e:
+        logger.error(f"Failed to delete node: node_id={node_id}, error={e}")
         raise
 
 

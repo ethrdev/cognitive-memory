@@ -525,9 +525,13 @@ async def list_insights(
 
             # Build WHERE clause conditions
             # Defense-in-depth: explicit project_id filter (Story 11.7)
+            # Graph-Enforcement A1: graph_node_embedding carrier rows are pure
+            # embedding vehicles for graph nodes, not user insights — hide them
+            # from the default insight listing (same marker filtered in hybrid_search).
             conditions = [
                 "is_deleted = FALSE",
                 "project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])",
+                "(metadata->>'source' IS DISTINCT FROM 'graph_node_embedding')",
             ]
             params = []
 

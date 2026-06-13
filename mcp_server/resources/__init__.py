@@ -277,6 +277,7 @@ async def handle_l2_insights(uri: str) -> list[dict[str, Any]] | dict[str, Any]:
                 SELECT id, content, embedding <=> %s::vector AS distance, source_ids
                 FROM l2_insights
                 WHERE project_id = %s
+                  AND (metadata->>'source' IS DISTINCT FROM 'graph_node_embedding')
                 ORDER BY distance
                 LIMIT %s
             """,
@@ -753,6 +754,7 @@ def register_resources(server: FastMCP) -> list[str]:
                     SELECT id, content, embedding <=> %s::vector AS distance, source_ids
                     FROM l2_insights
                     WHERE project_id = %s
+                      AND (metadata->>'source' IS DISTINCT FROM 'graph_node_embedding')
                     ORDER BY distance
                     LIMIT %s
                     """,

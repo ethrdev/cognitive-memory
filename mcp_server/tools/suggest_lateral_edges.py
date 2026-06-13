@@ -92,12 +92,23 @@ async def handle_suggest_lateral_edges(arguments: dict[str, Any]) -> dict[str, A
         # Extract parameters
         node_name = arguments.get("node_name")
         top_k = arguments.get("top_k", 5)
+        # Minimum confidence threshold for a suggestion to be returned (default 0.5).
+        min_confidence = arguments.get("min_confidence", 0.5)
 
         # Parameter validation
         if not node_name or not isinstance(node_name, str):
             return add_response_metadata({
                 "error": "Parameter validation failed",
                 "details": "Missing or invalid 'node_name' parameter (must be non-empty string)",
+                "tool": "suggest_lateral_edges",
+            }, project_id)
+
+        try:
+            min_confidence = float(min_confidence)
+        except (TypeError, ValueError):
+            return add_response_metadata({
+                "error": "Parameter validation failed",
+                "details": "Invalid 'min_confidence' parameter (must be a number)",
                 "tool": "suggest_lateral_edges",
             }, project_id)
 
@@ -235,7 +246,8 @@ async def handle_suggest_lateral_edges(arguments: dict[str, Any]) -> dict[str, A
                             "score": similarity,
                         })
 
-        # 5. Sort by score and take top_k
+        # 5. Filter by minimum confidence, sort by score and take top_k
+        candidates = [c for c in candidates if c["score"] >= min_confidence]
         candidates.sort(key=lambda x: x["score"], reverse=True)
         top_candidates = candidates[:top_k]
 

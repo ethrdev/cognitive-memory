@@ -14,14 +14,19 @@ import json
 import logging
 from typing import Any
 
-from mcp_server.db.graph import add_edge, get_or_create_node
+from mcp_server.db.graph import add_edge, get_node_by_name, get_or_create_node
+from mcp_server.graph_vocabulary import is_vocabulary_enforced, validate_relation
 from mcp_server.middleware.context import get_current_project
 from mcp_server.utils.response import add_response_metadata
 from mcp_server.utils.sector_classifier import classify_memory_sector
 
 logger = logging.getLogger(__name__)
 
-# Standard relations for validation and consistency
+# Standard relations for validation and consistency.
+# NOTE: This global set is the *soft* (warning-only) whitelist used for projects
+# that do NOT have a hard-enforced vocabulary (see mcp_server.graph_vocabulary).
+# Projects with a configured vocabulary (e.g. "tethr") are validated against that
+# vocabulary instead, and violations are rejected rather than merely logged.
 STANDARD_RELATIONS = {
     "USES", "SOLVES", "CREATED_BY", "RELATED_TO", "DEPENDS_ON"
 }
@@ -54,6 +59,10 @@ async def handle_graph_add_edge(arguments: dict[str, Any]) -> dict[str, Any]:
         target_label = arguments.get("target_label", "Entity")  # Optional, default "Entity"
         weight = arguments.get("weight", 1.0)  # Optional, default 1.0
         properties = arguments.get("properties")  # Optional
+        # Opt-in flag: for enforced projects, allow deliberate co-creation of
+        # missing endpoint nodes. Default False -> missing endpoints are rejected
+        # (no silent "Entity" node creation, which was the main drift driver).
+        create_missing_nodes = bool(arguments.get("create_missing_nodes", False))
 
         # Parameter validation
         if not source_name or not isinstance(source_name, str):
@@ -115,8 +124,22 @@ async def handle_graph_add_edge(arguments: dict[str, Any]) -> dict[str, Any]:
                 "tool": "graph_add_edge",
             }, project_id)
 
-        # Log warning for non-standard relations (optional validation, not blocking)
-        if relation not in STANDARD_RELATIONS:
+        # Relation validation:
+        #  - Projects WITH a configured vocabulary (e.g. "tethr") -> hard block.
+        #  - Projects WITHOUT a configured vocabulary -> warning-only (unchanged).
+        enforced = is_vocabulary_enforced(project_id)
+        if enforced:
+            relation_error = validate_relation(project_id, relation)
+            if relation_error:
+                logger.warning(
+                    f"Rejected non-vocabulary relation for project '{project_id}': '{relation}'"
+                )
+                return add_response_metadata({
+                    "error": "Relation not in project vocabulary",
+                    "details": relation_error,
+                    "tool": "graph_add_edge",
+                }, project_id)
+        elif relation not in STANDARD_RELATIONS:
             logger.warning(f"Non-standard relation used: '{relation}'. Standard relations: {sorted(STANDARD_RELATIONS)}")
 
         # Convert properties to JSON string for JSONB storage
@@ -124,6 +147,29 @@ async def handle_graph_add_edge(arguments: dict[str, Any]) -> dict[str, Any]:
 
         # Story 8.3: Classify memory sector based on relation and properties
         memory_sector = classify_memory_sector(relation, properties or {})
+
+        # Endpoint existence policy:
+        #  - Enforced projects (without create_missing_nodes opt-in): a missing
+        #    endpoint is an error — no silent "Entity" node creation. This was the
+        #    main graph-drift driver (Graph-Enforcement A2).
+        #  - Enforced projects WITH create_missing_nodes=True, or non-enforced
+        #    projects: keep the original auto-upsert behaviour.
+        if enforced and not create_missing_nodes:
+            for endpoint_name in (source_name, target_name):
+                existing = await get_node_by_name(endpoint_name)
+                if existing is None:
+                    logger.warning(
+                        f"Rejected edge for project '{project_id}': endpoint "
+                        f"'{endpoint_name}' does not exist"
+                    )
+                    return add_response_metadata({
+                        "error": "Endpoint node does not exist",
+                        "details": (
+                            f"Knoten '{endpoint_name}' existiert nicht — erst graph_add_node. "
+                            "(Pass create_missing_nodes=true to co-create endpoints intentionally.)"
+                        ),
+                        "tool": "graph_add_edge",
+                    }, project_id)
 
         # Database operation with auto-upsert logic
         try:
