@@ -15,6 +15,8 @@ from datetime import datetime
 from typing import Any
 
 from mcp_server.db.connection import get_connection_with_project_context
+from mcp_server.graph_vocabulary import is_vocabulary_enforced
+from mcp_server.middleware.context import get_current_project
 
 logger = logging.getLogger(__name__)
 
@@ -525,14 +527,19 @@ async def list_insights(
 
             # Build WHERE clause conditions
             # Defense-in-depth: explicit project_id filter (Story 11.7)
-            # Graph-Enforcement A1: graph_node_embedding carrier rows are pure
-            # embedding vehicles for graph nodes, not user insights — hide them
-            # from the default insight listing (same marker filtered in hybrid_search).
             conditions = [
                 "is_deleted = FALSE",
                 "project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])",
-                "(metadata->>'source' IS DISTINCT FROM 'graph_node_embedding')",
             ]
+            # Graph-Enforcement A1: graph_node_embedding carrier rows are pure
+            # embedding vehicles for graph nodes, not user insights. Hide them from
+            # the default listing ONLY for vocabulary-enforced projects (tethr);
+            # other projects (io, ab, njord) behave exactly as before enforcement.
+            try:
+                if is_vocabulary_enforced(get_current_project()):
+                    conditions.append("(metadata->>'source' IS DISTINCT FROM 'graph_node_embedding')")
+            except Exception:
+                pass
             params = []
 
             # Tags filter: use array-contains operator (GIN indexed)

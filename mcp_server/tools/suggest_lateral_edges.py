@@ -18,8 +18,9 @@ from typing import Any
 
 from openai import APIConnectionError, OpenAI, RateLimitError
 
-from mcp_server.db.graph import get_node_by_name, query_neighbors
 from mcp_server.db.connection import get_connection_with_project_context
+from mcp_server.db.graph import get_node_by_name, query_neighbors
+from mcp_server.graph_vocabulary import is_vocabulary_enforced
 from mcp_server.middleware.context import get_current_project
 from mcp_server.utils.response import add_response_metadata
 
@@ -92,8 +93,15 @@ async def handle_suggest_lateral_edges(arguments: dict[str, Any]) -> dict[str, A
         # Extract parameters
         node_name = arguments.get("node_name")
         top_k = arguments.get("top_k", 5)
-        # Minimum confidence threshold for a suggestion to be returned (default 0.5).
-        min_confidence = arguments.get("min_confidence", 0.5)
+        # Minimum confidence threshold for a suggestion to be returned.
+        # Graph-Enforcement: the 0.5 default applies ONLY to vocabulary-enforced
+        # projects (tethr). Other projects (io, ab, njord) keep pre-enforcement
+        # behaviour (no implicit filtering) unless the caller passes a value.
+        _min_conf_arg = arguments.get("min_confidence")
+        if _min_conf_arg is None:
+            min_confidence = 0.5 if is_vocabulary_enforced(project_id) else 0.0
+        else:
+            min_confidence = _min_conf_arg
 
         # Parameter validation
         if not node_name or not isinstance(node_name, str):

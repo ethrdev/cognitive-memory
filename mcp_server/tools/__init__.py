@@ -42,6 +42,7 @@ from mcp_server.db.connection import (
     get_connection,
     get_connection_with_project_context,
 )
+from mcp_server.graph_vocabulary import is_vocabulary_enforced
 from mcp_server.middleware.context import get_current_project
 from mcp_server.tools.count_by_type import handle_count_by_type
 from mcp_server.tools.delete_edge import handle_delete_edge
@@ -57,16 +58,16 @@ from mcp_server.tools.get_insight_by_id import handle_get_insight_by_id
 from mcp_server.tools.get_node_by_name import handle_get_node_by_name
 from mcp_server.tools.graph_add_edge import handle_graph_add_edge
 from mcp_server.tools.graph_add_node import handle_graph_add_node
-from mcp_server.tools.graph_update_node import handle_graph_update_node
 from mcp_server.tools.graph_find_path import handle_graph_find_path
 from mcp_server.tools.graph_query_neighbors import handle_graph_query_neighbors
-from mcp_server.tools.list_nodes_by_label import handle_list_nodes_by_label
+from mcp_server.tools.graph_update_node import handle_graph_update_node
 from mcp_server.tools.insights.delete import handle_delete_insight
 from mcp_server.tools.insights.feedback import handle_submit_insight_feedback
 from mcp_server.tools.insights.history import handle_get_insight_history
 from mcp_server.tools.insights.update import handle_update_insight
 from mcp_server.tools.list_episodes import handle_list_episodes
 from mcp_server.tools.list_insights import handle_list_insights
+from mcp_server.tools.list_nodes_by_label import handle_list_nodes_by_label
 from mcp_server.tools.reclassify_memory_sector import handle_reclassify_memory_sector
 from mcp_server.tools.resolve_dissonance import (
     RESOLVE_DISSONANCE_TOOL,
@@ -84,6 +85,22 @@ from mcp_server.utils.filter_validation import (
     validate_filter_params,
 )
 from mcp_server.utils.response import add_response_metadata
+
+# Graph-Enforcement: the carrier-row filter is scoped to vocabulary-enforced
+# projects (tethr). Auto-embedding only creates graph_node_embedding L2 rows for
+# enforced projects, so only their recall paths need to hide them. For other
+# projects (io, ab, njord) this returns "" -> queries behave exactly as before.
+_CARRIER_FILTER_SQL = "AND (metadata->>'source' IS DISTINCT FROM 'graph_node_embedding')"
+
+
+def _carrier_filter_clause() -> str:
+    """SQL clause hiding graph_node_embedding carrier rows; only for enforced projects."""
+    try:
+        if is_vocabulary_enforced(get_current_project()):
+            return _CARRIER_FILTER_SQL
+    except Exception:
+        pass
+    return ""
 
 
 def rrf_fusion(
@@ -310,13 +327,14 @@ def semantic_search(
     # Lower distance = higher similarity
     # Story 11.6.1: Include project_id in SELECT for result metadata tracking
     # Fix: Explicit project_id filter as defense-in-depth (neondb_owner has BYPASSRLS)
+    carrier_filter = _carrier_filter_clause()
     query = f"""
         SELECT id, content, source_ids, metadata, io_category, is_identity, source_file, memory_strength, project_id,
                embedding <=> %s::vector AS distance
         FROM l2_insights
         WHERE is_deleted = FALSE
           AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
-          AND (metadata->>'source' IS DISTINCT FROM 'graph_node_embedding')
+          {carrier_filter}
           {filter_clause}{sector_clause}{pre_filter_clause}
         ORDER BY distance
         LIMIT %s;
@@ -444,6 +462,7 @@ def keyword_search(
     # Using parameterized language config for multi-language support
     # Story 11.6.1: Include project_id in SELECT for result metadata tracking
     # Fix: Explicit project_id filter as defense-in-depth (neondb_owner has BYPASSRLS)
+    carrier_filter = _carrier_filter_clause()
     query = f"""
         SELECT id, content, source_ids, metadata, io_category, is_identity, source_file, memory_strength, project_id,
                ts_rank(
@@ -453,7 +472,7 @@ def keyword_search(
         FROM l2_insights
         WHERE is_deleted = FALSE
           AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
-          AND (metadata->>'source' IS DISTINCT FROM 'graph_node_embedding')
+          {carrier_filter}
           AND to_tsvector('{language}', content) @@ plainto_tsquery('{language}', %s)
         {filter_clause}{sector_clause}{pre_filter_clause}
         ORDER BY rank DESC
@@ -483,7 +502,7 @@ def keyword_search(
             FROM l2_insights
             WHERE is_deleted = FALSE
               AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
-              AND (metadata->>'source' IS DISTINCT FROM 'graph_node_embedding')
+              {carrier_filter}
               AND word_similarity(%s, content) > 0.3
             {filter_clause}{sector_clause}{pre_filter_clause}
             ORDER BY rank DESC
@@ -1042,13 +1061,14 @@ async def graph_search(
             # Defense-in-depth: explicit project_id filter (Story 11.7)
             try:
                 cursor = conn.cursor()
+                carrier_filter = _carrier_filter_clause()
                 cursor.execute(
-                    """
+                    f"""
                     SELECT id, content, source_ids, metadata, io_category, is_identity, source_file, project_id
                     FROM l2_insights
                     WHERE id = %s
                         AND project_id::TEXT = ANY((SELECT get_allowed_projects())::TEXT[])
-                        AND (metadata->>'source' IS DISTINCT FROM 'graph_node_embedding');
+                        {carrier_filter};
                     """,
                     (vector_id,)
                 )

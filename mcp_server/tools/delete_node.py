@@ -16,6 +16,7 @@ import logging
 from typing import Any
 
 from mcp_server.db.graph import delete_node, get_node_by_name
+from mcp_server.graph_vocabulary import is_vocabulary_enforced
 from mcp_server.middleware.context import get_current_project
 from mcp_server.utils.response import add_response_metadata
 
@@ -37,6 +38,18 @@ async def handle_delete_node(arguments: dict[str, Any]) -> dict[str, Any]:
 
     try:
         project_id = get_current_project()
+
+        # Graph-Enforcement: deletion tools are restricted to vocabulary-enforced
+        # projects (tethr). For other projects (io, ab, njord) the tool is inert.
+        if not is_vocabulary_enforced(project_id):
+            return add_response_metadata({
+                "error": "Tool not available for this project",
+                "details": (
+                    "delete_node is restricted to projects with vocabulary "
+                    "enforcement (e.g. tethr)."
+                ),
+                "tool": "delete_node",
+            }, project_id)
 
         node_id = arguments.get("node_id")
         name = arguments.get("name")

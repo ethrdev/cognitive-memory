@@ -95,7 +95,8 @@ async def handle_graph_add_node(arguments: dict[str, Any]) -> dict[str, Any]:
         # Property-convention soft check (Graph-Enforcement A5, non-blocking):
         # summary should stay <= 300 chars (one-glance content; substance lives
         # in L2). Only warn — never block — to avoid data loss / surprise.
-        if isinstance(properties, dict):
+        # Scoped to vocabulary-enforced projects (tethr); others unchanged.
+        if is_vocabulary_enforced(project_id) and isinstance(properties, dict):
             for prop_key in ("summary", "content"):
                 value = properties.get(prop_key)
                 if isinstance(value, str) and len(value) > 300:
@@ -125,7 +126,9 @@ async def handle_graph_add_node(arguments: dict[str, Any]) -> dict[str, Any]:
         # explicit vector_id, generate an embedding from name + summary so the
         # node is immediately visible to hybrid/graph search. On failure we fall
         # back to vector_id=None (node still gets created) and log a warning.
-        if vector_id is None:
+        # Scoped to vocabulary-enforced projects (tethr) only — other projects
+        # (io, ab, njord) keep pre-enforcement behaviour: no auto-embed, no cost.
+        if vector_id is None and is_vocabulary_enforced(project_id):
             generated_vector_id = await generate_node_embedding(name, properties)
             if generated_vector_id is not None:
                 vector_id = generated_vector_id

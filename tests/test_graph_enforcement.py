@@ -280,3 +280,52 @@ class TestDeleteTools:
                    new=AsyncMock(return_value=None)):
             result = await handle_delete_node({"name": "Ghost", "confirm": True})
         assert result["status"] == "not_found"
+
+
+# ---------------------------------------------------------------------------
+# Gating: enforcement side-effects scoped to tethr ONLY (remediation 2026-06-13).
+# Other projects (io, ab, njord) must behave exactly as before enforcement:
+# no auto-embedding, no carrier-row filter, delete tools inert.
+# ---------------------------------------------------------------------------
+
+class TestGatingScopedToTethr:
+    @pytest.mark.asyncio
+    async def test_io_node_create_skips_autoembed(self, io_ctx):
+        """Non-enforced project: no auto-embedding (no OpenAI cost, no carrier row)."""
+        with patch("mcp_server.tools.graph_add_node.add_node",
+                   new=AsyncMock(return_value={
+                       "node_id": "n9", "created": True,
+                       "label": "Whatever", "name": "Z"})), \
+             patch("mcp_server.tools.graph_add_node.generate_node_embedding",
+                   new=AsyncMock(return_value=4242)) as mock_embed:
+            result = await handle_graph_add_node({"label": "Whatever", "name": "Z"})
+        assert result["status"] == "success"
+        assert result["vector_id"] is None        # auto-embed gated off for unenforced
+        mock_embed.assert_not_awaited()
+
+    def test_carrier_filter_clause_only_for_enforced(self):
+        from mcp_server.tools import _carrier_filter_clause
+        set_project_id("tethr")
+        try:
+            assert "graph_node_embedding" in _carrier_filter_clause()
+        finally:
+            clear_context()
+        set_project_id("io")
+        try:
+            assert _carrier_filter_clause() == ""
+        finally:
+            clear_context()
+
+    @pytest.mark.asyncio
+    async def test_delete_node_blocked_for_io(self, io_ctx):
+        with patch("mcp_server.tools.delete_node.delete_node") as mock_del:
+            result = await handle_delete_node({"name": "X", "confirm": True})
+        assert result["error"] == "Tool not available for this project"
+        mock_del.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_delete_edge_blocked_for_io(self, io_ctx):
+        with patch("mcp_server.tools.delete_edge.delete_edge") as mock_del:
+            result = await handle_delete_edge({"edge_id": "e1"})
+        assert result["error"] == "Tool not available for this project"
+        mock_del.assert_not_called()

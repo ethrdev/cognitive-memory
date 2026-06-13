@@ -41,6 +41,7 @@ from mcp_server.db.connection import (
     get_pool_status,
 )
 from mcp_server.exceptions import ProjectNotFoundError
+from mcp_server.graph_vocabulary import is_vocabulary_enforced
 from mcp_server.middleware.context import get_project_id, set_project_id
 from mcp_server.middleware.tenant import validate_project_id
 from mcp_server.tools import get_embedding_with_retry
@@ -272,12 +273,18 @@ async def handle_l2_insights(uri: str) -> list[dict[str, Any]] | dict[str, Any]:
             # in depth — the app DB user has BYPASSRLS so RLS alone isn't
             # sufficient; the resolver + WHERE clause is the working fix.
             cursor = conn.cursor()
+            # Graph-Enforcement: hide carrier rows only for enforced projects (tethr);
+            # other projects behave exactly as before enforcement.
+            carrier_filter = (
+                "AND (metadata->>'source' IS DISTINCT FROM 'graph_node_embedding')"
+                if is_vocabulary_enforced(project_id) else ""
+            )
             cursor.execute(
-                """
+                f"""
                 SELECT id, content, embedding <=> %s::vector AS distance, source_ids
                 FROM l2_insights
                 WHERE project_id = %s
-                  AND (metadata->>'source' IS DISTINCT FROM 'graph_node_embedding')
+                  {carrier_filter}
                 ORDER BY distance
                 LIMIT %s
             """,
@@ -749,12 +756,18 @@ def register_resources(server: FastMCP) -> list[str]:
                 embedding = await get_embedding_with_retry(client, query.strip())
 
                 cursor = conn.cursor()
+                # Graph-Enforcement: hide carrier rows only for enforced projects (tethr);
+                # other projects behave exactly as before enforcement.
+                carrier_filter = (
+                    "AND (metadata->>'source' IS DISTINCT FROM 'graph_node_embedding')"
+                    if is_vocabulary_enforced(project_id) else ""
+                )
                 cursor.execute(
-                    """
+                    f"""
                     SELECT id, content, embedding <=> %s::vector AS distance, source_ids
                     FROM l2_insights
                     WHERE project_id = %s
-                      AND (metadata->>'source' IS DISTINCT FROM 'graph_node_embedding')
+                      {carrier_filter}
                     ORDER BY distance
                     LIMIT %s
                     """,
