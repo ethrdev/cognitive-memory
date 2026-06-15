@@ -546,3 +546,50 @@ async def test_smf_creation_error_returns_500(mock_create_smf, with_project_cont
     assert "error" in result
     assert result["error"]["code"] == 500
     assert "consent proposal" in result["error"]["message"].lower()
+
+
+# =============================================================================
+# EP-1 Consent Decoupling (Stefan-Entscheidung 2026-06-15)
+# tethr edits its own project-isolated insights directly; io/ab/njord unchanged.
+# =============================================================================
+
+def test_requires_io_cosign_policy():
+    """Policy: only tethr is decoupled; everything else (incl. None) keeps co-sign."""
+    from mcp_server.consent_policy import requires_io_cosign
+    assert requires_io_cosign("tethr") is False
+    assert requires_io_cosign("io") is True
+    assert requires_io_cosign("ab") is True
+    assert requires_io_cosign("njord") is True
+    assert requires_io_cosign("test-project") is True
+    assert requires_io_cosign(None) is True
+
+
+@pytest.mark.asyncio
+@patch('mcp_server.tools.insights.update.requires_io_cosign', return_value=False)
+@patch('mcp_server.tools.insights.update.execute_update_with_history')
+async def test_ethr_decoupled_project_direct_update(mock_execute, mock_cosign, with_project_context):
+    """Decoupled project: ethr updates directly, no SMF proposal, history records ethr."""
+    mock_execute.return_value = {
+        "success": True,
+        "insight_id": 42,
+        "history_id": 124,
+        "updated_fields": {"content": True, "memory_strength": False},
+    }
+
+    result = await handle_update_insight({
+        "insight_id": 42,
+        "actor": "ethr",
+        "reason": "tethr edits its own insight",
+        "new_content": "Directly updated by ethr",
+    })
+
+    assert "error" not in result
+    assert result.get("status") != "pending"
+    assert result["success"] is True
+    mock_execute.assert_called_once_with(
+        insight_id=42,
+        new_content="Directly updated by ethr",
+        new_memory_strength=None,
+        actor="ethr",
+        reason="tethr edits its own insight",
+    )

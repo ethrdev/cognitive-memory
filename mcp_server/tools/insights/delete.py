@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from mcp_server.consent_policy import requires_io_cosign
 from mcp_server.db.insights import execute_delete_with_history
 from mcp_server.analysis.smf import create_smf_proposal, TriggerType, ApprovalLevel, SMFAction
 from mcp_server.middleware.context import get_current_project
@@ -115,14 +116,15 @@ async def handle_delete_insight(arguments: dict[str, Any]) -> dict[str, Any]:
 
         # ===== EP-1 CONSENT-AWARE PATTERN =====
 
-        if actor == "I/O":
-            # I/O can delete directly - these are I/O's own memories
-            logger.info(f"I/O deleting insight {insight_id} directly")
+        if actor == "I/O" or not requires_io_cosign(project_id):
+            # Direct execution: I/O over its own memories, or a consent-decoupled
+            # project (e.g. tethr) over its own project-isolated insights (EP-1 exemption).
+            logger.info(f"{actor} deleting insight {insight_id} directly")
 
             try:
                 result = await execute_delete_with_history(
                     insight_id=insight_id,
-                    actor="I/O",
+                    actor=actor,
                     reason=reason
                 )
 
@@ -175,7 +177,7 @@ async def handle_delete_insight(arguments: dict[str, Any]) -> dict[str, Any]:
                     }
                 }, project_id)
 
-        else:  # actor == "ethr"
+        else:  # actor == "ethr" and project still requires io co-sign (io/ab/njord)
             # ethr requires bilateral consent - create SMF proposal
             logger.info(f"ethr requesting deletion of insight {insight_id} - creating SMF proposal")
 

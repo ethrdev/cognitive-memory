@@ -381,3 +381,36 @@ async def test_smf_proposal_bilateral_approval(mock_create_proposal, with_projec
     approval_level = call_args.kwargs.get("approval_level")
     from mcp_server.analysis.smf import ApprovalLevel
     assert approval_level == ApprovalLevel.BILATERAL
+
+
+# =============================================================================
+# EP-1 Consent Decoupling (Stefan-Entscheidung 2026-06-15)
+# tethr deletes its own project-isolated insights directly; io/ab/njord unchanged.
+# =============================================================================
+
+@pytest.mark.asyncio
+@patch('mcp_server.tools.insights.delete.requires_io_cosign', return_value=False)
+@patch('mcp_server.tools.insights.delete.execute_delete_with_history')
+async def test_ethr_decoupled_project_direct_delete(mock_execute, mock_cosign, with_project_context):
+    """Decoupled project: ethr deletes directly, no SMF proposal, history records ethr."""
+    mock_execute.return_value = {
+        "success": True,
+        "insight_id": 42,
+        "history_id": 125,
+        "status": "deleted",
+        "recoverable": True,
+    }
+
+    result = await handle_delete_insight({
+        "insight_id": 42,
+        "actor": "ethr",
+        "reason": "tethr deletes its own insight",
+    })
+
+    assert "error" not in result
+    assert result.get("status") != "pending"
+    mock_execute.assert_called_once_with(
+        insight_id=42,
+        actor="ethr",
+        reason="tethr deletes its own insight",
+    )
